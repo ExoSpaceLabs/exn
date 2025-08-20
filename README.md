@@ -32,15 +32,16 @@ This is the **meta-repo** that ties everything together.
 
 ## 🛠 Roadmap
 1. **Phase 1 – Pi Camera**
+   - Define ACK / NACK / TM and packets structures.
    - Bring up Pi camera, capture single frames
    - Export to CCSDS packets with CCSDSPack
-2. **Phase 2 – STM32 RTOS**
+3. **Phase 2 – STM32 RTOS**
    - Implement TC/TM service handler
    - Add health monitoring + basic CAN/SPI link
-3. **Phase 3 – FPGA Integration**
+4. **Phase 3 – FPGA Integration**
    - AXI register map + resize block
    - Add inference model (ImageNet classifier)
-4. **Phase 4 – Full System Integration**
+5. **Phase 4 – Full System Integration**
    - Pi → STM → FPGA workflow
    - End-to-end CCSDS packet chain
    - Demo: classification result sent as telemetry
