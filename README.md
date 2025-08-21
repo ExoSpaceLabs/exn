@@ -1,4 +1,10 @@
-# ASTRAi – Advanced Satellite Telemetry, Recognition & AI
+
+<div style="text-align: center;">
+    <img alt="astrai_logo" src="docs/images/astrai_logo.png" width="200" />
+</div>
+
+
+# ASTRAi [[ExoSpaceLabs](https://github.com/ExoSpaceLabs)] – Advanced Satellite Telemetry, Recognition & AI 
 
 **ASTRAi** is a modular open-source demonstration payload that combines a **Raspberry Pi**, **STM32 (RTOS)**, and **FPGA** into an integrated Earth Observation system.  
 The goal is to showcase onboard image capture, CCSDS packetization, AI inference, and system-level coordination – all within a realistic space payload architecture.
