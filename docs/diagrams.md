@@ -52,14 +52,11 @@ sequenceDiagram
 
   GS->>MCU: TC 23/1 Start Transfer (dest=FPGA)
   MCU->>PI: TC 23/1 Start Transfer
-  PI-->>MCU: TM 23/10 Metadata
-  MCU-->>FPGA: TM 23/10 Metadata (bridged)
+  PI-->>FPGA: TM 23/10 Metadata
   loop Chunks
-    PI-->>MCU: TM 23/11 Data Chunk
-    MCU-->>FPGA: TM 23/11 Data Chunk (bridged)
+    PI-->>FPGA: TM 23/11 Data Chunks
   end
-  PI-->>MCU: TM 23/12 Transfer Complete
-  MCU-->>FPGA: TM 23/12 Transfer Complete
+  PI-->>FPGA: TM 23/12 Transfer Complete
 
   GS->>MCU: TC 210/1 Execute (target=FPGA)
   MCU->>FPGA: TC 210/1 Execute
