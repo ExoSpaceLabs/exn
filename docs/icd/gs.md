@@ -98,7 +98,7 @@ Assume transactionId=42.
 
 ---
 
-## 6. CCSDSPack Template Hints (GS)
+## 6. CCSDSPack Interface Hints (GS)
 Recommended names for GS-originated TCs (APID 0x0F0, Type=TC, PUS-A/C as per service). Application Data must start with the Proxy Preamble when targeting devices.
 - `gs_hk_req_tc` (Svc 3/1), `gs_system_hk_req_tc` (Svc 3/10)
 - `gs_param_set_tc`, `gs_param_get_tc`
@@ -107,4 +107,4 @@ Recommended names for GS-originated TCs (APID 0x0F0, Type=TC, PUS-A/C as per ser
 - `gs_xfer_start_tc`, `gs_xfer_stop_tc`
 - `gs_link_ack_tm` (Svc 250/1) — GS→MCU link/proxy ACK/NACK
 
-These templates should include configurable insertion of the Proxy Preamble fields before the service payload (for device-directed TCs).
+These interfaces should include configurable insertion of the Proxy Preamble fields before the service payload (for device-directed TCs).

@@ -1,0 +1,10 @@
+{
+  "name": "pkt_system_hk_req_tc",
+  "primaryHeader": { "version": 0, "type": "TC", "apid": 240, "secHdrFlag": 1, "seqFlags": "UNSEG" },
+  "pusHeader": { "type": "PusA", "version": 1, "service": 3, "subservice": 10, "sourceId": 16 },
+  "appData": [
+    { "name": "transactionId", "type": "U16", "bits": 16, "description": "Correlation ID; 0 if unused" },
+    { "name": "include_mask", "type": "U8", "bits": 8, "description": "Bit0=MCU, Bit1=PI, Bit2=FPGA" },
+    { "name": "detailMask", "type": "U16", "bits": 16, "description": "Optional HK detail mask applied to all" }
+  ]
+}

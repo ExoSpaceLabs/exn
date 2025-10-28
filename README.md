@@ -25,7 +25,7 @@ All interfaces (CCSDS, SPI/UART/CAN links, FPGA register maps) are defined in th
 ## 📂 Repository Structure
 This is the **meta-repo** that ties everything together.
 
-- `interfaces/` → YAML specs + generated headers/packages (C, C++, VHDL)
+- `interfaces/` → Packet interfaces: CCSDSPack `.cfg`, JSON mirrors, and MCU header-only definitions
 - `docs/` → architecture docs, diagrams, and roadmaps
 - `system/` → integration scripts, manifests, CI/CD workflows
 - `submodules/`:
@@ -83,61 +83,8 @@ Notes:
 
 ### ➕ Additional Diagrams
 
-System HK aggregation (GS requests 3/10, MCU aggregates device HK 3/2 into TM 3/100):
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant GS as GS (APID 0x0F0)
-  participant MCU as MCU-RTOS (0x100)
-  participant PI as PI-CAM (0x101)
-  participant FPGA as FPGA-AI (0x102)
-
-  GS->>MCU: TC 3/10 Request System HK
-  par Fan-out HK requests
-    MCU->>PI: TC 3/1 Request HK
-    MCU->>FPGA: TC 3/1 Request HK
-    MCU->>MCU: Collect self HK
-  end
-  PI-->>MCU: TM 3/2 HK Report (PI)
-  FPGA-->>MCU: TM 3/2 HK Report (FPGA)
-  MCU-->>GS: TM 3/100 System HK Report (aggregated)
-```
-
-Capture → Transfer → Execute → Result (GS-driven end-to-end):
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant GS as GS (0x0F0)
-  participant MCU as MCU (0x100)
-  participant PI as PI (0x101)
-  participant FPGA as FPGA (0x102)
-
-  GS->>MCU: TC 200/1 Capture (target=PI)
-  MCU->>PI: TC 200/1 Capture
-  PI-->>MCU: TM 200/5 ACK
-  MCU-->>GS: TM 200/5 ACK (forwarded)
-
-  GS->>MCU: TC 23/1 Start Transfer (dest=FPGA)
-  MCU->>PI: TC 23/1 Start Transfer
-  PI-->>MCU: TM 23/10 Metadata
-  MCU-->>FPGA: TM 23/10 Metadata (bridged)
-  loop Chunks
-    PI-->>MCU: TM 23/11 Data Chunk
-    MCU-->>FPGA: TM 23/11 Data Chunk (bridged)
-  end
-  PI-->>MCU: TM 23/12 Transfer Complete
-  MCU-->>FPGA: TM 23/12 Transfer Complete
-
-  GS->>MCU: TC 210/1 Execute (target=FPGA)
-  MCU->>FPGA: TC 210/1 Execute
-  FPGA-->>MCU: TM 210/5 ACK
-  MCU-->>GS: TM 210/5 ACK (forwarded)
-  FPGA-->>MCU: TM 23/11 Result Chunk(s)
-  FPGA-->>MCU: TM 23/12 Result Complete
-  MCU-->>GS: Result TMs (forwarded)
-```
+The sequence diagrams have been moved to a dedicated page for clarity. See:
+- docs/diagrams.md — Mermaid sequences for System HK aggregation and the GS-driven end-to-end flow.
 
 ---
 
@@ -148,6 +95,18 @@ sequenceDiagram
   - MCU-RTOS: [docs/icd/mcu-rtos.md](docs/icd/mcu-rtos.md)
   - PI-CAM (Raspberry Pi 5 + Camera Module 3): [docs/icd/pi-cam.md](docs/icd/pi-cam.md)
   - FPGA-AI: [docs/icd/fpga-ai.md](docs/icd/fpga-ai.md)
+
+## 🧩 Interfaces
+- CCSDSPack interfaces (.cfg):
+  - TeleCommands: [interfaces/ccsdspack/tc/](interfaces/ccsdspack/tc/)
+  - TeleMetry:    [interfaces/ccsdspack/tm/](interfaces/ccsdspack/tm/)
+- JSON mirrors (for tooling):
+  - TeleCommands: [interfaces/json/tc/](interfaces/json/tc/)
+  - TeleMetry:    [interfaces/json/tm/](interfaces/json/tm/)
+- MCU-RTOS (no filesystem):
+  - Header-only definitions: [interfaces/mcu-rtos/](interfaces/mcu-rtos/)
+
+See also: [docs/diagrams.md](docs/diagrams.md) for the sequence diagrams moved from this README.
 
 ---
 

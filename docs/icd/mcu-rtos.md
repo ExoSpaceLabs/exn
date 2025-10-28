@@ -39,7 +39,7 @@ Transports: SPI, UART, CAN, or UDP, as integrated per platform build. Framing ma
 MCU-RTOS interfaces with the Ground Station (GS, APID 0x0F0, SourceID 0x10) over a northbound link. GS-originated TCs targeting devices include a Proxy Preamble (see `../ICD.md` and `gs.md`). MCU behavior:
 
 - Accept TCs from GS (APID src=0x0F0→dst=0x100) for Services 3/1 (HK Request), 3/10 (System HK Request), 20, 23, 200, 210.
-- Accept GS Link/Proxy ACK as TM 250/1 from GS to confirm UI/link acceptance or cancellation (see `../ICD.md` Section 4.7).
+- Accept GS Link/Proxy ACK as TM 250/1 from GS to confirm UI/link acceptance or cancellation (see `../ICD.md` Section 5.7).
 - Parse Proxy Preamble fields at the head of Application Data:
   - `transactionId:uint16`, `target:uint8` (0=ALL (System HK only), 1=PI,2=FPGA, 3=MCU), `options:uint8`.
 - Re-issue device TC to the target APID with the remainder payload (without the preamble).
@@ -120,11 +120,8 @@ Keys are 8-bit. Values are TLV in Application Data. TLV Types suggested: 1=U8,2=
 
 ---
 
-## 7. CCSDSPack Templates
-Suggested names (align with `ICD.md` Section 7) for MCU-owned packets:
+## 7. CCSDSPack Interfaces
+Suggested names (align with `ICD.md` Section 8) for MCU-owned packets:
 - `pkt_hk_req_tc`, `pkt_time_set_tc`, `pkt_param_set_tc`, `pkt_param_get_tc`
-- `pkt_cam_capture_tc`, `pkt_cam_settings_set_tc`, `pkt_cam_settings_get_tc`
-- `pkt_fpga_exec_tc`, `pkt_fpga_settings_set_tc`, `pkt_fpga_settings_get_tc`
-- `pkt_xfer_start_tc`, `pkt_xfer_stop_tc`
-
+- `pkt_cam_capture_tc`, `pkt_fpga_exec_tc`, `pkt_xfer_start_tc`, `pkt_xfer_stop_tc`
 These set Primary Header Type=TC, APID=0x100, SeqFlags=UNSEG; PUS headers per service/subservice as listed.

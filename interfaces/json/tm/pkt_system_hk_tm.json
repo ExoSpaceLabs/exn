@@ -1,0 +1,12 @@
+{
+  "name": "pkt_system_hk_tm",
+  "primaryHeader": { "version": 0, "type": "TM", "apid": 256, "secHdrFlag": 1, "seqFlags": "UNSEG" },
+  "pusHeader": { "type": "PusA", "version": 1, "service": 3, "subservice": 100, "sourceId": 1 },
+  "appData": [
+    { "name": "transactionId", "type": "U16", "bits": 16, "description": "Echo of request; 0 if unused" },
+    { "name": "present_mask", "type": "U8", "bits": 8, "description": "Bitmask: MCU, PI, FPGA present" },
+    { "name": "status", "type": "U8", "bits": 8, "description": "0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR" },
+    { "name": "reserved", "type": "U8", "bits": 8, "description": "0" },
+    { "name": "blocks", "type": "BYTES", "description": "Concatenated node HK blocks, each prefixed with U16 length" }
+  ]
+}

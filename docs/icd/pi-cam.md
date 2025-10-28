@@ -132,8 +132,7 @@ For generic parameter exchange not covered by Service 200, PI-CAM supports the S
 
 ---
 
-## 6. CCSDSPack Templates
-- `pkt_cam_capture_tc`, `pkt_cam_settings_set_tc`, `pkt_cam_settings_get_tc`, `pkt_cam_settings_tm`, `pkt_cam_ack_tm`
+## 6. CCSDSPack Interfaces
+- `pkt_cam_capture_tc`, `pkt_cam_ack_tm`
 - `pkt_xfer_meta_tm`, `pkt_xfer_chunk_tm`, `pkt_xfer_done_tm`
-
-Templates set Primary Header Type (TM/TC) and APID=0x101, with PUS-A secondary headers matching service/subservice.
+Interfaces set Primary Header Type (TM/TC) and APID=0x101, with PUS-A secondary headers matching service/subservice.

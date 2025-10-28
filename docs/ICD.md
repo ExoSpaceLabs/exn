@@ -51,10 +51,10 @@ To correlate multi-packet sequences initiated by GS, include a `transactionId` f
 - Placement: If present, it MUST be the first field of the initiating TC’s Application Data. Responders MUST echo it as the first field in corresponding ACKs and completion TMs for that transaction.
 - Mapping: For data transfers or executes that already have `imageId`/`jobId`, `transactionId` may be the same as those IDs or distinct.
 
-## 2. PUS Secondary Headers (CCSDSPack)
+## 3. PUS Secondary Headers (CCSDSPack)
 ASTRAi uses PUS-like headers provided by CCSDSPack.
 
-### 2.1 PUS-A (6 bytes)
+### 3.1 PUS-A (6 bytes)
 | Field          | Bits | Description |
 |----------------|------|-------------|
 | Version        | 3    | PUS version (set to 1) |
@@ -65,7 +65,7 @@ ASTRAi uses PUS-like headers provided by CCSDSPack.
 
 Usage: General TC/TM requests and reports (HK, parameters, device control, data transfer).
 
-### 2.2 PUS-B (8 bytes)
+### 3.2 PUS-B (8 bytes)
 | Field          | Bits | Description |
 |----------------|------|-------------|
 | Version        | 3    | PUS version (set to 1) |
@@ -77,7 +77,7 @@ Usage: General TC/TM requests and reports (HK, parameters, device control, data 
 
 Usage: Errors, warnings, and notable events.
 
-### 2.3 PUS-C (variable, ≥6 bytes)
+### 3.3 PUS-C (variable, ≥6 bytes)
 | Field          | Bits | Description |
 |----------------|------|-------------|
 | Version        | 3    | PUS version (set to 1) |
@@ -91,7 +91,7 @@ Usage: Time distribution and synchronization when used.
 
 ---
 
-## 3. Common Enumerations and Conventions
+## 4. Common Enumerations and Conventions
 - Source IDs: GS=0x10, MCU=0x01, PI=0x02, FPGA=0x03
 - Result Codes (ACK/NACK): 0=OK, 1=INVALID, 2=BUSY, 3=UNSUPPORTED, 4=TIMEOUT, 5=INTERNAL
 - Pixel Types:
@@ -100,8 +100,8 @@ Usage: Time distribution and synchronization when used.
 
 ---
 
-## 3.5 Quick TC/TM List
-Below is a compact list of all TeleCommands (TC) and TeleMetry (TM). See Section 4 for full field tables.
+### 4.1 Quick TC/TM List
+Below is a compact list of all TeleCommands (TC) and TeleMetry (TM). See Section 5 for full field tables.
 
 | Svc | Sub | Name                         | Direction        | APID (src→dst)              | PUS |
 |-----|-----|------------------------------|------------------|-----------------------------|-----|
@@ -140,17 +140,17 @@ See device/service‑specific details:
 - FPGA-AI: docs/icd/fpga-ai.md
 - GS (Ground Station Simulator): docs/icd/gs.md
 
-### 3.6 GS Service Usage Profile
+### 4.2 GS Service Usage Profile
 - GS sends: 3/1 (HK Request), 3/10 (System HK Request), 20/1–2, 200/1–3, 210/1–3, 23/1–2 as TeleCommands to MCU (APID 0x0F0→0x100). The MCU proxies device-directed TCs to PI/FPGA and aggregates System HK.
 - GS receives: 3/2 (forwarded device HK), 3/100 (System HK Report), 20/3, 200/4–5, 210/4–5, 23/10–12, and 5/1–3 from MCU as forwarded/aggregated TeleMetry.
-- GS returns link/proxy ACK/NACK to MCU using Service 250/1 (see Section 4.7) to indicate UI-side acceptance or command cancellation.
+- GS returns link/proxy ACK/NACK to MCU using Service 250/1 (see Section 5.7) to indicate UI-side acceptance or command cancellation.
 - Correlation: If `transactionId` is present in a GS TC, MCU MUST echo it in proxied TCs and in any forwarded ACK/TM as first field of Application Data.
 - Timing: Unless specified otherwise in device ICDs, immediate device ACK expected within 100 ms on MCU link; completion/aggregation timing depends on operation (e.g., image capture size; System HK aggregation timeout ~200–600 ms).
 
-## 4. Service Catalog (TC/TM)
+## 5. Service Catalog (TC/TM)
 Each entry defines: Direction, APID, PUS header type, and Application Data fields.
 
-### 4.1 Housekeeping (Service 3, PUS-A)
+### 5.1 Housekeeping (Service 3, PUS-A)
 - TC 3/1 Request HK
   - Direction: MCU→Device (APID target: 0x101 or 0x102); GS→MCU (proxy) allowed using Proxy Preamble (see GS ICD)
   - App Data: (optional) `detailMask` (uint16, 16 bits) — which groups to include
@@ -191,7 +191,7 @@ Each entry defines: Direction, APID, PUS header type, and Application Data field
   - Node block encoding (when present), each prefixed with `block_len:uint16` then the node’s TM 3/2 HK payload as defined in the respective device ICD. If a node timed out, a minimal block MAY be included with `block_len=0`.
   - Timing: MCU SHOULD wait up to `T_hk_timeout` per device (recommended 200 ms) with a total cap of 600 ms before emitting TM 3/100. Partial results are allowed with `status=PARTIAL` and appropriate `present_mask` bits set only for received HKs.
 
-### 4.2 Time Management (Service 17, PUS-C)
+### 5.2 Time Management (Service 17, PUS-C)
 - TC 17/1 Set Time
   - Direction: MCU→All
   - PUS-C Time Code: 6-byte CUC (recommended) or agreed format
@@ -201,7 +201,7 @@ Each entry defines: Direction, APID, PUS header type, and Application Data field
   - PUS-C Time Code: current device time
   - App Data: none
 
-### 4.3 Parameter Management (Service 20, PUS-A)
+### 5.3 Parameter Management (Service 20, PUS-A)
 - TC 20/1 Set Parameter
   - Direction: MCU→Device
   - App Data:
@@ -224,7 +224,7 @@ Each entry defines: Direction, APID, PUS header type, and Application Data field
     | status | uint8 | 8    | 0=OK or error code |
     | value  | TLV   | var  | Encoded value |
 
-### 4.4 Camera Control (Service 200, PUS-A, APID 0x101)
+### 5.4 Camera Control (Service 200, PUS-A, APID 0x101)
 - TC 200/1 Capture
   - App Data:
   
@@ -250,7 +250,7 @@ Each entry defines: Direction, APID, PUS header type, and Application Data field
     | resultCode   | uint8 | 8    | 0=OK, >0=error |
     | detail       | uint16| 16   | Optional error detail |
 
-### 4.5 FPGA Control (Service 210, PUS-A, APID 0x102)
+### 5.5 FPGA Control (Service 210, PUS-A, APID 0x102)
 - TC 210/1 Execute
   - App Data:
 
@@ -265,7 +265,7 @@ Each entry defines: Direction, APID, PUS header type, and Application Data field
 - TM 210/4 Proc Settings Report — `key`(uint8), `status`(uint8), `value`(TLV)
 - TM 210/5 ACK/NACK — same structure as 200/5
 
-### 4.6 Data Transfer (Service 23, PUS-A)
+### 5.6 Data Transfer (Service 23, PUS-A)
 Used by PI-CAM (and optionally FPGA) to stream large data as a series of packets.
 
 - TC 23/1 Start Transfer
@@ -317,7 +317,7 @@ Used by PI-CAM (and optionally FPGA) to stream large data as a series of packets
 
 ---
 
-### 4.7 GS Link/Proxy ACK (Service 250, PUS-A)
+### 5.7 GS Link/Proxy ACK (Service 250, PUS-A)
 - Purpose: GS acknowledges receipt/handling of a GS-originated TC at the UI/link layer (not device execution status).
 - Direction: GS→MCU (APID 0x0F0→0x100)
 - Subservice: 1 (ACK/NACK)
@@ -334,11 +334,11 @@ Notes:
 
 ---
 
-## 5. Acknowledgement & Error Handling
+## 6. Acknowledgement & Error Handling
 - Every TC SHOULD receive an immediate ACK/NACK TM (Service 200/5 or 210/5, or Service-specific ACK if defined) with `resultCode` and optional `detail`.
 - Completion reports are sent as the final TM of a sequence (e.g., 23/12), or as Events (Service 5) when errors occur mid-flow.
 
-### 5.1 Event Reporting (Service 5, PUS-B)
+### 6.1 Event Reporting (Service 5, PUS-B)
 - TM 5/1 Info, 5/2 Warn, 5/3 Error
   - App Data (examples):
   
@@ -351,35 +351,39 @@ Notes:
 
 ---
 
-## 6. Transport Bindings & Segmentation
+## 7. Transport Bindings & Segmentation
 - Links: SPI, UART, CAN, or UDP. Implementations MAY wrap CCSDS packets in a simple framing (e.g., SLIP) per link.
 - Recommended application data chunk size: 800–1000 bytes for UART/CAN; higher acceptable for SPI/UDP by agreement.
 - Primary Header `Sequence Flags` MAY be used to mirror multi-packet segmentation at CCSDS level when underlying link needs it; otherwise keep UNSEGMENTED and rely on app-level chunking with `offset`.
 
 ---
 
-## 7. CCSDSPack Templates (TBD)
-These template names can be used in CCSDSPack configuration files to predefine packet structures:
-- `pkt_hk_req_tc` (Service=3/Sub=1, PUS-A)
-- `pkt_hk_report_tm` (3/2, PUS-A)
-- `pkt_system_hk_req_tc` (3/10, PUS-A)
-- `pkt_system_hk_tm` (3/100, PUS-A)
-- `pkt_time_set_tc` (17/1, PUS-C)
-- `pkt_time_report_tm` (17/2, PUS-C)
-- `pkt_param_set_tc` (20/1, PUS-A); `pkt_param_get_tc` (20/2); `pkt_param_val_tm` (20/3)
-- `pkt_cam_capture_tc` (200/1, PUS-A, APID 0x101)
-- `pkt_cam_settings_set_tc` (200/2); `pkt_cam_settings_get_tc` (200/3); `pkt_cam_settings_tm` (200/4)
-- `pkt_cam_ack_tm` (200/5)
-- `pkt_fpga_exec_tc` (210/1); `pkt_fpga_settings_set_tc` (210/2); `pkt_fpga_settings_get_tc` (210/3); `pkt_fpga_settings_tm` (210/4); `pkt_fpga_ack_tm` (210/5)
-- `pkt_xfer_start_tc` (23/1); `pkt_xfer_stop_tc` (23/2); `pkt_xfer_meta_tm` (23/10); `pkt_xfer_chunk_tm` (23/11); `pkt_xfer_done_tm` (23/12)
+## 8. Interfaces (CCSDSPack & JSON)
+Predefined packet interfaces are provided in the repository to accelerate development and ensure alignment with this ICD.
 
-Template defaults should set: Primary Header (Type, APID, SeqFlags=UNSEG), Secondary Header fields (Service/Sub/SourceID), and placeholder Application Data lengths.
+- CCSDSPack .cfg interfaces:
+  - TeleCommands: `interfaces/ccsdspack/tc/`
+  - TeleMetry:    `interfaces/ccsdspack/tm/`
+- JSON mirrors (for tooling/generation):
+  - TeleCommands: `interfaces/json/tc/`
+  - TeleMetry:    `interfaces/json/tm/`
+- MCU-RTOS (no filesystem):
+  - Header-only definitions: `interfaces/mcu-rtos/`
+
+Examples (by filename):
+- TC: `pkt_hk_req_tc.cfg`, `pkt_system_hk_req_tc.cfg`, `pkt_time_set_tc.cfg`, `pkt_param_set_tc.cfg`, `pkt_param_get_tc.cfg`, `pkt_cam_capture_tc.cfg`, `pkt_fpga_exec_tc.cfg`, `pkt_xfer_start_tc.cfg`, `pkt_xfer_stop_tc.cfg`
+- TM: `pkt_hk_report_tm.cfg`, `pkt_system_hk_tm.cfg`, `pkt_param_val_tm.cfg`, `pkt_cam_ack_tm.cfg`, `pkt_xfer_meta_tm.cfg`, `pkt_xfer_chunk_tm.cfg`, `pkt_xfer_done_tm.cfg`, `pkt_gs_link_ack_tm.cfg`
+
+Notes:
+- Primary Header defaults reflect typical APIDs; adjust as needed per node.
+- Secondary Header fields (PUS-A/B/C) and Application Data placeholders match the field tables in this ICD.
+- On STM32 MCU builds, include the header-only interfaces from `interfaces/mcu-rtos/` to construct packets programmatically without loading configs.
 
 ---
 
-## 8. Operational Scenarios
+## 9. Operational Scenarios
 
-### 8.1 Capture → Transfer to FPGA → Inference → Result (GS-driven)
+### 9.1 Capture → Transfer to FPGA → Inference → Result (GS-driven)
 Assumptions: GS APID 0x0F0, MCU 0x100, PI 0x101, FPGA 0x102; `transactionId=42`, `imageId=100`.
 
 1) GS→MCU: TC 200/1 Capture (PUS-A)
@@ -403,24 +407,12 @@ Timing: Immediate ACKs within ~100 ms on MCU link; image transfer timing depends
 
 ---
 
-## 9. CCSDSPack Templates (TBD)
-These template names can be used in CCSDSPack configuration files to predefine packet structures:
-- `pkt_hk_req_tc` (Service=3/Sub=1, PUS-A)
-- `pkt_hk_report_tm` (3/2, PUS-A)
-- `pkt_time_set_tc` (17/1, PUS-C)
-- `pkt_time_report_tm` (17/2, PUS-C)
-- `pkt_param_set_tc` (20/1, PUS-A); `pkt_param_get_tc` (20/2); `pkt_param_val_tm` (20/3)
-- `pkt_cam_capture_tc` (200/1, PUS-A, APID 0x101)
-- `pkt_cam_settings_set_tc` (200/2); `pkt_cam_settings_get_tc` (200/3); `pkt_cam_settings_tm` (200/4)
-- `pkt_cam_ack_tm` (200/5)
-- `pkt_fpga_exec_tc` (210/1); `pkt_fpga_settings_set_tc` (210/2); `pkt_fpga_settings_get_tc` (210/3); `pkt_fpga_settings_tm` (210/4); `pkt_fpga_ack_tm` (210/5)
-- `pkt_xfer_start_tc` (23/1); `pkt_xfer_stop_tc` (23/2); `pkt_xfer_meta_tm` (23/10); `pkt_xfer_chunk_tm` (23/11); `pkt_xfer_done_tm` (23/12)
-
-Template defaults should set: Primary Header (Type, APID, SeqFlags=UNSEG), Secondary Header fields (Service/Sub/SourceID), and placeholder Application Data lengths.
+## 10. Interfaces Reference
+For predefined packet interfaces (CCSDSPack .cfg, JSON, and MCU header-only), see Section 8 and the repository paths under `interfaces/`.
 
 ---
 
-## 10. Revision Notes
+## 11. Revision Notes
 - This ICD corrects typos and clarifies CCSDS/PUS usage compared to the initial draft.
 - Added GS node (APID 0x0F0) and routing/correlation model.
 - Added operational scenario for GS-driven end-to-end flow.

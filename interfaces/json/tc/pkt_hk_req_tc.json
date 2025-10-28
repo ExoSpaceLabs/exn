@@ -1,0 +1,8 @@
+{
+  "name": "pkt_hk_req_tc",
+  "primaryHeader": { "version": 0, "type": "TC", "apid": 256, "secHdrFlag": 1, "seqFlags": "UNSEG" },
+  "pusHeader": { "type": "PusA", "version": 1, "service": 3, "subservice": 1, "sourceId": 1 },
+  "appData": [
+    { "name": "detailMask", "type": "U16", "bits": 16, "description": "Optional groups to include; 0=all" }
+  ]
+}

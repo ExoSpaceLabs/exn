@@ -125,8 +125,7 @@ Generic TLV parameters are supported for experimental configuration (keys 100..1
 
 ---
 
-## 6. CCSDSPack Templates
-- `pkt_fpga_exec_tc`, `pkt_fpga_settings_set_tc`, `pkt_fpga_settings_get_tc`, `pkt_fpga_settings_tm`, `pkt_fpga_ack_tm`
+## 6. CCSDSPack Interfaces
+- `pkt_fpga_exec_tc`
 - `pkt_xfer_chunk_tm` (results), `pkt_xfer_done_tm` (results)
-
-Templates set APID=0x102 and appropriate PUS-A fields per service/subservice.
+Interfaces set APID=0x102 and appropriate PUS-A fields per service/subservice.
