@@ -39,22 +39,30 @@ This is the **meta-repo** that ties everything together.
 ## 🧭 Modular System Graph
 
 ```mermaid
-flowchart LR
-  %% Simplified for GitHub Mermaid (avoid parentheses/commas and edge labels)
-  subgraph "GS [Ground Station]"
+graph LR
+  %% GitHub-friendly Mermaid: quoted subgraph labels and explicit directions
+  subgraph "Ground Station"
+    direction TB
     GSNode[GS App APID 0x0F0 SrcID 0x10]
   end
 
-  subgraph "MCU [MCU RTOS]"
-    MCUNode[MCU Controller APID 0x100 SrcID 0x01]
-  end
-
-  subgraph "PI [PI CAM]"
-    PiNode[Camera Node APID 0x101 SrcID 0x02]
-  end
-
-  subgraph "FPGA [FPGA AI]"
-    FpgaNode[Processing Node APID 0x102 SrcID 0x03]
+  subgraph "Astrai Payload"
+  
+      subgraph "MCU RTOS"
+        direction TB
+        MCUNode[MCU Controller APID 0x100 SrcID 0x01]
+      end
+    
+      subgraph "PI CAM"
+        direction TB
+        PiNode[Camera Node APID 0x101 SrcID 0x02]
+      end
+    
+      subgraph "FPGA AI"
+        direction TB
+        FpgaNode[Processing Node APID 0x102 SrcID 0x03]
+      end
+      
   end
 
   GSNode --> MCUNode
@@ -73,24 +81,62 @@ Notes:
 - GS may request individual HK (Service 3/1) via MCU and may request a System HK aggregation (Service 3/10). MCU bridges/proxies; devices do not depend on GS.
 - All APIDs are fixed: GS=0x0F0, MCU=0x100, PI=0x101, FPGA=0x102. Source IDs: MCU=0x01, PI=0x02, FPGA=0x03, GS=0x10.
 
-ASCII fallback diagram (if Mermaid is not rendered):
+### ➕ Additional Diagrams
 
+System HK aggregation (GS requests 3/10, MCU aggregates device HK 3/2 into TM 3/100):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant GS as GS (APID 0x0F0)
+  participant MCU as MCU-RTOS (0x100)
+  participant PI as PI-CAM (0x101)
+  participant FPGA as FPGA-AI (0x102)
+
+  GS->>MCU: TC 3/10 Request System HK
+  par Fan-out HK requests
+    MCU->>PI: TC 3/1 Request HK
+    MCU->>FPGA: TC 3/1 Request HK
+    MCU->>MCU: Collect self HK
+  end
+  PI-->>MCU: TM 3/2 HK Report (PI)
+  FPGA-->>MCU: TM 3/2 HK Report (FPGA)
+  MCU-->>GS: TM 3/100 System HK Report (aggregated)
 ```
-[GS 0x0F0]
-   |  TC: 3/1, 3/10, 20, 200, 210, 23 + Proxy Preamble
-   v
-[MCU 0x100] <----- TM 250/1 (ACK/NACK) from GS
-  |  \
-  |   \
-  |    +--> [PI 0x101] <= TC: 3/1, 20, 200, 23
-  |           ^
-  |           | TM: 3/2, 200/4-5, 23/10-12, 5/x
-  |
-  +--> [FPGA 0x102] <= TC: 3/1, 20, 210, 23
-              ^
-              | TM: 3/2, 210/4-5, 23/11-12, 5/x
 
-MCU forwards device TMs to GS and emits System HK TM 3/100 on GS request 3/10.
+Capture → Transfer → Execute → Result (GS-driven end-to-end):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant GS as GS (0x0F0)
+  participant MCU as MCU (0x100)
+  participant PI as PI (0x101)
+  participant FPGA as FPGA (0x102)
+
+  GS->>MCU: TC 200/1 Capture (target=PI)
+  MCU->>PI: TC 200/1 Capture
+  PI-->>MCU: TM 200/5 ACK
+  MCU-->>GS: TM 200/5 ACK (forwarded)
+
+  GS->>MCU: TC 23/1 Start Transfer (dest=FPGA)
+  MCU->>PI: TC 23/1 Start Transfer
+  PI-->>MCU: TM 23/10 Metadata
+  MCU-->>FPGA: TM 23/10 Metadata (bridged)
+  loop Chunks
+    PI-->>MCU: TM 23/11 Data Chunk
+    MCU-->>FPGA: TM 23/11 Data Chunk (bridged)
+  end
+  PI-->>MCU: TM 23/12 Transfer Complete
+  MCU-->>FPGA: TM 23/12 Transfer Complete
+
+  GS->>MCU: TC 210/1 Execute (target=FPGA)
+  MCU->>FPGA: TC 210/1 Execute
+  FPGA-->>MCU: TM 210/5 ACK
+  MCU-->>GS: TM 210/5 ACK (forwarded)
+  FPGA-->>MCU: TM 23/11 Result Chunk(s)
+  FPGA-->>MCU: TM 23/12 Result Complete
+  MCU-->>GS: Result TMs (forwarded)
 ```
 
 ---

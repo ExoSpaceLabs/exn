@@ -5,3 +5,4 @@ This document holds changes that have been performed on the documents. should be
 - Add changelog file.
 - Fix: README Mermaid diagram failed to render on GitHub due to syntax error (subgraph label format). Updated to `subgraph <id> [Label]` and replaced `\n` with `<br/>` in node labels; adjusted arrow notation for GitHub Mermaid. Added ASCII fallback remains unchanged.
 - Docs: Verified APIDs/IDs consistency across ICDs; no changes needed for this fix.
+- Docs: Add two additional Mermaid sequence diagrams to README: System HK aggregation flow and GS-driven end-to-end capture→transfer→execute→result workflow.
