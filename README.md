@@ -40,24 +40,24 @@ This is the **meta-repo** that ties everything together.
 
 ```mermaid
 flowchart LR
-  subgraph GS[Ground Station (PC)]
-    GSNode[GS App\nAPID 0x0F0\nSrcID 0x10]
+  subgraph GS [Ground Station (PC)]
+    GSNode[GS App<br/>APID 0x0F0<br/>SrcID 0x10]
   end
 
-  subgraph MCU[MCU-RTOS (STM32)]
-    MCUNode[MCU Controller\nAPID 0x100\nSrcID 0x01]
+  subgraph MCU [MCU-RTOS (STM32)]
+    MCUNode[MCU Controller<br/>APID 0x100<br/>SrcID 0x01]
   end
 
-  subgraph PI[PI-CAM (Raspberry Pi 5 + Cam Module 3)]
-    PiNode[Camera Node\nAPID 0x101\nSrcID 0x02]
+  subgraph PI [PI-CAM (Raspberry Pi 5 + Cam Module 3)]
+    PiNode[Camera Node<br/>APID 0x101<br/>SrcID 0x02]
   end
 
-  subgraph FPGA[FPGA-AI]
-    FpgaNode[Processing Node\nAPID 0x102\nSrcID 0x03]
+  subgraph FPGA [FPGA-AI]
+    FpgaNode[Processing Node<br/>APID 0x102<br/>SrcID 0x03]
   end
 
-  GSNode -- "TC (Svc 3/1, 3/10, 20/200/210/23)\n+ Proxy Preamble" --> MCUNode
-  GSNode <-. "Forwarded TMs (3/2, 20/3, 200/4-5, 210/4-5, 23/10-12, 5/x)" .- MCUNode
+  GSNode -- "TC (Svc 3/1, 3/10, 20/200/210/23)<br/>+ Proxy Preamble" --> MCUNode
+  MCUNode -. "Forwarded TMs (3/2, 20/3, 200/4-5, 210/4-5, 23/10-12, 5/x)" .-> GSNode
   GSNode -- "TM 250/1 Link/Proxy ACK" --> MCUNode
 
   MCUNode -- "TC 3/1, 20/1-2, 200/1-3, 210/1-3, 23/1-2" --> PiNode
