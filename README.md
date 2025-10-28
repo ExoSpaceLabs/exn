@@ -36,6 +36,75 @@ This is the **meta-repo** that ties everything together.
 
 ---
 
+## 🧭 Modular System Graph
+
+```mermaid
+flowchart LR
+  subgraph GS[Ground Station (PC)]
+    GSNode[GS App\nAPID 0x0F0\nSrcID 0x10]
+  end
+
+  subgraph MCU[MCU-RTOS (STM32)]
+    MCUNode[MCU Controller\nAPID 0x100\nSrcID 0x01]
+  end
+
+  subgraph PI[PI-CAM (Raspberry Pi 5 + Cam Module 3)]
+    PiNode[Camera Node\nAPID 0x101\nSrcID 0x02]
+  end
+
+  subgraph FPGA[FPGA-AI]
+    FpgaNode[Processing Node\nAPID 0x102\nSrcID 0x03]
+  end
+
+  GSNode -- "TC (Svc 3/1, 3/10, 20/200/210/23)\n+ Proxy Preamble" --> MCUNode
+  GSNode <-. "Forwarded TMs (3/2, 20/3, 200/4-5, 210/4-5, 23/10-12, 5/x)" .- MCUNode
+  GSNode -- "TM 250/1 Link/Proxy ACK" --> MCUNode
+
+  MCUNode -- "TC 3/1, 20/1-2, 200/1-3, 210/1-3, 23/1-2" --> PiNode
+  MCUNode -- "TC 3/1, 20/1-2, 210/1-3, 23/1-2" --> FpgaNode
+
+  PiNode -- "TM 3/2, 200/4-5, 23/10-12, 5/x" --> MCUNode
+  FpgaNode -- "TM 3/2, 210/4-5, 23/11-12, 5/x" --> MCUNode
+
+  PiNode -- "Data path (23/10-12)" --> FpgaNode
+```
+
+Notes:
+- GS may request individual HK (Service 3/1) via MCU and may request a System HK aggregation (Service 3/10). MCU bridges/proxies; devices do not depend on GS.
+- All APIDs are fixed: GS=0x0F0, MCU=0x100, PI=0x101, FPGA=0x102. Source IDs: MCU=0x01, PI=0x02, FPGA=0x03, GS=0x10.
+
+ASCII fallback diagram (if Mermaid is not rendered):
+
+```
+[GS 0x0F0]
+   |  TC: 3/1, 3/10, 20, 200, 210, 23 + Proxy Preamble
+   v
+[MCU 0x100] <----- TM 250/1 (ACK/NACK) from GS
+  |  \
+  |   \
+  |    +--> [PI 0x101] <= TC: 3/1, 20, 200, 23
+  |           ^
+  |           | TM: 3/2, 200/4-5, 23/10-12, 5/x
+  |
+  +--> [FPGA 0x102] <= TC: 3/1, 20, 210, 23
+              ^
+              | TM: 3/2, 210/4-5, 23/11-12, 5/x
+
+MCU forwards device TMs to GS and emits System HK TM 3/100 on GS request 3/10.
+```
+
+---
+
+## 📑 Interfaces & ICD
+- Master ICD: [docs/ICD.md](docs/ICD.md)
+- Device/Service ICDs:
+  - GS (Ground Station Simulator): [docs/icd/gs.md](docs/icd/gs.md)
+  - MCU-RTOS: [docs/icd/mcu-rtos.md](docs/icd/mcu-rtos.md)
+  - PI-CAM (Raspberry Pi 5 + Camera Module 3): [docs/icd/pi-cam.md](docs/icd/pi-cam.md)
+  - FPGA-AI: [docs/icd/fpga-ai.md](docs/icd/fpga-ai.md)
+
+---
+
 ## 🛠 Roadmap
 1. **Phase 1 – Pi Camera**
    - Define ACK / NACK / TM and packets structures.
