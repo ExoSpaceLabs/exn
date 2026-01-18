@@ -1,6 +1,6 @@
 # MCU-RTOS Device/Service ICD
 
-This document specializes the ASTRAi ICD for the STM32 MCU-RTOS control node (APID 0x100). It details the TCs it emits, TMs it receives, its own TMs (e.g., events/time), and the housekeeping (HK) parameters it reports when queried.
+This document specializes the EXN ICD for the STM32 MCU-RTOS control node (APID 0x100). It details the TCs it emits, TMs it receives, its own TMs (e.g., events/time), and the housekeeping (HK) parameters it reports when queried.
 
 See the master CCSDS/PUS conventions and service catalog in `../ICD.md`.
 

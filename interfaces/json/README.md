@@ -1,4 +1,4 @@
-# ASTRAi Packet Interfaces (JSON)
+# EXN Packet Interfaces (JSON)
 
 This directory mirrors the CCSDSPack `.cfg` interfaces in a JSON format suitable for tooling, generation, and validation.
 

@@ -10,4 +10,4 @@ This document holds changes that have been performed on the documents. should be
 - Interfaces: Create `interfaces/ccsdspack/{tc,tm}` and seed core `.cfg` interfaces (HK req/report, System HK req/tm, Time set, Param set/get/value, Camera capture/ACK, FPGA exec/ACK, Xfer start/stop/meta/chunk/done, GS Link ACK).
 - Interfaces: Add JSON mirrors under `interfaces/json/{tc,tm}` and seed representative files (`pkt_hk_req_tc.json`, `pkt_system_hk_req_tc.json`, `pkt_system_hk_tm.json`).
 - Docs: Update `docs/ICD.md` Section 7 to reference the new interfaces directories and example filenames; link interfaces directories from README.
-- MCU: Add header-only interfaces for STM32 builds under `interfaces/mcu-rtos/` (`astrai_interfaces.h`) and README.
+- MCU: Add header-only interfaces for STM32 builds under `interfaces/mcu-rtos/` (`exn_interfaces.h`) and README.

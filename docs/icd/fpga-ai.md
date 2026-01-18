@@ -1,6 +1,6 @@
 # FPGA-AI Device/Service ICD
 
-This document specializes the ASTRAi ICD for the FPGA Processing node (APID 0x102). It defines Housekeeping (HK) telemetry, processing settings (Service 210), execution control, and data/result transfer behavior.
+This document specializes the EXN ICD for the FPGA Processing node (APID 0x102). It defines Housekeeping (HK) telemetry, processing settings (Service 210), execution control, and data/result transfer behavior.
 
 Refer to `../ICD.md` for CCSDS/PUS conventions and the master service catalog.
 

@@ -1,6 +1,6 @@
 # CCSDSPack Packet Interfaces
 
-This directory contains configuration interfaces for CCSDSPack to define ASTRAi TeleCommands (TC) and TeleMetry (TM) packets.
+This directory contains configuration interfaces for CCSDSPack to define EXN TeleCommands (TC) and TeleMetry (TM) packets.
 
 Layout:
 - tc/ — TeleCommand interfaces (PUS-A/C)

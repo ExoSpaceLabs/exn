@@ -1,6 +1,6 @@
 # PI-CAM Device/Service ICD — Raspberry Pi 5 + Camera Module 3
 
-This document specializes the ASTRAi ICD for the Raspberry Pi 5 camera node (APID 0x101) equipped with the Raspberry Pi Camera Module 3. It defines the node’s Housekeeping (HK) telemetry, camera settings catalog (Service 200), and data transfer behavior (Service 23).
+This document specializes the EXN ICD for the Raspberry Pi 5 camera node (APID 0x101) equipped with the Raspberry Pi Camera Module 3. It defines the node’s Housekeeping (HK) telemetry, camera settings catalog (Service 200), and data transfer behavior (Service 23).
 
 Refer to `../ICD.md` for CCSDS/PUS conventions, primary/secondary header definitions, and the master service catalog.
 

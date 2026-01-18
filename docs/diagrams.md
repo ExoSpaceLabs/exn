@@ -1,4 +1,4 @@
-# ASTRAi — Sequence Diagrams
+# EXN — Sequence Diagrams
 
 This page collects the rendered Mermaid sequence diagrams referenced by the root README. They illustrate key interactions among Ground Station (GS), MCU-RTOS (MCU), PI-CAM (PI), and FPGA-AI (FPGA).
 

@@ -1,6 +1,6 @@
 # Ground Station (GS) Device/Service ICD
 
-This document specializes the ASTRAi ICD for the Ground Station node simulated on a PC.
+This document specializes the EXN ICD for the Ground Station node simulated on a PC.
 It defines the GS role and the set of TeleCommands it can issue to the MCU-RTOS for proxying to downstream devices (PI-CAM and FPGA-AI). The GS can request Housekeeping (HK) individually or as a System HK aggregation via the MCU, and can send link/proxy ACK/NACK to MCU.
 
 See master CCSDS/PUS conventions and service catalog in `../ICD.md`.

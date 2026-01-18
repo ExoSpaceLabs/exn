@@ -1,10 +1,10 @@
 
-# ICD — ASTRAi CCSDS/PUS Interface Control Document
+# ICD — EXN CCSDS/PUS Interface Control Document
 
-This document defines all TeleCommands (TC) and TeleMetry (TM) messages exchanged between the ASTRAi nodes. All messages are CCSDS Space Packets and use PUS-style secondary headers as implemented by CCSDSPack.
+This document defines all TeleCommands (TC) and TeleMetry (TM) messages exchanged between the EXN nodes. All messages are CCSDS Space Packets and use PUS-style secondary headers as implemented by CCSDSPack.
 
 ### About this document
-- Purpose: Serve as the single source of truth for how nodes in ASTRAi communicate, including packet formats, field sizes, allowed values, and semantics. It is implementation‑agnostic but directly mappable to CCSDSPack templates for generation and validation.
+- Purpose: Serve as the single source of truth for how nodes in EXN communicate, including packet formats, field sizes, allowed values, and semantics. It is implementation‑agnostic but directly mappable to CCSDSPack templates for generation and validation.
 - Scope: CCSDS primary headers, PUS secondary headers (A/B/C), services and subservices, application data definitions, acknowledgements/errors, and segmentation policies.
 - Audience: Firmware developers (MCU/FPGA/PI), test/integration engineers, and tool authors creating CCSDSPack configurations.
 - Related: Device/service‑specific ICDs with concrete parameter keys and ranges are provided alongside this document at `docs/icd/`.
@@ -28,7 +28,7 @@ All packets shall include the CCSDS Primary Header with the following fields:
 |---------------------------|------|--------------------------------------|-------------|
 | Version                   | 3    | 0                                    | CCSDS version |
 | Type                      | 1    | 1=TC, 0=TM                           | Telecommand vs Telemetry |
-| Secondary Header Flag     | 1    | 1                                    | Always present in ASTRAi |
+| Secondary Header Flag     | 1    | 1                                    | Always present in EXN |
 | APID                      | 11   | 0x100 MCU, 0x101 PI, 0x102 FPGA      | Application Process ID |
 | Sequence Flags            | 2    | 3=UNSEG, 1=FIRST, 0=CONT, 2=LAST     | Segmentation state |
 | Sequence Count            | 14   | 0..16383 (per-APID counter)          | Increment per packet sent by an APID |
@@ -52,7 +52,7 @@ To correlate multi-packet sequences initiated by GS, include a `transactionId` f
 - Mapping: For data transfers or executes that already have `imageId`/`jobId`, `transactionId` may be the same as those IDs or distinct.
 
 ## 3. PUS Secondary Headers (CCSDSPack)
-ASTRAi uses PUS-like headers provided by CCSDSPack.
+EXN uses PUS-like headers provided by CCSDSPack.
 
 ### 3.1 PUS-A (6 bytes)
 | Field          | Bits | Description |
