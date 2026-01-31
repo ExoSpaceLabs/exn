@@ -29,9 +29,10 @@ This is the **meta-repo** that ties everything together.
 - `docs/` → architecture docs, diagrams, and roadmaps
 - `system/` → integration scripts, manifests, CI/CD workflows
 - `submodules/`:
-  - [exn-pi-cam](https://github.com/ExoSpaceLabs/exn-pi-cam)
-  - [exn-mcu-rtos](https://github.com/ExoSpaceLabs/exn-mcu-rtos)
-  - [exn-fpga-ai](https://github.com/ExoSpaceLabs/exn-fpga-ai)
+  - [exn-gs](https://github.com/ExoSpaceLabs/exn-gs) (Work started / open)
+  - [exn-pi-cam](https://github.com/ExoSpaceLabs/exn-pi-cam) (WIP / locked)
+  - [exn-mcu-rtos](https://github.com/ExoSpaceLabs/exn-mcu-rtos) (WIP / locked)
+  - [exn-fpga-ai](https://github.com/ExoSpaceLabs/exn-fpga-ai) (WIP / locked)
   - [ccsdspack](https://github.com/ExoSpaceLabs/CCSDSPack)
 
 ---
