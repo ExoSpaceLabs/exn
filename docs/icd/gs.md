@@ -1,110 +1,182 @@
 # Ground Station (GS) Device/Service ICD
 
-This document specializes the EXN ICD for the Ground Station node simulated on a PC.
-It defines the GS role and the set of TeleCommands it can issue to the MCU-RTOS for proxying to downstream devices (PI-CAM and FPGA-AI). The GS can request Housekeeping (HK) individually or as a System HK aggregation via the MCU, and can send link/proxy ACK/NACK to MCU.
+This document specializes the EXN master ICD for the Ground Station. The wire profile is defined in `../ICD.md`; this file defines GS routing, client responsibilities, and GS-originated application flows.
 
-See master CCSDS/PUS conventions and service catalog in `../ICD.md`.
+## 1. GS identity and topology
 
----
+- GS APID: `0x0F0`.
+- PUS-A TC Source ID: `0x10`.
+- The GS transport link terminates at MCU-RTOS (`0x100`).
+- GS-originated TC/request packets sent over that link therefore use destination APID `0x100`.
+- MCU consumes device-proxy metadata and re-issues a new TC to PI (`0x101`) or FPGA (`0x102`) when required.
+- Forwarded node TMs retain the producing node APID where the link permits raw Space Packet routing.
 
-## 1. Role and Interfaces
-- Acts as the operator console and test harness.
-- Sends TCs to MCU-RTOS (APID 0x100). MCU proxies these to PI (0x101) and FPGA (0x102).
-- Receives forwarded TMs (ACKs, reports, data) from MCU.
-- APID: 0x0F0 (240)
-- PUS Source ID: 0x10
-- Transport: typically UDP or serial. Framing per `ICD.md` Transport section.
-
-Authority and safety: GS is assumed authorized to issue all TCs during development; deployments may restrict via policy (out of scope for this ICD).
+All current GS mission packets use the PUS revision-A profile defined by the master ICD.
 
 ---
 
-## 2. GS↔MCU Proxy Preamble
-When GS sends a TC that is intended for a downstream device (HK, Params, Camera, FPGA, Transfer), it SHOULD prepend a short proxy preamble to the Application Data so MCU can route and correlate responses.
+## 2. Ground-segment software responsibility split
 
-- Fields (big-endian):
+The EXN ground segment separates transport ownership from mission/application behavior.
 
-| Name           | Type   | Bits | Description |
-|----------------|--------|------|-------------|
-| transactionId  | uint16 | 16   | Correlates multi-packet flows. Range 1..65535; 0 reserved. Echoed in all ACKs/TMs for this transaction. |
-| target         | uint8  | 8    | 1=PI-CAM (0x101), 2=FPGA-AI (0x102) |
-| options        | uint8  | 8    | Bitmask: [0]=mirror TM to GS, [1]=mirror TM to device peer (for PI→FPGA direct assist), others reserved=0 |
+### 2.1 Daemon/router
 
-Placement: This preamble MUST be the first bytes of the Application Data in GS-originated TCs for Services 3, 20, 23, 200, 210. The remainder of the payload follows the service-specific schema as defined in `ICD.md`.
+The GS daemon is the common connection point for local clients and owns the physical/simulator link. Its responsibilities are limited to:
 
-MCU behavior: MCU consumes the preamble, re-issues a device TC with the remainder payload (without the preamble), and stores `transactionId` for mapping and forwarding of downstream ACKs/TMs back to GS, re-inserting `transactionId` as the first field of forwarded Application Data.
+- open/close and maintain the Serial/TCP device link;
+- frame incoming CCSDS Space Packets;
+- validate packet boundaries and expose packet metadata;
+- route complete client-supplied Space Packets to the device link;
+- broadcast received/transmitted packet metadata to connected clients;
+- maintain link state and packet logging.
 
----
+The daemon shall **not**:
 
-## 3. GS Command Scope and ACK/NACK Behavior
-- GS MAY send Housekeeping (HK) requests (Service 3/1) to MCU for a specific target (MCU/PI/FPGA) using the Proxy Preamble, and MAY request a System HK aggregation (Service 3/10) from MCU.
-- Devices publish their HK (3/2) to MCU; MCU forwards to GS as appropriate. System HK is returned by MCU as a single aggregated TM (3/100).
-- GS MAY issue control TCs via MCU proxy for device control/services (Params, Camera, FPGA, Data Transfer) as defined below.
-- GS SHOULD send minimal ACK/NACK back to MCU for GS→MCU transactions using Service 250 (Link/Proxy ACK), defined in `../ICD.md`.
+- generate periodic HK requests;
+- synthesize time-setting packets as liveness checks;
+- own mission command sequence/correlation counters;
+- schedule application services.
 
----
+A daemon `PING` is an IPC/link-state liveness operation only and does not create a spacecraft packet.
 
-## 4. Commands the GS Can Issue
-For each of the following, prepend the Proxy Preamble (Section 2), then append the service-specific payload defined in `ICD.md`.
+### 2.2 Operator client/UI
 
-- Housekeeping
-  - TC 3/1 Request HK — Preamble + optional `detailMask:uint16`; target must be one of MCU/PI/FPGA
-  - Expected: TM 3/2 Report HK forwarded from target device
-  - TC 3/10 Request System HK — Preamble (target MUST be MCU) + `{ transactionId:uint16, include_mask:uint8, detailMask:uint16 }`
-  - Expected: TM 3/100 System HK Report from MCU (aggregated)
+Mission behavior belongs to the client application. The UI/client is responsible for:
 
-- Parameter Management
-  - TC 20/1 Set Parameter — Preamble + `key:uint8` + `value:TLV`
-  - TC 20/2 Get Parameter — Preamble + `key:uint8`
-  - Expected: TM 20/3 Parameter Value (forwarded)
+- constructing CCSDSPack v2 packets according to this ICD;
+- owning TC sequence counts for the packet streams it generates;
+- owning GS transaction/correlation IDs;
+- scheduling periodic requests such as System HK;
+- enabling/disabling those schedules as part of the operator workflow.
 
-- Camera Control (target=PI)
-  - TC 200/1 Capture — Preamble + `{ mode:uint8, burst_count:uint16, exposure_us:uint32 }`
-  - TC 200/2 Cam Settings Set — Preamble + `key:uint8` + `value:TLV`
-  - TC 200/3 Cam Settings Get — Preamble + `key:uint8`
-  - Expected: TM 200/5 ACK, TM 23/10..12 (image stream), optional events
-
-- FPGA Control (target=FPGA)
-  - TC 210/1 Execute — Preamble + `{ pipeline:uint8, modelId:uint16, flags:uint16 }`
-  - TC 210/2 Proc Settings Set — Preamble + `key:uint8` + `value:TLV`
-  - TC 210/3 Proc Settings Get — Preamble + `key:uint8`
-  - Expected: TM 210/5 ACK, result TMs/Events as defined in FPGA ICD
-
-- Data Transfer
-  - TC 23/1 Start Transfer — Preamble + `{ imageId:uint16, dest:uint8(0=FPGA,1=MCU), chunk_size:uint16 }`
-  - TC 23/2 Stop Transfer — Preamble + `{ imageId:uint16 }`
-  - Expected: TM 23/10 Metadata, TM 23/11 Chunks, TM 23/12 Complete
+The current terminal UI uses a default **2 s** periodic System HK cadence when HK scheduling is enabled. This cadence is an application setting, not a daemon protocol requirement.
 
 ---
 
-## 5. End-to-End Example Workflows
+## 3. GS -> MCU proxy preamble
 
-### 5.1 Capture → Transfer to FPGA → Run Inference → Return Result (via MCU)
-Assume transactionId=42.
+A GS TC that is intended for PI or FPGA begins its Application Data with the four-octet proxy preamble:
 
-1) GS→MCU: TC 200/1 Capture (target=PI)
-   - App Data: `[preamble{txId=42,target=PI,options=0}] + {mode=0,burst_count=1,exposure_us=0}`
-   - MCU proxies to PI; PI→MCU sends TM 200/5 ACK which MCU forwards to GS with `txId` echoed.
+| Field | Type | Bits | Description |
+|---|---|---:|---|
+| `transactionId` | uint16 | 16 | `1..65535`; `0` reserved |
+| `target` | uint8 | 8 | `1=PI`, `2=FPGA` |
+| `options` | uint8 | 8 | bit0 mirror response to GS; bit1 mirror to peer; remaining bits zero |
 
-2) GS→MCU: TC 23/1 Start Transfer (target=PI)
-   - App Data: `[preamble{42,PI,options bit0=1 (mirror to GS)}] + {imageId=100, dest=0 /*FPGA*/, chunk_size=900}`
-   - PI emits TM 23/10 Metadata, followed by TM 23/11 chunks to MCU; MCU forwards to FPGA (dest=FPGA) and, because options bit0=1, mirrors the same TMs to GS. Completion TM 23/12 forwarded likewise.
+The GS -> MCU packet still has TC APID `0x100` and PUS-A Source ID `0x10` because MCU is the direct endpoint of that hop.
 
-3) GS→MCU: TC 210/1 Execute (target=FPGA)
-   - App Data: `[preamble{42,FPGA,0}] + {pipeline=3, modelId=1, flags=0}`
-   - FPGA→MCU sends TM 210/5 ACK then result TMs (e.g., TM 23/11 with logits or TM 3/2 HK update); MCU forwards to GS with `txId=42` echoed.
+MCU removes the preamble before creating the downstream packet. The downstream TC then uses target APID `0x101` or `0x102` and PUS-A Source ID `0x01`.
 
-4) Finalization: MCU may send Event (5/1..3) on errors; GS correlates by `txId` (and `imageId`/`jobId` if present).
+### 3.1 Services that use the preamble
+
+The preamble is required for GS-originated device-directed requests in Services 3, 20, 23, 200, and 210 when the actual service endpoint is PI or FPGA.
+
+It is **not** used merely because a packet originated at GS.
+
+### 3.2 Direct MCU requests
+
+MCU-local services have no proxy preamble. In particular:
+
+- TC `3/10` System HK Request is direct GS -> MCU.
+- GS MCU-local TC `3/1` HK Request is direct GS -> MCU.
 
 ---
 
-## 6. CCSDSPack Interface Hints (GS)
-Recommended names for GS-originated TCs (APID 0x0F0, Type=TC, PUS-A/C as per service). Application Data must start with the Proxy Preamble when targeting devices.
-- `gs_hk_req_tc` (Svc 3/1), `gs_system_hk_req_tc` (Svc 3/10)
-- `gs_param_set_tc`, `gs_param_get_tc`
-- `gs_cam_capture_tc`, `gs_cam_setting_set_tc`, `gs_cam_setting_get_tc`
-- `gs_fpga_exec_tc`, `gs_fpga_setting_set_tc`, `gs_fpga_setting_get_tc`
-- `gs_xfer_start_tc`, `gs_xfer_stop_tc`
-- `gs_link_ack_tm` (Svc 250/1) — GS→MCU link/proxy ACK/NACK
+## 4. Housekeeping behavior
 
-These interfaces should include configurable insertion of the Proxy Preamble fields before the service payload (for device-directed TCs).
+### 4.1 Single-node HK, 3/1
+
+For MCU-local HK:
+
+- TC APID: `0x100`;
+- PUS-A Source ID: `0x10`;
+- App Data: optional `detailMask:uint16`;
+- no proxy preamble.
+
+For PI/FPGA HK through MCU:
+
+- GS -> MCU App Data: proxy preamble + optional `detailMask:uint16`;
+- MCU re-issues TC `3/1` to the selected target APID.
+
+Expected response is TM `3/2` with the target node as producer APID.
+
+### 4.2 System HK, 3/10 and 3/100
+
+System HK is an MCU aggregation service and is therefore direct.
+
+GS -> MCU TC `3/10`:
+
+- APID `0x100`;
+- Source ID `0x10`;
+- no proxy preamble;
+- exactly five Application Data octets:
+
+| Field | Type | Description |
+|---|---|---|
+| `transactionId` | uint16 | request/response correlation |
+| `include_mask` | uint8 | bit0 MCU, bit1 PI, bit2 FPGA |
+| `detailMask` | uint16 | common detail selection |
+
+MCU -> GS TM `3/100` uses producer APID `0x100` and echoes `transactionId`.
+
+The GS UI's periodic HK job sends this `3/10` packet. The daemon only routes it.
+
+---
+
+## 5. Other GS command flows
+
+All device-directed examples below are GS -> MCU packets with APID `0x100`, PUS-A Source ID `0x10`, and the proxy preamble before the service payload.
+
+### Parameter management
+
+- TC `20/1` Set Parameter: preamble + `key:uint8` + `value:TLV`.
+- TC `20/2` Get Parameter: preamble + `key:uint8`.
+- Expected TM `20/3` from the producing target APID.
+
+### Camera control, target PI
+
+- TC `200/1` Capture: preamble + `{mode:uint8, burst_count:uint16, exposure_us:uint32}`.
+- TC `200/2` Camera Settings Set: preamble + `key:uint8` + `value:TLV`.
+- TC `200/3` Camera Settings Get: preamble + `key:uint8`.
+- Expected TM `200/4`, `200/5`, and Service 23 image-transfer TMs as applicable.
+
+### FPGA control, target FPGA
+
+- TC `210/1` Execute: preamble + `{pipeline:uint8, modelId:uint16, flags:uint16}`.
+- TC `210/2` Processing Settings Set: preamble + `key:uint8` + `value:TLV`.
+- TC `210/3` Processing Settings Get: preamble + `key:uint8`.
+- Expected TM `210/4`/`210/5` and event/report packets as applicable.
+
+### Data transfer
+
+- TC `23/1` Start Transfer: preamble + `{imageId:uint16, dest:uint8, chunk_size:uint16}`.
+- TC `23/2` Stop Transfer: preamble + `{imageId:uint16}`.
+- Expected TM `23/10` Metadata, `23/11` Chunks, and `23/12` Complete.
+
+---
+
+## 6. GS reporting packet, Service 250/1
+
+GS may produce reporting packet `250/1` when application-level UI/proxy acknowledgement is required.
+
+- Packet Type: TM/report (`0`).
+- Producer APID: GS `0x0F0`.
+- PUS profile: `PUS:revA:TM`.
+- Application Data: `{transactionId:uint16, ackCode:uint8, detail:uint16}`.
+
+The physical direction is still GS -> MCU. Packet Type expresses EXN request/report semantics rather than being hard-bound to link direction. Consequently, the GS daemon/router must route structurally valid Space Packets without assuming every outbound packet has Packet Type TC.
+
+---
+
+## 7. CCSDSPack v2 construction hints
+
+GS TC construction uses:
+
+- selector `PUS:revA:TC`;
+- one-octet Source ID width;
+- Source ID `0x10`;
+- CRC16 enabled;
+- sequence flags UNSEGMENTED;
+- destination APID according to the direct packet endpoint.
+
+System HK is the first GS client flow migrated to this API. Other UI command builders should reuse the same shared packet-construction layer rather than adding command-specific packet synthesis to the daemon.

@@ -1,420 +1,374 @@
-
 # ICD — EXN CCSDS/PUS Interface Control Document
 
-This document defines all TeleCommands (TC) and TeleMetry (TM) messages exchanged between the EXN nodes. All messages are CCSDS Space Packets and use PUS-style secondary headers as implemented by CCSDSPack.
+This document is the wire-level source of truth for communication between EXN nodes. Device-specific behavior and parameter ranges live under `docs/icd/`; packet identifiers, header policy, routing rules, service identifiers, and common application-data layouts are defined here.
 
-### About this document
-- Purpose: Serve as the single source of truth for how nodes in EXN communicate, including packet formats, field sizes, allowed values, and semantics. It is implementation‑agnostic but directly mappable to CCSDSPack templates for generation and validation.
-- Scope: CCSDS primary headers, PUS secondary headers (A/B/C), services and subservices, application data definitions, acknowledgements/errors, and segmentation policies.
-- Audience: Firmware developers (MCU/FPGA/PI), test/integration engineers, and tool authors creating CCSDSPack configurations.
-- Related: Device/service‑specific ICDs with concrete parameter keys and ranges are provided alongside this document at `docs/icd/`.
+## 0. Current protocol baseline
 
-- Nodes and APIDs:
-  - 0x0F0 (240): GS — Ground Station (PC simulator; operator console)
-  - 0x100 (256): MCU-RTOS — Control node (TC originator, time master)
-  - 0x101 (257): PI-CAM — Camera node (image source)
-  - 0x102 (258): FPGA-AI — Processing node (pre/inference/post)
+EXN currently uses:
 
-- Endianness: Unless explicitly stated, multi-byte integers in Application Data are big-endian (network order) to align with CCSDS practice.
-- CRC: CRC-16/CCITT (poly 0x1021, init 0xFFFF, final XOR 0x0000). CCSDSPack computes and appends CRC in the data field as configured.
-- Time: Recommend CCSDS CUC (coarse+fine) 6-byte time where timestamps are included. Alternatively, UNIX epoch seconds(4)/nanos(4) MAY be used if agreed.
+- CCSDS Space Packet Protocol, Packet Version Number `0`;
+- CCSDSPack **v2.x**, with **v2.0.0** as the initial migration baseline;
+- **PUS revision A** TC/TM secondary headers for all currently defined EXN services;
+- CRC-16/CCITT-FALSE packet error control;
+- big-endian application-data integers;
+- unsegmented CCSDS Space Packets by default. Service 23 chunking is application-level chunking, not CCSDS packet segmentation.
 
----
+PUS revision and PUS service number are separate concepts. Service 5 (events) and Service 17 (time) therefore use the same PUS revision-A secondary-header profile as the other current services. EXN does not define a PUS-B secondary-header format, and Service 17 does not imply a PUS-C header.
 
-## 1. CCSDS Primary Header (6 bytes)
-All packets shall include the CCSDS Primary Header with the following fields:
+### Nodes
 
-| Field                     | Bits | Value/Range                          | Description |
-|---------------------------|------|--------------------------------------|-------------|
-| Version                   | 3    | 0                                    | CCSDS version |
-| Type                      | 1    | 1=TC, 0=TM                           | Telecommand vs Telemetry |
-| Secondary Header Flag     | 1    | 1                                    | Always present in EXN |
-| APID                      | 11   | 0x100 MCU, 0x101 PI, 0x102 FPGA      | Application Process ID |
-| Sequence Flags            | 2    | 3=UNSEG, 1=FIRST, 0=CONT, 2=LAST     | Segmentation state |
-| Sequence Count            | 14   | 0..16383 (per-APID counter)          | Increment per packet sent by an APID |
-| Data Length               | 16   | 0..65535                              | Bytes in Data Field (Secondary Header + App Data [+ CRC]) |
-
-Policy:
-- Sequence counter rolls over per-sender APID. For chunked transfers, flags use FIRST/CONT/LAST; otherwise UNSEGMENTED.
+| Node | APID | PUS-A TC Source ID | Role |
+|---|---:|---:|---|
+| GS | `0x0F0` | `0x10` | Ground station/operator client |
+| MCU-RTOS | `0x100` | `0x01` | Control/router node and time master |
+| PI-CAM | `0x101` | `0x02` | Camera/image source |
+| FPGA-AI | `0x102` | `0x03` | Processing/inference node |
 
 ---
 
-## 2. Ground Station Control Model and Routing
-The Ground Station (GS, APID 0x0F0, SourceID 0x10) is an operator console simulated on a PC. GS communicates ONLY with MCU-RTOS (APID 0x100). The MCU acts as a bridge/proxy to downstream devices (PI 0x101, FPGA 0x102):
-- GS→MCU: GS sends TCs including HK requests (Service 3/1) and System HK requests (Service 3/10), as well as device control (Params, Camera, FPGA, Data Transfer). The MCU proxies device-directed HK/TCs to the target APIDs and manages responses; for System HK, the MCU aggregates device HKs.
-- Device→MCU→GS: Devices send TMs to MCU. For GS-initiated operations, MCU forwards relevant ACKs/TMs upstream to GS. The forwarded packets retain the device’s APID in the primary header when link permits; if a single GS link requires one APID, MCU may encapsulate device APID in the Application Data preamble (see Correlation/Transaction ID).
-- Authority: By default, GS has authority to request any TC. Implementations may restrict via policy (out of scope of ICD).
+## 1. CCSDS Space Packet profile
 
-### 2.1 Correlation/Transaction ID (optional but RECOMMENDED for GS-driven flows)
-To correlate multi-packet sequences initiated by GS, include a `transactionId` field as the first item in Application Data of the initiating TC, and echo it in all related ACKs/TMs:
-- Type/Size: `transactionId` is `uint16` (16 bits). Range 1..65535; 0 is reserved.
-- Placement: If present, it MUST be the first field of the initiating TC’s Application Data. Responders MUST echo it as the first field in corresponding ACKs and completion TMs for that transaction.
-- Mapping: For data transfers or executes that already have `imageId`/`jobId`, `transactionId` may be the same as those IDs or distinct.
+### 1.1 Primary header
 
-## 3. PUS Secondary Headers (CCSDSPack)
-EXN uses PUS-like headers provided by CCSDSPack.
+All EXN packets use the standard six-octet CCSDS Space Packet Primary Header.
 
-### 3.1 PUS-A (6 bytes)
-| Field          | Bits | Description |
-|----------------|------|-------------|
-| Version        | 3    | PUS version (set to 1) |
-| Service Type   | 8    | Functional service (e.g., 3=HK, 23=Data) |
-| Subservice     | 8    | Specific request/indication under the service |
-| Source ID      | 8    | Origin logical ID (MCU=0x01, PI=0x02, FPGA=0x03) |
-| Data Length    | 16   | Length of application data in bytes |
+| Field | Bits | EXN policy |
+|---|---:|---|
+| Version | 3 | `0` |
+| Packet Type | 1 | `1` requesting/TC, `0` reporting/TM |
+| Secondary Header Flag | 1 | `1` for current EXN application packets |
+| APID | 11 | Mission-managed endpoint/path identifier, policy below |
+| Sequence Flags | 2 | `11` / UNSEGMENTED unless a future interface explicitly adopts CCSDS segmentation |
+| Sequence Count | 14 | `0..16383`, modulo 16384 per Packet Identification stream |
+| Packet Data Length | 16 | Encoded value `N - 1`, where `N` is all octets after the primary header, including CRC when enabled |
 
-Usage: General TC/TM requests and reports (HK, parameters, device control, data transfer).
+The complete packet size is therefore:
 
-### 3.2 PUS-B (8 bytes)
-| Field          | Bits | Description |
-|----------------|------|-------------|
-| Version        | 3    | PUS version (set to 1) |
-| Service Type   | 8    | 5=Event Reporting |
-| Subservice     | 8    | Severity/type (1=Info,2=Warn,3=Error) |
-| Source ID      | 8    | Origin logical ID |
-| Event ID       | 16   | Event identifier |
-| Data Length    | 16   | Length of event data |
+`6 + Packet Data Length + 1`
 
-Usage: Errors, warnings, and notable events.
+Do not treat Packet Data Length as a literal byte count. Earlier EXN material did so and was off by one.
 
-### 3.3 PUS-C (variable, ≥6 bytes)
-| Field          | Bits | Description |
-|----------------|------|-------------|
-| Version        | 3    | PUS version (set to 1) |
-| Service Type   | 8    | 17=Time Management |
-| Subservice     | 8    | 1=SetTime, 2=TimeReport |
-| Source ID      | 8    | Origin logical ID |
-| Time Code      | n×8  | Time code bytes (e.g., 6-byte CUC) |
-| Data Length    | 16   | Length of time payload (not counting PUS-C header itself) |
+### 1.2 APID naming policy
 
-Usage: Time distribution and synchronization when used.
+CCSDS permits APID naming to be mission-specific. EXN fixes the following convention:
 
----
+- **TC/request packet:** APID identifies the **destination EXN endpoint**.
+- **TM/report packet:** APID identifies the **producing EXN endpoint**.
 
-## 4. Common Enumerations and Conventions
-- Source IDs: GS=0x10, MCU=0x01, PI=0x02, FPGA=0x03
-- Result Codes (ACK/NACK): 0=OK, 1=INVALID, 2=BUSY, 3=UNSUPPORTED, 4=TIMEOUT, 5=INTERNAL
-- Pixel Types:
-  - 1=RGB888, 2=GRAY8, 3=GRAY16, 4=YUV420, 5=BAYER_RGGB8
-- Endianness of Application Data fields: Big-endian unless explicitly noted.
+Examples:
+
+- GS -> MCU System HK request: TC APID `0x100`, PUS-A TC Source ID `0x10`.
+- MCU -> PI camera command: TC APID `0x101`, PUS-A TC Source ID `0x01`.
+- PI -> MCU/GS camera ACK: TM APID `0x101`.
+- MCU -> GS System HK report: TM APID `0x100`.
+
+The Packet Sequence Count authority follows the complete managed Packet Identification stream, not a vague "per sender" rule.
+
+### 1.3 Packet error control
+
+Current EXN interfaces use CCSDSPack `PacketErrorControlMode::CRC16`, corresponding to CRC-16/CCITT-FALSE:
+
+- polynomial `0x1021`;
+- initial value `0xFFFF`;
+- no reflection;
+- final XOR `0x0000`.
+
+The two CRC octets are part of the CCSDS Packet Data Field length calculation.
 
 ---
 
-### 4.1 Quick TC/TM List
-Below is a compact list of all TeleCommands (TC) and TeleMetry (TM). See Section 5 for full field tables.
+## 2. PUS revision-A profile
 
-| Svc | Sub | Name                         | Direction        | APID (src→dst)              | PUS |
-|-----|-----|------------------------------|------------------|-----------------------------|-----|
-| 3   | 1   | Request HK                   | MCU→Device, GS→MCU (proxy) | 0x100→0x101/0x102, 0x0F0→0x100 | A   |
-| 3   | 2   | Report HK                    | Device→MCU→GS    | 0x101/0x102→0x100(bridge to 0x0F0) | A   |
-| 5   | 1   | Event Info                   | Device→MCU→GS    | any→0x100(bridge to 0x0F0)  | B   |
-| 5   | 2   | Event Warn                   | Device→MCU→GS    | any→0x100(bridge to 0x0F0)  | B   |
-| 5   | 3   | Event Error                  | Device→MCU→GS    | any→0x100(bridge to 0x0F0)  | B   |
-| 17  | 1   | Set Time                     | MCU→All          | 0x100→all                   | C   |
-| 17  | 2   | Time Report                  | Any→MCU→GS       | any→0x100(bridge to 0x0F0)  | C   |
-| 3   | 10  | Request System HK            | GS→MCU           | 0x0F0→0x100                 | A   |
-| 3   | 100 | System HK Report             | MCU→GS           | 0x100→0x0F0                 | A   |
-| 20  | 1   | Set Parameter                | MCU→Device, GS→MCU (proxy) | 0x100→0x101/0x102, 0x0F0→0x100 | A   |
-| 20  | 2   | Get Parameter                | MCU→Device, GS→MCU (proxy) | 0x100→0x101/0x102, 0x0F0→0x100 | A   |
-| 20  | 3   | Parameter Value              | Device→MCU→GS    | 0x101/0x102→0x100(bridge to 0x0F0) | A   |
-| 23  | 1   | Start Transfer               | MCU→PI/FPGA, GS→MCU (proxy) | 0x100→0x101/0x102, 0x0F0→0x100 | A   |
-| 23  | 2   | Stop Transfer                | MCU→PI/FPGA, GS→MCU (proxy) | 0x100→0x101/0x102, 0x0F0→0x100 | A   |
-| 23  | 10  | Metadata                     | PI→MCU→GS/FPGA   | 0x101→0x100(bridge to 0x0F0/0x102) | A   |
-| 23  | 11  | Data Chunk                   | PI→MCU→GS/FPGA   | 0x101→0x100(bridge to 0x0F0/0x102) | A   |
-| 23  | 12  | Transfer Complete            | PI→MCU→GS/FPGA   | 0x101→0x100(bridge to 0x0F0/0x102) | A   |
-| 200 | 1   | Capture                      | MCU→PI, GS→MCU (proxy) | 0x100→0x101, 0x0F0→0x100 | A   |
-| 200 | 2   | Camera Settings Set          | MCU→PI, GS→MCU (proxy) | 0x100→0x101, 0x0F0→0x100 | A   |
-| 200 | 3   | Camera Settings Get          | MCU→PI, GS→MCU (proxy) | 0x100→0x101, 0x0F0→0x100 | A   |
-| 200 | 4   | Camera Settings Report       | PI→MCU→GS        | 0x101→0x100(bridge to 0x0F0) | A   |
-| 200 | 5   | Camera ACK/NACK              | PI→MCU→GS        | 0x101→0x100(bridge to 0x0F0) | A   |
-| 210 | 1   | Execute                      | MCU→FPGA, GS→MCU (proxy) | 0x100→0x102, 0x0F0→0x100 | A   |
-| 210 | 2   | Proc Settings Set            | MCU→FPGA, GS→MCU (proxy) | 0x100→0x102, 0x0F0→0x100 | A   |
-| 210 | 3   | Proc Settings Get            | MCU→FPGA, GS→MCU (proxy) | 0x100→0x102, 0x0F0→0x100 | A   |
-| 210 | 4   | Proc Settings Report         | FPGA→MCU→GS      | 0x102→0x100(bridge to 0x0F0) | A   |
-| 210 | 5   | FPGA ACK/NACK                | FPGA→MCU→GS      | 0x102→0x100(bridge to 0x0F0) | A   |
-| 250 | 1   | Link/Proxy ACK               | GS→MCU           | 0x0F0→0x100                  | A   |
+### 2.1 Telecommand secondary header
 
-See device/service‑specific details:
-- MCU-RTOS: docs/icd/mcu-rtos.md
-- PI-CAM (Raspberry Pi 5 + Camera Module 3): docs/icd/pi-cam.md
-- FPGA-AI: docs/icd/fpga-ai.md
-- GS (Ground Station Simulator): docs/icd/gs.md
+EXN uses CCSDSPack selector `PUS:revA:TC` with:
 
-### 4.2 GS Service Usage Profile
-- GS sends: 3/1 (HK Request), 3/10 (System HK Request), 20/1–2, 200/1–3, 210/1–3, 23/1–2 as TeleCommands to MCU (APID 0x0F0→0x100). The MCU proxies device-directed TCs to PI/FPGA and aggregates System HK.
-- GS receives: 3/2 (forwarded device HK), 3/100 (System HK Report), 20/3, 200/4–5, 210/4–5, 23/10–12, and 5/1–3 from MCU as forwarded/aggregated TeleMetry.
-- GS returns link/proxy ACK/NACK to MCU using Service 250/1 (see Section 5.7) to indicate UI-side acceptance or command cancellation.
-- Correlation: If `transactionId` is present in a GS TC, MCU MUST echo it in proxied TCs and in any forwarded ACK/TM as first field of Application Data.
-- Timing: Unless specified otherwise in device ICDs, immediate device ACK expected within 100 ms on MCU link; completion/aggregation timing depends on operation (e.g., image capture size; System HK aggregation timeout ~200–600 ms).
+- source-ID width: **1 octet**;
+- secondary-header spare octets: `0`;
+- acknowledgement flags: `0` by default;
+- service type: one octet;
+- service subtype: one octet.
 
-## 5. Service Catalog (TC/TM)
-Each entry defines: Direction, APID, PUS header type, and Application Data fields.
+With this tailoring, the current TC secondary header is four octets on wire: version/ACK field, Service, Subservice, Source ID.
 
-### 5.1 Housekeeping (Service 3, PUS-A)
-- TC 3/1 Request HK
-  - Direction: MCU→Device (APID target: 0x101 or 0x102); GS→MCU (proxy) allowed using Proxy Preamble (see GS ICD)
-  - App Data: (optional) `detailMask` (uint16, 16 bits) — which groups to include
-- TM 3/2 Report HK
-  - Direction: Device→MCU (APID source: PI=0x101, FPGA=0x102)
-  - App Data:
-  
-    | Name            | Type   | Bits | Description |
-    |-----------------|--------|------|-------------|
-    | uptime_ms       | uint64 | 64   | Device uptime |
-    | temperature_cC  | int16  | 16   | Temperature in centi-deg C |
-    | status_flags    | uint16 | 16   | Bitmask (health flags) |
-    | last_error      | uint16 | 16   | Last error code |
-    | ts_cuc          | bytes  | 48   | 6-byte CUC timestamp |
+Application data follows immediately after the secondary header. There is no EXN/PUS-A secondary-header application-data length field; CCSDS Packet Data Length owns packet sizing.
 
-- TC 3/10 Request System HK (GS-driven)
-  - Direction: GS→MCU (APID 0x0F0→0x100)
-  - App Data (big-endian):
-  
-    | Name          | Type   | Bits | Description |
-    |---------------|--------|------|-------------|
-    | transactionId | uint16 | 16   | Correlates with response; 0 if unused |
-    | include_mask  | uint8  | 8    | Bitmask: [0]=MCU, [1]=PI, [2]=FPGA; other bits reserved 0 |
-    | detailMask    | uint16 | 16   | Optional per-device HK detail mask (applied to all) |
+### 2.2 Telemetry secondary header
 
-- TM 3/100 System HK Report (aggregated)
-  - Direction: MCU→GS (APID 0x100→0x0F0)
-  - App Data (big-endian):
-  
-    | Name          | Type   | Bits | Description |
-    |---------------|--------|------|-------------|
-    | transactionId | uint16 | 16   | Echo of request, 0 if unused |
-    | present_mask  | uint8  | 8    | Bitmask of which blocks are present: [0]=MCU, [1]=PI, [2]=FPGA |
-    | status        | uint8  | 8    | 0=OK, 1=PARTIAL, 2=TIMEOUT, 3=ERROR |
-    | reserved      | uint8  | 8    | 0 |
-    | blocks        | bytes  | var  | Concatenated node blocks in order MCU, PI, FPGA when present |
-  
-  - Node block encoding (when present), each prefixed with `block_len:uint16` then the node’s TM 3/2 HK payload as defined in the respective device ICD. If a node timed out, a minimal block MAY be included with `block_len=0`.
-  - Timing: MCU SHOULD wait up to `T_hk_timeout` per device (recommended 200 ms) with a total cap of 600 ms before emitting TM 3/100. Partial results are allowed with `status=PARTIAL` and appropriate `present_mask` bits set only for received HKs.
+EXN uses CCSDSPack selector `PUS:revA:TM` with:
 
-### 5.2 Time Management (Service 17, PUS-C)
-- TC 17/1 Set Time
-  - Direction: MCU→All
-  - PUS-C Time Code: 6-byte CUC (recommended) or agreed format
-  - App Data: none
-- TM 17/2 Time Report (optional periodic)
-  - Direction: Any→MCU
-  - PUS-C Time Code: current device time
-  - App Data: none
+- destination-ID width: **0 octets**;
+- packet subcounter: absent;
+- timestamp in secondary header: absent;
+- spare octets: `0`;
+- service type and subtype present.
 
-### 5.3 Parameter Management (Service 20, PUS-A)
-- TC 20/1 Set Parameter
-  - Direction: MCU→Device
-  - App Data:
-  
-    | Name  | Type  | Bits | Description |
-    |-------|-------|------|-------------|
-    | key   | uint8 | 8    | Parameter key (device-specific) |
-    | value | TLV   | var  | Encoded value (Type,Length,Value) |
-  
-- TC 20/2 Get Parameter
-  - Direction: MCU→Device
-  - App Data: `key` (uint8, 8)
-- TM 20/3 Parameter Value
-  - Direction: Device→MCU
-  - App Data:
+With this tailoring, the current TM secondary header is three octets on wire: version/spare field, Service, Subservice.
 
-    | Name   | Type  | Bits | Description |
-    |--------|-------|------|-------------|
-    | key    | uint8 | 8    | Parameter key |
-    | status | uint8 | 8    | 0=OK or error code |
-    | value  | TLV   | var  | Encoded value |
+TM producer identity is carried by APID. Mission timestamps, when required, remain explicit Application Data fields.
 
-### 5.4 Camera Control (Service 200, PUS-A, APID 0x101)
-- TC 200/1 Capture
-  - App Data:
-  
-    | Name         | Type   | Bits | Description |
-    |--------------|--------|------|-------------|
-    | mode         | uint8  | 8    | 0=single, 1=burst |
-    | burst_count  | uint16 | 16   | Number of frames if burst |
-    | exposure_us  | uint32 | 32   | Optional exposure (0=default) |
+### 2.3 Time representation
 
-- TC 200/2 Camera Settings Set
-  - App Data: `key`(uint8), `value`(TLV)
-- TC 200/3 Camera Settings Get
-  - App Data: `key`(uint8)
-- TM 200/4 Camera Settings Report
-  - App Data: `key`(uint8), `status`(uint8), `value`(TLV)
-- TM 200/5 ACK/NACK
-  - App Data:
-
-    | Name         | Type  | Bits | Description |
-    |--------------|-------|------|-------------|
-    | orig_service | uint8 | 8    | Service of original TC |
-    | orig_sub     | uint8 | 8    | Subservice of original TC |
-    | resultCode   | uint8 | 8    | 0=OK, >0=error |
-    | detail       | uint16| 16   | Optional error detail |
-
-### 5.5 FPGA Control (Service 210, PUS-A, APID 0x102)
-- TC 210/1 Execute
-  - App Data:
-
-    | Name     | Type   | Bits | Description |
-    |----------|--------|------|-------------|
-    | pipeline | uint8  | 8    | 0=pre,1=infer,2=post,3=full |
-    | modelId  | uint16 | 16   | Model selection |
-    | flags    | uint16 | 16   | Bitfield (options) |
-  
-- TC 210/2 Proc Settings Set — `key`(uint8), `value`(TLV)
-- TC 210/3 Proc Settings Get — `key`(uint8)
-- TM 210/4 Proc Settings Report — `key`(uint8), `status`(uint8), `value`(TLV)
-- TM 210/5 ACK/NACK — same structure as 200/5
-
-### 5.6 Data Transfer (Service 23, PUS-A)
-Used by PI-CAM (and optionally FPGA) to stream large data as a series of packets.
-
-- TC 23/1 Start Transfer
-  - Direction: MCU→PI (or MCU→FPGA)
-  - App Data:
-
-    | Name       | Type   | Bits | Description |
-    |------------|--------|------|-------------|
-    | imageId    | uint16 | 16   | Transfer identifier |
-    | dest       | uint8  | 8    | 0=FPGA, 1=MCU |
-    | chunk_size | uint16 | 16   | Preferred chunk size (bytes) |
-  
-- TC 23/2 Stop Transfer
-  - App Data: `imageId` (uint16)
-- TM 23/10 Metadata (first packet for a stream)
-  - Direction: PI→Destination
-  - App Data:
-  
-    | Name        | Type   | Bits | Description |
-    |-------------|--------|------|-------------|
-    | imageId     | uint16 | 16   | Transfer identifier |
-    | height      | uint16 | 16   | Pixels |
-    | width       | uint16 | 16   | Pixels |
-    | channels    | uint8  | 8    | 1..4 |
-    | pixel_type  | uint8  | 8    | See Pixel Types |
-    | total_size  | uint32 | 32   | Bytes of image payload |
-    | chunk_size  | uint16 | 16   | Bytes per data chunk |
-    | ts_cuc      | bytes  | 48   | 6-byte timestamp |
-  
-- TM 23/11 Data Chunk (repeating)
-  - Direction: PI→Destination
-  - Primary Header Sequence Flags: typically UNSEGMENTED, app-level chunking controls order. Optionally use FIRST/CONT/LAST for link-layer segmentation coherence.
-  - App Data:
-  
-    | Name    | Type   | Bits | Description |
-    |---------|--------|------|-------------|
-    | imageId | uint16 | 16   | Transfer identifier |
-    | offset  | uint32 | 32   | Byte offset into image |
-    | data    | bytes  | var  | Up to negotiated `chunk_size` |
-  
-- TM 23/12 Transfer Complete
-  - Direction: PI→Destination
-  - App Data:
-  
-    | Name        | Type   | Bits | Description |
-    |-------------|--------|------|-------------|
-    | imageId     | uint16 | 16   | Transfer identifier |
-    | totalChunks | uint16 | 16   | Number of chunks sent |
+Where this ICD specifies `ts_cuc`, EXN currently uses a six-octet mission CUC representation in Application Data. Service 17 distributes or reports that application time value. It does not switch the packet to a PUS-C secondary header.
 
 ---
 
-### 5.7 GS Link/Proxy ACK (Service 250, PUS-A)
-- Purpose: GS acknowledges receipt/handling of a GS-originated TC at the UI/link layer (not device execution status).
-- Direction: GS→MCU (APID 0x0F0→0x100)
-- Subservice: 1 (ACK/NACK)
-- Application Data:
+## 3. GS/MCU routing and correlation
 
-| Name           | Type   | Bits | Description |
-|----------------|--------|------|-------------|
-| transactionId  | uint16 | 16   | Correlates with GS-initiated TC (if used). 0 if not applicable. |
-| ackCode        | uint8  | 8    | 0=Accepted, 1=Rejected, 2=Cancelled, 3=Invalid, 4=Timeout |
-| detail         | uint16 | 16   | Optional reason/detail code |
+The GS physical/simulator link terminates at MCU-RTOS. Device-directed commands are therefore two packet hops:
 
-Notes:
-- Does not replace device ACKs (e.g., 200/5, 210/5); it complements them to reflect GS-side state.
+1. **GS -> MCU:** TC APID `0x100`, Source ID `0x10`. For downstream-device operations, Application Data begins with the proxy preamble.
+2. **MCU -> target:** MCU consumes the proxy preamble and creates a new TC using target APID `0x101` or `0x102` and Source ID `0x01`.
 
----
+Device TMs retain their source APID while MCU forwards/routes them to GS where the transport permits it.
 
-## 6. Acknowledgement & Error Handling
-- Every TC SHOULD receive an immediate ACK/NACK TM (Service 200/5 or 210/5, or Service-specific ACK if defined) with `resultCode` and optional `detail`.
-- Completion reports are sent as the final TM of a sequence (e.g., 23/12), or as Events (Service 5) when errors occur mid-flow.
+### 3.1 Proxy preamble
 
-### 6.1 Event Reporting (Service 5, PUS-B)
-- TM 5/1 Info, 5/2 Warn, 5/3 Error
-  - App Data (examples):
-  
-    | Name       | Type   | Bits | Description |
-    |------------|--------|------|-------------|
-    | eventId    | uint16 | 16   | Event identifier |
-    | code       | uint16 | 16   | Error/Info code |
-    | detail     | uint32 | 32   | Extra context |
-    | ts_cuc     | bytes  | 48   | 6-byte timestamp |
+The proxy preamble is exactly four octets and is used only on GS-originated TCs that MCU must re-issue to PI-CAM or FPGA-AI.
+
+| Field | Type | Bits | Meaning |
+|---|---|---:|---|
+| `transactionId` | uint16 | 16 | Correlation ID, `1..65535`; `0` reserved |
+| `target` | uint8 | 8 | `1=PI`, `2=FPGA` |
+| `options` | uint8 | 8 | bit0 mirror response to GS; bit1 mirror to peer; remaining bits zero |
+
+The preamble is not part of the downstream packet. MCU removes it before re-issuing the command.
+
+### 3.2 Direct MCU services
+
+Commands whose service endpoint is MCU itself do **not** use the proxy preamble. In particular:
+
+- TC `3/10` Request System HK is GS -> MCU and its Application Data is exactly `{transactionId, include_mask, detailMask}`.
+- A GS request for MCU-local `3/1` HK likewise needs no downstream proxy preamble.
+
+This avoids the previous duplicate `transactionId` definition around System HK.
 
 ---
 
-## 7. Transport Bindings & Segmentation
-- Links: SPI, UART, CAN, or UDP. Implementations MAY wrap CCSDS packets in a simple framing (e.g., SLIP) per link.
-- Recommended application data chunk size: 800–1000 bytes for UART/CAN; higher acceptable for SPI/UDP by agreement.
-- Primary Header `Sequence Flags` MAY be used to mirror multi-packet segmentation at CCSDS level when underlying link needs it; otherwise keep UNSEGMENTED and rely on app-level chunking with `offset`.
+## 4. Common enumerations
+
+### 4.1 Result codes
+
+| Value | Meaning |
+|---:|---|
+| 0 | OK |
+| 1 | INVALID |
+| 2 | BUSY |
+| 3 | UNSUPPORTED |
+| 4 | TIMEOUT |
+| 5 | INTERNAL |
+
+### 4.2 Pixel types
+
+| Value | Meaning |
+|---:|---|
+| 1 | RGB888 |
+| 2 | GRAY8 |
+| 3 | GRAY16 |
+| 4 | YUV420 |
+| 5 | BAYER_RGGB8 |
 
 ---
 
-## 8. Interfaces (CCSDSPack & JSON)
-Predefined packet interfaces are provided in the repository to accelerate development and ensure alignment with this ICD.
+## 5. Service catalogue
 
-- CCSDSPack .cfg interfaces:
-  - TeleCommands: `interfaces/ccsdspack/tc/`
-  - TeleMetry:    `interfaces/ccsdspack/tm/`
-- JSON mirrors (for tooling/generation):
-  - TeleCommands: `interfaces/json/tc/`
-  - TeleMetry:    `interfaces/json/tm/`
-- MCU-RTOS (no filesystem):
-  - Header-only definitions: `interfaces/mcu-rtos/`
+All entries below use the PUS revision-A profile from Section 2.
 
-Examples (by filename):
-- TC: `pkt_hk_req_tc.cfg`, `pkt_system_hk_req_tc.cfg`, `pkt_time_set_tc.cfg`, `pkt_param_set_tc.cfg`, `pkt_param_get_tc.cfg`, `pkt_cam_capture_tc.cfg`, `pkt_fpga_exec_tc.cfg`, `pkt_xfer_start_tc.cfg`, `pkt_xfer_stop_tc.cfg`
-- TM: `pkt_hk_report_tm.cfg`, `pkt_system_hk_tm.cfg`, `pkt_param_val_tm.cfg`, `pkt_cam_ack_tm.cfg`, `pkt_xfer_meta_tm.cfg`, `pkt_xfer_chunk_tm.cfg`, `pkt_xfer_done_tm.cfg`, `pkt_gs_link_ack_tm.cfg`
+| Service/Sub | Name | Packet type | Direct endpoint / APID policy |
+|---|---|---|---|
+| 3/1 | Request HK | TC | target node APID; GS device request first targets MCU `0x100` with proxy preamble |
+| 3/2 | Report HK | TM | producer node APID |
+| 3/10 | Request System HK | TC | MCU `0x100`, direct, no proxy preamble |
+| 3/100 | System HK Report | TM | MCU `0x100` |
+| 5/1 | Event Info | TM | producer node APID |
+| 5/2 | Event Warn | TM | producer node APID |
+| 5/3 | Event Error | TM | producer node APID |
+| 17/1 | Set Time | TC | target node APID; one packet per target |
+| 17/2 | Time Report | TM | producer node APID |
+| 20/1 | Set Parameter | TC | target node APID; GS device request uses MCU proxy hop |
+| 20/2 | Get Parameter | TC | target node APID; GS device request uses MCU proxy hop |
+| 20/3 | Parameter Value | TM | producer node APID |
+| 23/1 | Start Transfer | TC | data-source node APID; GS request uses MCU proxy hop |
+| 23/2 | Stop Transfer | TC | data-source node APID; GS request uses MCU proxy hop |
+| 23/10 | Transfer Metadata | TM | data-source node APID |
+| 23/11 | Transfer Chunk | TM | data-source node APID |
+| 23/12 | Transfer Complete | TM | data-source node APID |
+| 200/1 | Camera Capture | TC | PI `0x101`; GS request uses MCU proxy hop |
+| 200/2 | Camera Settings Set | TC | PI `0x101`; GS request uses MCU proxy hop |
+| 200/3 | Camera Settings Get | TC | PI `0x101`; GS request uses MCU proxy hop |
+| 200/4 | Camera Settings Report | TM | PI `0x101` |
+| 200/5 | Camera ACK/NACK | TM | PI `0x101` |
+| 210/1 | Execute | TC | FPGA `0x102`; GS request uses MCU proxy hop |
+| 210/2 | Processing Settings Set | TC | FPGA `0x102`; GS request uses MCU proxy hop |
+| 210/3 | Processing Settings Get | TC | FPGA `0x102`; GS request uses MCU proxy hop |
+| 210/4 | Processing Settings Report | TM | FPGA `0x102` |
+| 210/5 | FPGA ACK/NACK | TM | FPGA `0x102` |
+| 250/1 | GS Link/Proxy ACK | TM/report | producer GS APID `0x0F0`, routed to MCU |
 
-Notes:
-- Primary Header defaults reflect typical APIDs; adjust as needed per node.
-- Secondary Header fields (PUS-A/B/C) and Application Data placeholders match the field tables in this ICD.
-- On STM32 MCU builds, include the header-only interfaces from `interfaces/mcu-rtos/` to construct packets programmatically without loading configs.
+### 5.1 Housekeeping, Service 3
+
+#### TC 3/1 Request HK
+
+Application Data after any required GS proxy preamble:
+
+| Field | Type | Notes |
+|---|---|---|
+| `detailMask` | uint16, optional | `0` means default/all groups |
+
+#### TM 3/2 Report HK
+
+| Field | Type | Notes |
+|---|---|---|
+| `uptime_ms` | uint64 | device uptime |
+| `temperature_cC` | int16 | centi-degrees Celsius |
+| `status_flags` | uint16 | node-defined health flags |
+| `last_error` | uint16 | last error code |
+| `ts_cuc` | bytes[6] | report timestamp |
+
+#### TC 3/10 Request System HK
+
+Exactly five Application Data octets, no proxy preamble:
+
+| Field | Type | Notes |
+|---|---|---|
+| `transactionId` | uint16 | correlation ID; current GS client uses non-zero IDs |
+| `include_mask` | uint8 | bit0 MCU, bit1 PI, bit2 FPGA |
+| `detailMask` | uint16 | common HK detail selection |
+
+#### TM 3/100 System HK Report
+
+Header fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `transactionId` | uint16 | echoes request |
+| `present_mask` | uint8 | bit0 MCU, bit1 PI, bit2 FPGA |
+| `status` | uint8 | `0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR` |
+| `reserved` | uint8 | zero |
+
+Then repeat `[block_len:uint16][node_hk_bytes...]` for each included node.
+
+### 5.2 Event reporting, Service 5
+
+Subservice defines severity: `1=Info`, `2=Warn`, `3=Error`.
+
+Application Data begins with:
+
+| Field | Type | Notes |
+|---|---|---|
+| `eventId` | uint16 | event identifier |
+| `eventData` | bytes[] | event-specific payload |
+
+`eventId` is application data, not a separate PUS-B secondary-header field.
+
+### 5.3 Time management, Service 17
+
+#### TC 17/1 Set Time
+
+Application Data: mission-defined `time_cuc[6]`.
+
+#### TM 17/2 Time Report
+
+Application Data: mission-defined `time_cuc[6]` plus any node-specific quality/status fields defined by the device ICD.
+
+### 5.4 Parameter management, Service 20
+
+- TC 20/1 Set Parameter: `key:uint8` + `value:TLV`.
+- TC 20/2 Get Parameter: `key:uint8`.
+- TM 20/3 Parameter Value: `key:uint8` + `value:TLV`.
+
+For GS device-directed requests, the four-octet proxy preamble precedes these service fields on the GS -> MCU hop.
+
+### 5.5 Data transfer, Service 23
+
+- TC 23/1 Start Transfer: `{imageId:uint16, dest:uint8, chunk_size:uint16}`.
+- TC 23/2 Stop Transfer: `{imageId:uint16}`.
+- TM 23/10 Metadata: `{imageId:uint16,height:uint16,width:uint16,channels:uint8,pixel_type:uint8,total_size:uint32,chunk_size:uint16,ts_cuc[6]}`.
+- TM 23/11 Chunk: `{imageId:uint16,offset:uint32,data[]}`.
+- TM 23/12 Complete: `{imageId:uint16,totalChunks:uint16}`.
+
+Each 23/11 packet is currently an independent UNSEGMENTED CCSDS Space Packet. `offset` and `imageId` provide application-level reassembly.
+
+### 5.6 Camera control, Service 200
+
+- TC 200/1 Capture: `{mode:uint8,burst_count:uint16,exposure_us:uint32}`.
+- TC 200/2 Settings Set: `key:uint8 + value:TLV`.
+- TC 200/3 Settings Get: `key:uint8`.
+- TM 200/4 Settings Report: device-defined key/value report.
+- TM 200/5 ACK/NACK: `{orig_service:uint8,orig_sub:uint8,resultCode:uint8,detail:uint16}`.
+
+### 5.7 FPGA processing, Service 210
+
+- TC 210/1 Execute: `{pipeline:uint8,modelId:uint16,flags:uint16}`.
+- TC 210/2 Settings Set: `key:uint8 + value:TLV`.
+- TC 210/3 Settings Get: `key:uint8`.
+- TM 210/4 Settings/Result Report: device ICD defines payload.
+- TM 210/5 ACK/NACK: `{orig_service:uint8,orig_sub:uint8,resultCode:uint8,detail:uint16}`.
+
+### 5.8 GS link/proxy acknowledgement, Service 250
+
+TM/report 250/1 is produced by GS when an application-level GS acknowledgement is required:
+
+| Field | Type | Notes |
+|---|---|---|
+| `transactionId` | uint16 | associated proxy transaction |
+| `ackCode` | uint8 | `0=Accepted,1=Rejected,2=Cancelled,3=Invalid,4=Timeout` |
+| `detail` | uint16 | implementation-defined detail |
+
+Because EXN Packet Type describes requesting vs reporting semantics rather than physical link direction, a GS-originated reporting packet may have Packet Type `TM` and APID `0x0F0`.
 
 ---
 
-## 9. Operational Scenarios
+## 6. CCSDSPack v2 configuration mapping
 
-### 9.1 Capture → Transfer to FPGA → Inference → Result (GS-driven)
-Assumptions: GS APID 0x0F0, MCU 0x100, PI 0x101, FPGA 0x102; `transactionId=42`, `imageId=100`.
+Authoritative `.cfg` templates are under `interfaces/ccsdspack/`.
 
-1) GS→MCU: TC 200/1 Capture (PUS-A)
-   - Primary: Type=TC, APID=0x0F0
-   - App Data: `[transactionId:uint16=42][target:uint8=1][options:uint8=0] + {mode=0, burst_count=1, exposure_us=0}`
-   - MCU proxies to PI as TC 200/1 (without preamble). PI→MCU emits TM 200/5 ACK; MCU forwards to GS and prepends `[transactionId=42]`.
+Current TC templates use:
 
-2) GS→MCU: TC 23/1 Start Transfer (PUS-A)
-   - App Data: `[42][1][options bit0=1] + {imageId=100, dest=0 /*FPGA*/, chunk_size=900}`
-   - PI→MCU: TM 23/10 Metadata, then TM 23/11 Chunks, then TM 23/12 Complete.
-   - MCU forwards to FPGA (dest=FPGA) and mirrors to GS because options bit0=1; all forwarded TMs include `[transactionId=42]` as the first field of Application Data.
+```text
+ccsds_packet_error_control:string=crc16
+ccsds_version_number:int=0
+ccsds_segmented:bool=false
+define_secondary_header:bool=true
+secondary_header_type:string=PUS:revA:TC
+pus_source_id_octets:int=1
+secondary_header_spare_octets:int=0
+pus_acknowledgement_flags:uint=0
+```
 
-3) GS→MCU: TC 210/1 Execute (PUS-A)
-   - App Data: `[42][2][0] + {pipeline=3, modelId=1, flags=0}`
-   - FPGA→MCU: TM 210/5 ACK, followed by result TMs per FPGA ICD; MCU forwards to GS with `[transactionId=42]`.
+Current TM templates use:
 
-4) Completion/Errors
-   - Final TM 23/12 indicates image transfer completion; FPGA result TM indicates inference complete. Any errors: TM 5/x Event forwarded to GS with `[transactionId=42]` if applicable.
+```text
+ccsds_packet_error_control:string=crc16
+ccsds_version_number:int=0
+ccsds_segmented:bool=false
+define_secondary_header:bool=true
+secondary_header_type:string=PUS:revA:TM
+pus_destination_id_octets:int=0
+secondary_header_spare_octets:int=0
+pus_destination_id:uint=0
+```
 
-Timing: Immediate ACKs within ~100 ms on MCU link; image transfer timing depends on chunk size/MTU; inference timing is model-dependent.
+Direction and Secondary Header Flag come from the installed directional secondary-header object. Legacy EXN keys such as `ccsds_type`, `ccsds_data_field_header_flag`, `pus_version`, `pus_service_sub_type`, and selectors `PusA/PusB/PusC` are not part of the EXN v2 profile.
 
 ---
 
-## 10. Interfaces Reference
-For predefined packet interfaces (CCSDSPack .cfg, JSON, and MCU header-only), see Section 8 and the repository paths under `interfaces/`.
+## 7. Implementation invariants
 
----
+Implementations and tests shall enforce at least the following:
 
-## 11. Revision Notes
-- This ICD corrects typos and clarifies CCSDS/PUS usage compared to the initial draft.
-- Added GS node (APID 0x0F0) and routing/correlation model.
-- Added operational scenario for GS-driven end-to-end flow.
-- Future extensions: define comprehensive parameter key tables for Camera/FPGA, event ID registry, and per-link framing details.
+1. CCSDS Packet Version Number is `0`.
+2. Packet Data Length equals `packet_size - 7` on a complete packet.
+3. Current EXN application packets have a PUS revision-A secondary header.
+4. TC source-ID width is one octet; TM destination-ID width is zero octets.
+5. CRC16 is included and validated at packet endpoints.
+6. TC APID follows destination-endpoint policy; TM APID follows producer-endpoint policy.
+7. GS -> MCU System HK `3/10` carries exactly the five service payload octets and no proxy preamble.
+8. The GS transport daemon may route packets, but mission scheduling and periodic command generation belong to clients/applications, not the transport layer.
 
+Device-specific constraints remain in:
+
+- `docs/icd/gs.md`
+- `docs/icd/mcu-rtos.md`
+- `docs/icd/pi-cam.md`
+- `docs/icd/fpga-ai.md`

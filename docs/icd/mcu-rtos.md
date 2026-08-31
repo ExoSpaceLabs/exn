@@ -1,127 +1,156 @@
 # MCU-RTOS Device/Service ICD
 
-This document specializes the EXN ICD for the STM32 MCU-RTOS control node (APID 0x100). It details the TCs it emits, TMs it receives, its own TMs (e.g., events/time), and the housekeeping (HK) parameters it reports when queried.
+This document specializes the EXN master ICD for the STM32 MCU-RTOS control node. The wire-level packet profile, APID policy, PUS revision, CRC policy, proxy preamble, and common service payloads are authoritative in `../ICD.md`.
 
-See the master CCSDS/PUS conventions and service catalog in `../ICD.md`.
+## 1. Role and identifiers
 
----
+- Node APID: `0x100`.
+- PUS-A TC Source ID: `0x01`.
+- Acts as the northbound GS endpoint, system controller, downstream command router, System HK aggregator, and time master.
+- Issues device TCs to PI-CAM (`0x101`) and FPGA-AI (`0x102`).
+- Receives and forwards device TMs while retaining the producing device APID.
 
-## 1. Role and Interfaces
-- Acts as the system controller and time master.
-- Issues TeleCommands to PI-CAM (APID 0x101) and FPGA-AI (APID 0x102).
-- Aggregates TeleMetry and relays events upward.
-- Provides time distribution (PUS-C Service 17).
+All currently defined MCU packets use the EXN **PUS revision-A** profile from the master ICD. Service numbers do not select a different PUS revision.
 
-Transports: SPI, UART, CAN, or UDP, as integrated per platform build. Framing may be SLIP or raw; see `ICD.md` Transport section.
+## 2. Packet/APID behavior
 
----
+EXN APID semantics are direction-specific:
 
-## 2. TCs/TMs Summary (MCU perspective)
-- Emits:
-  - 3/1 HK Request (to PI, FPGA)
-  - 17/1 Set Time (to all)
-  - 20/1 Set Param, 20/2 Get Param (to PI, FPGA)
-  - 200/x Camera Control (to PI)
-  - 210/x Processing Control (to FPGA)
-  - 23/1 Start Transfer, 23/2 Stop Transfer (to PI/FPGA)
-- Receives:
-  - 3/2 HK Report (from PI, FPGA)
-  - 5/x Events (from any)
-  - 17/2 Time Report (from any)
-  - 20/3 Parameter Value (from PI, FPGA)
-  - 200/4 Settings Report, 200/5 ACK (from PI)
-  - 210/4 Settings Report, 210/5 ACK (from FPGA)
-  - 23/10..12 Data Transfer packets (from PI/FPGA)
+- TCs emitted by MCU use the **destination APID**: PI `0x101` or FPGA `0x102`.
+- TMs produced by MCU use APID `0x100`.
+- GS-originated TCs received by MCU use destination APID `0x100` and PUS-A TC Source ID `0x10`.
 
----
+The MCU maintains sequence state for each Packet Identification stream it originates.
 
-## 2.5 GS Northbound Interface and Proxying
-MCU-RTOS interfaces with the Ground Station (GS, APID 0x0F0, SourceID 0x10) over a northbound link. GS-originated TCs targeting devices include a Proxy Preamble (see `../ICD.md` and `gs.md`). MCU behavior:
+## 3. GS northbound proxying
 
-- Accept TCs from GS (APID src=0x0F0→dst=0x100) for Services 3/1 (HK Request), 3/10 (System HK Request), 20, 23, 200, 210.
-- Accept GS Link/Proxy ACK as TM 250/1 from GS to confirm UI/link acceptance or cancellation (see `../ICD.md` Section 5.7).
-- Parse Proxy Preamble fields at the head of Application Data:
-  - `transactionId:uint16`, `target:uint8` (0=ALL (System HK only), 1=PI,2=FPGA, 3=MCU), `options:uint8`.
-- Re-issue device TC to the target APID with the remainder payload (without the preamble).
-- Correlate responses: For any downstream ACK/TM related to the proxied operation, forward upstream to GS and prepend `transactionId` as the first field in the forwarded Application Data. Preserve the device APID when link/protocol permits; otherwise include APID in a small preamble field `orig_apid:uint16` after `transactionId`.
-- Fan-out requests: For System HK (3/10), MCU issues internal 3/1 HK requests to each device selected by `include_mask` and also collects its own HK.
-- Timeouts/Retry (recommended default):
-  - Immediate device ACK expected within 100 ms; retry TC up to 2 times if no ACK.
-  - Operation timeout per service: Capture/Transfer 10 s (configurable), Execute 5 s; System HK aggregation up to 600 ms total.
+GS physically communicates with MCU. Device-directed GS operations therefore use two packet hops.
 
-### 2.6 System HK Aggregation (TC 3/10 → TM 3/100)
-- Upon receiving TC 3/10 from GS, MCU:
-  1) Records `transactionId` and `include_mask`.
-  2) Issues TC 3/1 to PI and/or FPGA per `include_mask` and gathers TM 3/2; collects MCU self-HK.
-  3) Waits up to `T_hk_timeout` (≈200 ms per device) with an overall cap of 600 ms.
-  4) Builds TM 3/100 with `present_mask` indicating which blocks are included and `status=OK/PARTIAL/TIMEOUT`.
-  5) Sends TM 3/100 to GS, echoing `transactionId`.
-- Partial results policy: include any received HK; missing devices are omitted from `present_mask`.
-- Error handling: severe errors are also reported as PUS-B events (Service 5).
+### 3.1 Device-directed operation
 
-Note: For Data Transfer (23/10..12), if GS preamble `options bit0` is set, MCU mirrors PI→MCU stream to GS while also forwarding to FPGA when `dest=0`. 
+1. GS sends a TC to APID `0x100`, Source ID `0x10`.
+2. Application Data begins with the four-octet proxy preamble from `../ICD.md`:
+   `{transactionId:u16,target:u8,options:u8}`.
+3. MCU consumes the preamble.
+4. MCU constructs a new TC addressed to the target APID with Source ID `0x01` and only the service-specific payload.
+5. MCU correlates downstream responses to `transactionId` and forwards them to GS.
 
----
+Valid proxy targets are `1=PI` and `2=FPGA`. MCU-local operations do not use this preamble.
 
-## 3. MCU-RTOS Housekeeping (Service 3)
-When MCU is queried by another node (less common) or for self-test logs, the following HK set is used. Use big-endian for multi-byte fields.
+### 3.2 Direct MCU services
 
-- TM 3/2 Report HK — Application Data
+System HK TC `3/10` is a direct GS -> MCU command and **must not** carry the proxy preamble. Its Application Data is exactly:
 
-| Name                | Type   | Bits | Description |
-|---------------------|--------|------|-------------|
-| uptime_ms           | uint64 | 64   | System uptime in milliseconds |
-| reset_cause         | uint8  | 8    | 0=POR,1=PIN,2=IWDG,3=WWDG,4=SW,5=LPWR,6=BOR |
-| fw_version          | uint32 | 32   | Firmware version encoded (major<<24|minor<<16|patch<<8|build) |
-| heap_used_bytes     | uint32 | 32   | Current heap in bytes |
-| heap_free_bytes     | uint32 | 32   | Free heap in bytes |
-| task_count          | uint16 | 16   | Number of RTOS tasks |
-| stack_low_water_min | uint16 | 16   | Minimum remaining stack (worst task) in bytes |
-| link_status         | uint16 | 16   | Bitmask: [0]SPI, [1]UART, [2]CAN, [3]UDP up |
-| tc_sent             | uint32 | 32   | Total TCs sent |
-| tm_rcvd             | uint32 | 32   | Total TMs received |
-| err_count           | uint32 | 32   | Error counter |
-| ts_cuc              | bytes  | 48   | 6-byte CUC timestamp |
+`{transactionId:u16, include_mask:u8, detailMask:u16}`
 
-Notes:
-- Add optional diagnostic extension as a TLV block at the end if `detailMask` in TC 3/1 requests it.
+A GS request for MCU-local TC `3/1` HK is likewise direct.
 
----
+## 4. System HK aggregation
 
-## 4. Time Management (Service 17, PUS-C)
-- TC 17/1 Set Time: MCU sends 6-byte CUC time code to sync nodes.
-- TM 17/2 Time Report: Optional echo/periodic from devices; MCU may also issue a self-report during testing.
+For TC `3/10`, MCU:
 
-Time code: Recommended CUC coarse(4 bytes seconds) + fine(2 bytes 1/65536 s).
+1. records `transactionId`, `include_mask`, and `detailMask`;
+2. collects MCU self-HK when bit0 is set;
+3. issues TC `3/1` to PI and/or FPGA when bits1/2 are set;
+4. waits for the selected TM `3/2` reports up to the configured aggregation timeout;
+5. produces TM `3/100` using APID `0x100` and echoes `transactionId`;
+6. reports `present_mask` and `status=OK/PARTIAL/TIMEOUT/ERROR` according to collected data.
 
----
+Recommended integration defaults remain approximately 200 ms per device and no more than 600 ms overall. These values are policy defaults, not packet-format requirements.
 
-## 5. Event Reporting (Service 5, PUS-B)
-MCU can emit its own events, but typically aggregates device events. Event payload follows `ICD.md` Section 5.1. Suggested MCU event IDs:
+## 5. MCU packet scope
 
-| Event ID | Severity | Description |
-|----------|----------|-------------|
-| 0x0001   | Info     | Boot completed |
-| 0x0002   | Warn     | Link degraded (detail bitmask) |
-| 0x0003   | Error    | Watchdog reset occurred |
+### Emits TCs
 
----
+- `3/1` HK Request to PI/FPGA.
+- `17/1` Set Time to each target node.
+- `20/1` Set Parameter and `20/2` Get Parameter.
+- `23/1` Start Transfer and `23/2` Stop Transfer.
+- `200/1..3` Camera control to PI.
+- `210/1..3` processing control to FPGA.
 
-## 6. Parameter Keys (Service 20)
-Keys are 8-bit. Values are TLV in Application Data. TLV Types suggested: 1=U8,2=U16,3=U32,4=I32,5=F32,6=STR,7=BYTES.
+### Produces TMs/reports
 
-| Key | Name              | TLV Type | Units | Range/Enum | Default | Notes |
-|-----|-------------------|----------|-------|------------|---------|-------|
-| 1   | link.primary      | U8       | enum  | 0=SPI,1=UART,2=CAN,3=UDP | 0 | Preferred control link |
-| 2   | link.baud         | U32      | bps   | 9600..3e6  | 115200  | UART only |
-| 3   | can.bitrate       | U32      | bps   | 125k..1M   | 500000  | CAN only |
-| 4   | time.use_pus_c    | U8       | bool  | 0/1        | 1       | Use PUS-C time distribution |
-| 5   | crc.enable        | U8       | bool  | 0/1        | 1       | Enable CRC appending |
+- `3/2` MCU HK Report.
+- `3/100` System HK Report.
+- `5/1..3` MCU event reports.
+- `17/2` MCU Time Report when requested/used.
 
----
+### Receives device TMs
 
-## 7. CCSDSPack Interfaces
-Suggested names (align with `ICD.md` Section 8) for MCU-owned packets:
-- `pkt_hk_req_tc`, `pkt_time_set_tc`, `pkt_param_set_tc`, `pkt_param_get_tc`
-- `pkt_cam_capture_tc`, `pkt_fpga_exec_tc`, `pkt_xfer_start_tc`, `pkt_xfer_stop_tc`
-These set Primary Header Type=TC, APID=0x100, SeqFlags=UNSEG; PUS headers per service/subservice as listed.
+- `3/2` HK Report.
+- `5/1..3` Event reports.
+- `17/2` Time Report.
+- `20/3` Parameter Value.
+- `23/10..12` transfer packets.
+- `200/4..5` camera reports/ACKs.
+- `210/4..5` FPGA reports/ACKs.
+
+## 6. MCU housekeeping payload
+
+When MCU produces TM `3/2`, Application Data uses big-endian encoding:
+
+| Name | Type | Bits | Description |
+|---|---|---:|---|
+| `uptime_ms` | uint64 | 64 | System uptime in milliseconds |
+| `reset_cause` | uint8 | 8 | `0=POR,1=PIN,2=IWDG,3=WWDG,4=SW,5=LPWR,6=BOR` |
+| `fw_version` | uint32 | 32 | `major<<24 | minor<<16 | patch<<8 | build` |
+| `heap_used_bytes` | uint32 | 32 | Current heap usage |
+| `heap_free_bytes` | uint32 | 32 | Free heap |
+| `task_count` | uint16 | 16 | Number of RTOS tasks |
+| `stack_low_water_min` | uint16 | 16 | Lowest remaining stack margin |
+| `link_status` | uint16 | 16 | Platform-defined active-link bitmask |
+| `tc_sent` | uint32 | 32 | TCs emitted |
+| `tm_rcvd` | uint32 | 32 | TMs received |
+| `err_count` | uint32 | 32 | Error counter |
+| `ts_cuc` | bytes[6] | 48 | Mission CUC timestamp in Application Data |
+
+An optional diagnostic TLV extension may follow when requested by `detailMask`.
+
+## 7. Time management, Service 17
+
+Service 17 uses the same **PUS revision-A** secondary header as every current EXN service.
+
+- TC `17/1`: Application Data contains `time_cuc[6]`.
+- TM `17/2`: Application Data contains `time_cuc[6]` and optional quality/status fields.
+
+The six-octet CUC value is mission Application Data. It is not a PUS-C secondary header.
+
+## 8. Event reporting, Service 5
+
+Service 5 also uses PUS revision A. Event ID is Application Data, not a separate PUS-B field.
+
+Suggested MCU event IDs:
+
+| Event ID | Severity/subservice | Description |
+|---:|---|---|
+| `0x0001` | `5/1` Info | Boot completed |
+| `0x0002` | `5/2` Warn | Link degraded |
+| `0x0003` | `5/3` Error | Watchdog reset occurred |
+
+Application Data starts with `eventId:uint16`, followed by event-specific bytes.
+
+## 9. Parameter keys, Service 20
+
+Keys are 8-bit and values use the master ICD TLV encoding.
+
+| Key | Name | TLV | Range/Enum | Default | Notes |
+|---:|---|---|---|---|---|
+| 1 | `link.primary` | U8 | `0=SPI,1=UART,2=CAN,3=UDP` | 0 | Preferred control transport |
+| 2 | `link.baud` | U32 | `9600..3000000` | 115200 | UART only |
+| 3 | `can.bitrate` | U32 | `125000..1000000` | 500000 | CAN only |
+| 4 | `time.distribution_enable` | BOOL | `0/1` | 1 | Enables Service 17 distribution using current Rev-A profile |
+| 5 | `crc.enable` | BOOL | `0/1` | 1 | Current baseline requires enabled CRC16 |
+
+## 10. CCSDSPack v2 mapping
+
+MCU-hosted/filesystem consumers use the `.cfg` templates under `interfaces/ccsdspack/`. Bare-metal consumers use `interfaces/mcu-rtos/exn_interfaces.h` and construct packets programmatically.
+
+Key rules:
+
+- downstream TC template APID is the destination (`0x101` or `0x102`);
+- MCU-produced TM APID is `0x100`;
+- TC selector is `PUS:revA:TC`, source-ID width one octet, Source ID `0x01`;
+- TM selector is `PUS:revA:TM`, destination-ID width zero octets;
+- packet error control is CRC16;
+- service-specific timestamps remain Application Data.

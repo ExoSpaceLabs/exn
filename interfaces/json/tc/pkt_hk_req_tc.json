@@ -1,8 +1,30 @@
 {
   "name": "pkt_hk_req_tc",
-  "primaryHeader": { "version": 0, "type": "TC", "apid": 256, "secHdrFlag": 1, "seqFlags": "UNSEG" },
-  "pusHeader": { "type": "PusA", "version": 1, "service": 3, "subservice": 1, "sourceId": 1 },
+  "packetErrorControl": "crc16",
+  "primaryHeader": {
+    "version": 0,
+    "type": "TC",
+    "apid": 257,
+    "apidPolicy": "destination",
+    "secHdrFlag": 1,
+    "seqFlags": "UNSEG"
+  },
+  "pusHeader": {
+    "selector": "PUS:revA:TC",
+    "sourceIdOctets": 1,
+    "acknowledgementFlags": 0,
+    "service": 3,
+    "subservice": 1,
+    "sourceId": 1
+  },
   "appData": [
-    { "name": "detailMask", "type": "U16", "bits": 16, "description": "Optional groups to include; 0=all" }
-  ]
+    {
+      "name": "detailMask",
+      "type": "U16",
+      "bits": 16,
+      "optional": true,
+      "description": "HK groups to include; 0 selects the default/all set"
+    }
+  ],
+  "notes": "Default template is MCU -> PI. Override destination APID to 0x100 or 0x102 for MCU or FPGA HK."
 }

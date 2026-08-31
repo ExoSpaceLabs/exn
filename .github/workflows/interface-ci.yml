@@ -1,0 +1,85 @@
+name: Interface CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feat/**'
+      - 'fix/**'
+  pull_request:
+
+jobs:
+  validate-interfaces:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout EXN
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build python3
+
+      - name: Build CCSDSPack v2.0.0
+        run: |
+          git clone --depth 1 --branch v2.0.0 \
+            https://github.com/ExoSpaceLabs/CCSDSPack.git \
+            /tmp/ccsdspack
+          cmake -S /tmp/ccsdspack -B /tmp/ccsdspack-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/ccsdspack-install \
+            -DENABLE_TESTER=OFF \
+            -DENABLE_ENCODER=OFF \
+            -DENABLE_DECODER=OFF \
+            -DENABLE_VALIDATOR=OFF \
+            -DCCSDSPACK_ENABLE_FUZZING=OFF
+          cmake --build /tmp/ccsdspack-build --target install --parallel
+
+      - name: Build interface validator
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror \
+            tools/validate_ccsdspack_interfaces.cpp \
+            -I/tmp/ccsdspack-install/include \
+            -L/tmp/ccsdspack-install/lib \
+            -Wl,-rpath,/tmp/ccsdspack-install/lib \
+            -lccsdspack \
+            -o /tmp/validate_ccsdspack_interfaces
+
+      - name: Validate every CCSDSPack config
+        shell: bash
+        run: |
+          mapfile -d '' configs < <(find interfaces/ccsdspack -type f -name '*.cfg' -print0 | sort -z)
+          test "${#configs[@]}" -gt 0
+          /tmp/validate_ccsdspack_interfaces "${configs[@]}"
+
+      - name: Validate JSON mirrors
+        run: |
+          find interfaces/json -type f -name '*.json' -print0 \
+            | xargs -0 -r -n1 python3 -m json.tool >/dev/null
+
+      - name: Compile header contract as C
+        run: |
+          cat >/tmp/exn_header_check.c <<'EOF'
+          #include "interfaces/mcu-rtos/exn_interfaces.h"
+          int main(void) {
+            unsigned char b[4] = {0};
+            be_put_u32(b, 0x12345678u);
+            return be_get_u32(b) == 0x12345678u ? 0 : 1;
+          }
+          EOF
+          cc -std=c11 -Wall -Wextra -Werror -I. /tmp/exn_header_check.c -o /tmp/exn_header_check_c
+          /tmp/exn_header_check_c
+
+      - name: Compile compatibility header as C++
+        run: |
+          cat >/tmp/exn_header_check.cpp <<'EOF'
+          #include "interfaces/mcu-rtos/astrai_interfaces.h"
+          int main() {
+            return APID_MCU == 0x100u && SVC_HK == 3u ? 0 : 1;
+          }
+          EOF
+          c++ -std=c++17 -Wall -Wextra -Werror -I. /tmp/exn_header_check.cpp -o /tmp/exn_header_check_cpp
+          /tmp/exn_header_check_cpp
