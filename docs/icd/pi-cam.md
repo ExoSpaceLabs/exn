@@ -11,7 +11,7 @@ Refer to `../ICD.md` for CCSDS/PUS conventions, primary/secondary header definit
 - Responds to TCs from MCU-RTOS for capture, settings, parameter management, and transfer control.
 - Can send data to MCU-RTOS and/or FPGA-AI depending on TC `dest`.
 
-Transports: SPI, UART, CAN, or UDP as deployed. Application data follows big-endian unless otherwise stated. Timestamps use 6-byte CUC by default.
+Transports: SPI, UART, CAN, or UDP as deployed. Application data follows big-endian unless otherwise stated. Timestamps use the mission 6-byte CUC Application Data representation defined by the master ICD.
 
 ---
 
@@ -44,7 +44,7 @@ Notes:
 | lens_position       | uint16 | 16   | Lens focus position (0..1023), 0xFFFF if N/A |
 | status_flags        | uint16 | 16   | Bitmask: [0]cam_present, [1]streaming, [2]recording, [3]af_locked, [4]ae_locked |
 | last_error          | uint16 | 16   | Last error code |
-| ts_cuc              | bytes  | 48   | 6-byte CUC timestamp |
+| ts_cuc              | bytes  | 48   | 6-byte CUC timestamp in Application Data |
 
 ---
 
@@ -59,7 +59,7 @@ Service 200 defines camera‑specific TCs/TMs. The set aligns with the master ca
 | burst_count  | uint16 | 16   | 1..1000 (ignored if mode=single) |
 | exposure_us  | uint32 | 32   | 0=auto; else manual exposure time in µs |
 
-- TM 200/5 ACK/NACK — as in `ICD.md` Section 4.4.
+- TM 200/5 ACK/NACK — as in `ICD.md` Section 5.6.
 
 - TC 200/2 Settings Set and TC 200/3 Settings Get use the key/TLV catalog below.
 - TM 200/4 Settings Report returns `key`, `status`, `value` (TLV) for the requested key or the last set.
@@ -112,7 +112,7 @@ Keys are stable 8‑bit IDs. Unless noted, setting takes effect on next capture/
 | 37  | output.compress       | U8  | enum    | 0=none,1=JPEG,2=LZ4      | 0 | App‑level compression |
 | 38  | xfer.chunk_size       | U16 | bytes   | 256..4096  | 900     | Preferred chunk size for Service 23 |
 | 39  | xfer.dest             | U8  | enum    | 0=FPGA,1=MCU | 1      | Default data transfer destination |
-| 40  | ts.embed_mode         | U8  | enum    | 0=none,1=app_payload,2=pus_c | 2 | Where timestamps are placed |
+| 40  | ts.embed_mode         | U8  | enum    | 0=none,1=app_payload | 1 | Timestamp placement; PUS-C secondary-header timestamps are not part of the current EXN profile |
 
 Notes:
 - Changing resolution/framerate may reconfigure the sensor pipeline and briefly stall.
@@ -123,7 +123,7 @@ Notes:
 ## 4. Data Transfer (Service 23)
 - TM 23/10 Metadata includes image dimensions, pixel type, total size, and chunk size per `../ICD.md`.
 - TM 23/11 Data Chunk uses `imageId`, `offset`, and `data[]` up to `xfer.chunk_size`.
-- TM 23/12 Transfer Complete summarizes the chunk count. Sequence flags typically UNSEGMENTED; app-level `offset` provides ordering.
+- TM 23/12 Transfer Complete summarizes the chunk count. Sequence flags currently remain UNSEGMENTED; application-level `offset` provides ordering/reassembly.
 
 ---
 
@@ -135,4 +135,5 @@ For generic parameter exchange not covered by Service 200, PI-CAM supports the S
 ## 6. CCSDSPack Interfaces
 - `pkt_cam_capture_tc`, `pkt_cam_ack_tm`
 - `pkt_xfer_meta_tm`, `pkt_xfer_chunk_tm`, `pkt_xfer_done_tm`
-Interfaces set Primary Header Type (TM/TC) and APID=0x101, with PUS-A secondary headers matching service/subservice.
+
+All current PI interfaces use the master EXN PUS revision-A profile. TCs addressed to PI use APID `0x101`; TMs produced by PI also carry APID `0x101` under the EXN APID policy.
