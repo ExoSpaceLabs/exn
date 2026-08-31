@@ -6,10 +6,10 @@
 
 **EXN** is an ExoSpaceLabs system-integration project for demonstrating a modular Earth-observation payload architecture across a **Raspberry Pi payload computer**, **STM32 control node**, **FPGA processing node**, and **ground/HIL environment**.
 
-The platform is intended to exercise realistic spacecraft engineering boundaries: CCSDS/ECSS packet interfaces, SpaceWire-oriented transport, embedded supervision, image acquisition and processing, FPGA acceleration, telemetry/telecommand workflows, and end-to-end integration testing.
+The platform is intended to exercise realistic spacecraft engineering boundaries: CCSDS/ECSS packet interfaces, embedded supervision, image acquisition and processing, FPGA acceleration, telemetry/telecommand workflows, and end-to-end integration testing. SpaceWire integration is a planned transport direction and should be treated separately from interfaces that are already implemented.
 
 > [!IMPORTANT]
-> **Modernization status — 2026-08-31:** the architecture and ICD remain the project direction, but the implementation/dependency baseline is being refreshed. Existing component integration should be treated as transitional until the stack is migrated to **CCSDSPack 2.x** and a compatible current **SpWKit** release, with clean-checkout CI and HIL regression restored. Progress is tracked in [issue #2](https://github.com/ExoSpaceLabs/exn/issues/2).
+> **Modernization status — 2026-08-31:** the architecture and ICD remain the project direction, but the implementation/dependency baseline is being refreshed. Existing component integration should be treated as transitional until the stack is migrated to **CCSDSPack 2.x**, with clean-checkout CI and HIL regression restored. Adoption of **SpWKit** as the EXN SpaceWire transport layer is tracked as a separate integration decision rather than assumed to exist today. Progress is tracked in [issue #2](https://github.com/ExoSpaceLabs/exn/issues/2).
 
 ## System Scope
 
@@ -20,7 +20,7 @@ EXN separates payload responsibilities across independent computing nodes:
 - **FPGA Processing Node:** deterministic data movement plus hardware-accelerated preprocessing/inference/postprocessing functions.
 - **Ground/HIL:** operator tooling, command/telemetry inspection, subsystem simulation, fault injection, and integration validation.
 - **CCSDSPack:** CCSDS Space Packet and ECSS PUS packet contract used across software nodes.
-- **SpWKit:** SpaceWire/RMAP transport and simulation layer for compatible node-to-node links.
+- **SpWKit:** candidate SpaceWire transport/simulation layer for future EXN transport integration; it is not currently a required EXN dependency.
 
 The objective is not to force every function onto one device. Each component should remain independently testable and replaceable behind documented packet, transport, and hardware interfaces.
 
@@ -44,21 +44,24 @@ exn/
 - **exn-pi-cam:** Raspberry Pi camera and payload-processing component.
 - **exn-fpga-ai:** FPGA payload bridge and acceleration component.
 - **[CCSDSPack](https://github.com/ExoSpaceLabs/CCSDSPack):** CCSDS/PUS packet library.
-- **[SpWKit](https://github.com/ExoSpaceLabs/spwkit):** SpaceWire/RMAP integration toolkit.
+- **[SpWKit](https://github.com/ExoSpaceLabs/spwkit):** candidate SpaceWire transport toolkit for future EXN integration.
 
 ## Dependency Baseline
 
-The modernization sequence is intentionally ordered:
+The mandatory modernization path is:
 
-`CCSDSPack 2.0.0` → `SpWKit CCSDSPack 2.x integration` → `EXN component migration` → `EXN system baseline`
+`CCSDSPack 2.0.0` → `EXN packet/interface migration` → `EXN system baseline`
+
+SpWKit has its own CCSDSPack 2.x interoperability work. If EXN adopts SpWKit for SpaceWire transport, that integration must be added and validated explicitly rather than folded implicitly into the packet migration.
 
 A new EXN release baseline should only be cut once:
 
 1. CCSDSPack 2.x is available as a released package/API contract.
-2. The supported SpWKit compatibility line is explicit and versioned.
+2. Existing EXN CCSDS/PUS consumers and shared definitions have been migrated to that contract.
 3. All EXN software components build from clean checkouts without developer-local dependency paths.
-4. Shared CCSDS/PUS and transport interfaces are validated across component boundaries.
+4. Shared CCSDS/PUS interfaces are validated across component boundaries.
 5. End-to-end simulation/HIL regressions pass against the documented dependency matrix.
+6. Any SpaceWire/SpWKit support claimed by EXN has its own implementation and integration evidence.
 
 ## System Graph
 
@@ -119,15 +122,15 @@ These definitions must be reconciled with the CCSDSPack 2.x API/profile during m
 ### Phase 0 — Dependency and interface reset
 
 - Publish CCSDSPack 2.0.0.
-- Validate the SpWKit compatibility path against CCSDSPack 2.x.
-- Define the supported EXN dependency matrix and canonical CMake targets.
+- Define the supported EXN CCSDSPack version and canonical CMake package target.
 - Reconcile the central ICD and packet definitions with the released packet API.
+- Decide whether SpWKit becomes the supported EXN SpaceWire layer and define that integration as separate scope if adopted.
 
 ### Phase 1 — Ground/HIL migration
 
-- Migrate EXN-GS to versioned CCSDSPack/SpWKit package discovery.
+- Migrate EXN-GS to versioned CCSDSPack package discovery.
 - Restore clean-checkout CI.
-- Validate CCSDS/PUS encoding/decoding and SpaceWire/RMAP simulation paths.
+- Validate CCSDS/PUS encoding/decoding and the currently implemented Serial/TCP simulator paths.
 
 ### Phase 2 — Flight/payload component migration
 
@@ -140,6 +143,7 @@ These definitions must be reconciled with the CCSDSPack 2.x API/profile during m
 - Restore node-to-node regression tests.
 - Execute representative command, housekeeping, payload-data, and fault scenarios.
 - Validate end-to-end HIL/simulation operation against the documented dependency baseline.
+- Add SpaceWire/SpWKit integration tests only if that transport is implemented as part of EXN.
 
 ### Phase 4 — Coherent EXN release baseline
 
