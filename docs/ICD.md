@@ -1,6 +1,8 @@
 # ICD — EXN CCSDS/PUS Interface Control Document
 
-This document is the wire-level source of truth for communication between EXN nodes. Device-specific behavior and parameter ranges live under `docs/icd/`; packet identifiers, header policy, routing rules, service identifiers, and common application-data layouts are defined here.
+This document is the wire-level source of truth for communication between EXN logical endpoints. Device-specific behavior and parameter ranges live under `docs/icd/`; packet identifiers, header policy, routing rules, service identifiers, and common application-data layouts are defined here.
+
+Logical endpoints may be co-located on one physical computer. In particular, PI-CAM and PI-COMMS may initially execute on the same Raspberry Pi while retaining independent endpoint identities.
 
 ## 0. Current protocol baseline
 
@@ -21,8 +23,11 @@ PUS revision and PUS service number are separate concepts. Service 5 (events) an
 |---|---:|---:|---|
 | GS | `0x0F0` | `0x10` | Ground station/operator client |
 | MCU-RTOS | `0x100` | `0x01` | Control/router node and time master |
-| PI-CAM | `0x101` | `0x02` | Camera/image source |
+| PI-CAM | `0x101` | `0x02` | Camera/image payload service |
 | FPGA-AI | `0x102` | `0x03` | Processing/inference node |
+| PI-COMMS | `0x103` | `0x04` | Antenna/communications logical service |
+
+PI-CAM and PI-COMMS are logical endpoints. Their current co-location on a Raspberry Pi does not make them one packet endpoint.
 
 ---
 
@@ -59,7 +64,9 @@ Examples:
 
 - GS -> MCU System HK request: TC APID `0x100`, PUS-A TC Source ID `0x10`.
 - MCU -> PI camera command: TC APID `0x101`, PUS-A TC Source ID `0x01`.
-- PI -> MCU/GS camera ACK: TM APID `0x101`.
+- MCU -> PI communications command: TC APID `0x103`, PUS-A TC Source ID `0x01`.
+- PI-CAM -> MCU/GS camera ACK: TM APID `0x101`.
+- PI-COMMS -> MCU communications HK: TM APID `0x103`.
 - MCU -> GS System HK report: TM APID `0x100`.
 
 The Packet Sequence Count authority follows the complete managed Packet Identification stream, not a vague "per sender" rule.
@@ -113,23 +120,30 @@ Where this ICD specifies `ts_cuc`, EXN currently uses a six-octet mission CUC re
 
 ---
 
-## 3. GS/MCU routing and correlation
+## 3. Ground ingress, MCU routing and correlation
 
-The GS physical/simulator link terminates at MCU-RTOS. Device-directed commands are therefore two packet hops:
+EXN supports two ground-link deployment profiles without changing control ownership:
 
-1. **GS -> MCU:** TC APID `0x100`, Source ID `0x10`. For downstream-device operations, Application Data begins with the proxy preamble.
-2. **MCU -> target:** MCU consumes the proxy preamble and creates a new TC using target APID `0x101` or `0x102` and Source ID `0x01`.
+1. **HIL/direct profile:** GS connects directly to MCU-RTOS.
+2. **Flight-like profile:** GS connects to PI-COMMS, which delivers ground traffic toward MCU-RTOS. PI-COMMS is a communications endpoint, not the spacecraft command authority.
 
-Device TMs retain their source APID while MCU forwards/routes them to GS where the transport permits it.
+In both profiles, device-directed commands are supervised/routed by MCU-RTOS before being re-issued to controlled payload endpoints.
+
+For downstream-device operations handled by the MCU proxy path:
+
+1. **GS -> MCU:** TC APID `0x100`, Source ID `0x10`. In the flight-like profile this packet is transported through PI-COMMS without changing its logical destination.
+2. **MCU -> target:** MCU consumes the proxy preamble and creates a new TC using the target APID (`0x101`, `0x102`, or `0x103`) and Source ID `0x01`.
+
+Device TMs retain their producer APID while MCU and/or the communications path routes them toward GS where the deployment permits it.
 
 ### 3.1 Proxy preamble
 
-The proxy preamble is exactly four octets and is used only on GS-originated TCs that MCU must re-issue to PI-CAM or FPGA-AI.
+The proxy preamble is exactly four octets and is used on GS-originated TCs that MCU must re-issue to a payload endpoint.
 
 | Field | Type | Bits | Meaning |
 |---|---|---:|---|
 | `transactionId` | uint16 | 16 | Correlation ID, `1..65535`; `0` reserved |
-| `target` | uint8 | 8 | `1=PI`, `2=FPGA` |
+| `target` | uint8 | 8 | `1=PI-CAM`, `2=FPGA-AI`, `3=PI-COMMS` |
 | `options` | uint8 | 8 | bit0 mirror response to GS; bit1 mirror to peer; remaining bits zero |
 
 The preamble is not part of the downstream packet. MCU removes it before re-issuing the command.
@@ -193,17 +207,19 @@ All entries below use the PUS revision-A profile from Section 2.
 | 23/10 | Transfer Metadata | TM | data-source node APID |
 | 23/11 | Transfer Chunk | TM | data-source node APID |
 | 23/12 | Transfer Complete | TM | data-source node APID |
-| 200/1 | Camera Capture | TC | PI `0x101`; GS request uses MCU proxy hop |
-| 200/2 | Camera Settings Set | TC | PI `0x101`; GS request uses MCU proxy hop |
-| 200/3 | Camera Settings Get | TC | PI `0x101`; GS request uses MCU proxy hop |
-| 200/4 | Camera Settings Report | TM | PI `0x101` |
-| 200/5 | Camera ACK/NACK | TM | PI `0x101` |
+| 200/1 | Camera Capture | TC | PI-CAM `0x101`; GS request uses MCU proxy hop |
+| 200/2 | Camera Settings Set | TC | PI-CAM `0x101`; GS request uses MCU proxy hop |
+| 200/3 | Camera Settings Get | TC | PI-CAM `0x101`; GS request uses MCU proxy hop |
+| 200/4 | Camera Settings Report | TM | PI-CAM `0x101` |
+| 200/5 | Camera ACK/NACK | TM | PI-CAM `0x101` |
 | 210/1 | Execute | TC | FPGA `0x102`; GS request uses MCU proxy hop |
 | 210/2 | Processing Settings Set | TC | FPGA `0x102`; GS request uses MCU proxy hop |
 | 210/3 | Processing Settings Get | TC | FPGA `0x102`; GS request uses MCU proxy hop |
 | 210/4 | Processing Settings Report | TM | FPGA `0x102` |
 | 210/5 | FPGA ACK/NACK | TM | FPGA `0x102` |
 | 250/1 | GS Link/Proxy ACK | TM/report | producer GS APID `0x0F0`, routed to MCU |
+
+PI-COMMS currently uses the common services (3, 5, 17, 20 and 23 where applicable). A dedicated communications-control service may be introduced later if the common parameter/event model is insufficient.
 
 ### 5.1 Housekeeping, Service 3
 
@@ -232,7 +248,7 @@ Exactly five Application Data octets, no proxy preamble:
 | Field | Type | Notes |
 |---|---|---|
 | `transactionId` | uint16 | correlation ID; current GS client uses non-zero IDs |
-| `include_mask` | uint8 | bit0 MCU, bit1 PI, bit2 FPGA |
+| `include_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS |
 | `detailMask` | uint16 | common HK detail selection |
 
 #### TM 3/100 System HK Report
@@ -242,7 +258,7 @@ Header fields:
 | Field | Type | Notes |
 |---|---|---|
 | `transactionId` | uint16 | echoes request |
-| `present_mask` | uint8 | bit0 MCU, bit1 PI, bit2 FPGA |
+| `present_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS |
 | `status` | uint8 | `0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR` |
 | `reserved` | uint8 | zero |
 
@@ -289,6 +305,8 @@ For GS device-directed requests, the four-octet proxy preamble precedes these se
 
 Each 23/11 packet is currently an independent UNSEGMENTED CCSDS Space Packet. `offset` and `imageId` provide application-level reassembly.
 
+For PI-CAM transfers, the current `dest` endpoint codes are `0=FPGA`, `1=MCU`, `2=PI-COMMS`. Other producers may specialize destination semantics in their device ICDs until Service 23 is generalized around a transport-independent object/transfer identifier.
+
 ### 5.6 Camera control, Service 200
 
 - TC 200/1 Capture: `{mode:uint8,burst_count:uint16,exposure_us:uint32}`.
@@ -304,6 +322,8 @@ Each 23/11 packet is currently an independent UNSEGMENTED CCSDS Space Packet. `o
 - TC 210/3 Settings Get: `key:uint8`.
 - TM 210/4 Settings/Result Report: device ICD defines payload.
 - TM 210/5 ACK/NACK: `{orig_service:uint8,orig_sub:uint8,resultCode:uint8,detail:uint16}`.
+
+FPGA processing results shall **not** be hard-wired to one consumer. The current Service 210 wire format controls result routing through processing settings defined by the FPGA device ICD. A future compatible interface revision may add a per-execution route override to TC 210/1.
 
 ### 5.8 GS link/proxy acknowledgement, Service 250
 
@@ -364,11 +384,14 @@ Implementations and tests shall enforce at least the following:
 5. CRC16 is included and validated at packet endpoints.
 6. TC APID follows destination-endpoint policy; TM APID follows producer-endpoint policy.
 7. GS -> MCU System HK `3/10` carries exactly the five service payload octets and no proxy preamble.
-8. The GS transport daemon may route packets, but mission scheduling and periodic command generation belong to clients/applications, not the transport layer.
+8. The GS transport daemon and PI-COMMS service may move packets, but mission scheduling and control decisions remain application/OBC responsibilities.
+9. FPGA processing-result routing is configurable and shall not be implemented as one fixed destination.
+10. Physical co-location of PI-CAM and PI-COMMS shall not collapse their logical endpoint identities.
 
 Device-specific constraints remain in:
 
 - `docs/icd/gs.md`
 - `docs/icd/mcu-rtos.md`
+- `docs/icd/linux-payload.md`
 - `docs/icd/pi-cam.md`
 - `docs/icd/fpga-ai.md`
