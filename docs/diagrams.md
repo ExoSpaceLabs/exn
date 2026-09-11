@@ -1,68 +1,150 @@
 # EXN — Sequence Diagrams
 
-This page collects the rendered Mermaid sequence diagrams referenced by the root README. They illustrate key interactions among Ground Station (GS), MCU-RTOS (MCU), PI-CAM (PI), and FPGA-AI (FPGA).
+This page collects representative EXN interactions among Ground Station (GS), STM32/OBC, Linux payload services, and FPGA processing.
 
-Notes for GitHub rendering:
-- Mermaid blocks use conservative, GitHub-friendly syntax.
-- Subgraph quotations are not required for sequence diagrams, but labels are kept simple.
+The diagrams show **valid flows**, not one mandatory pipeline. EXN separates control authority from payload-data routing, and FPGA processing results may be routed differently depending on the request and mission policy.
 
 ---
 
 ## 1) System Housekeeping Aggregation
 
-GS requests a System HK from MCU. MCU fans out HK requests to devices, aggregates their HK, and returns a single System HK report.
+The existing HIL profile may connect GS directly to MCU/OBC. The MCU fans out HK requests, aggregates the reports, and returns System HK.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant GS as GS (APID 0x0F0)
-  participant MCU as MCU-RTOS (0x100)
-  participant PI as PI-CAM (0x101)
-  participant FPGA as FPGA-AI (0x102)
+  participant GS as GS
+  participant MCU as STM32 OBC
+  participant CAM as Camera Service
+  participant FPGA as FPGA Processing
 
   GS->>MCU: TC 3/10 Request System HK
   par Fan-out HK requests
-    MCU->>PI: TC 3/1 Request HK
+    MCU->>CAM: TC 3/1 Request HK
     MCU->>FPGA: TC 3/1 Request HK
     MCU->>MCU: Collect self HK
   end
-  PI-->>MCU: TM 3/2 HK Report (PI)
-  FPGA-->>MCU: TM 3/2 HK Report (FPGA)
-  MCU-->>GS: TM 3/100 System HK Report (aggregated)
+  CAM-->>MCU: TM 3/2 HK Report
+  FPGA-->>MCU: TM 3/2 HK Report
+  MCU-->>GS: TM 3/100 System HK Report
+```
+
+A flight-like deployment may place the Antenna/Communications service between GS and MCU without changing MCU control ownership.
+
+---
+
+## 2) Flight-like Ground Command Path
+
+Ground traffic enters through the communications service, while the OBC remains the command authority.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant GS as Ground
+  participant ANT as Antenna/Comms
+  participant MCU as STM32 OBC
+  participant CAM as Camera Service
+
+  GS->>ANT: uplink TC
+  ANT->>MCU: deliver TC
+  MCU->>CAM: routed camera command
+  CAM-->>MCU: ACK / report
+  MCU-->>ANT: downlinkable TM
+  ANT-->>GS: TM
 ```
 
 ---
 
-## 2) Capture → Transfer → Execute → Result
+## 3) Capture -> FPGA Processing -> Camera Product -> Ground
 
-A GS-driven end-to-end scenario: capture on PI, transfer to FPGA, execute inference, and receive results via MCU.
+The Camera service owns the payload product and delegates computation to FPGA.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant GS as GS (0x0F0)
-  participant MCU as MCU (0x100)
-  participant PI as PI (0x101)
-  participant FPGA as FPGA (0x102)
+  participant CAM as Camera Service
+  participant FPGA as FPGA Processing
+  participant ANT as Antenna/Comms
+  participant GS as Ground
 
-  GS->>MCU: TC 200/1 Capture (target=PI)
-  MCU->>PI: TC 200/1 Capture
-  PI-->>MCU: TM 200/5 ACK
-  MCU-->>GS: TM 200/5 ACK (forwarded)
-
-  GS->>MCU: TC 23/1 Start Transfer (dest=FPGA)
-  MCU->>PI: TC 23/1 Start Transfer
-  PI-->>FPGA: TM 23/10 Metadata
-  loop Chunks
-    PI-->>FPGA: TM 23/11 Data Chunks
-  end
-  PI-->>FPGA: TM 23/12 Transfer Complete
-
-  GS->>MCU: TC 210/1 Execute (target=FPGA)
-  MCU->>FPGA: TC 210/1 Execute
-  FPGA-->>MCU: TM 210/5 ACK
-  MCU-->>GS: TM 210/5 ACK (forwarded)
-  FPGA-->>MCU: TM 23/11 Result Chunk(s)
-  FPGA-->>MCU: TM 23/12 Result Complete
-  MCU-->>GS: Result TMs (forwarded)
+  CAM->>CAM: capture image
+  CAM->>FPGA: image + processing request
+  FPGA-->>CAM: processed product / result
+  CAM->>CAM: associate/store/package product
+  CAM->>ANT: payload product
+  ANT-->>GS: downlink
 ```
+
+---
+
+## 4) Classification Result Routed to OBC
+
+A low-volume inference result may be sent directly to the OBC so software can make an autonomous mission decision.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant CAM as Camera Service
+  participant FPGA as FPGA Processing
+  participant MCU as STM32 OBC
+
+  CAM->>FPGA: image + classification request
+  FPGA-->>MCU: classification result
+  MCU->>MCU: evaluate mission policy
+  alt retain/downlink
+    MCU-->>CAM: retain / prepare for downlink
+  else recapture
+    MCU-->>CAM: capture again
+  else discard
+    MCU-->>CAM: release product
+  end
+```
+
+---
+
+## 5) Direct FPGA Result Downlink
+
+When a ground link exists and policy permits it, a processing result may bypass the OBC data path.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant CAM as Camera Service
+  participant FPGA as FPGA Processing
+  participant ANT as Antenna/Comms
+  participant GS as Ground
+
+  CAM->>FPGA: image + request, route=communications
+  FPGA-->>ANT: processing result
+  ANT-->>GS: direct result downlink
+```
+
+The OBC may still receive separate status, metadata, or decision-relevant information. Direct data routing does not transfer command authority away from the OBC.
+
+---
+
+## 6) Logical Links over Shared Ethernet
+
+SpWKit may represent multiple logical relationships over one physical Ethernet carrier.
+
+```mermaid
+graph LR
+  ETH[Shared Ethernet Carrier]
+  CAM[Camera]
+  ANT[Antenna/Comms]
+  MCU[STM32 OBC]
+  FPGA[FPGA Processing]
+
+  CAM --- ETH
+  ANT --- ETH
+  MCU --- ETH
+  FPGA --- ETH
+
+  CAM -. logical link .- MCU
+  ANT -. logical link .- MCU
+  CAM -. logical link .- FPGA
+  CAM -. logical link .- ANT
+  FPGA -. logical link .- ANT
+```
+
+The logical routes are independent of whether Camera and Antenna currently execute on the same Raspberry Pi.
