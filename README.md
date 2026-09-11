@@ -164,6 +164,7 @@ Additional sequence diagrams are maintained in [docs/diagrams.md](docs/diagrams.
 - **Master wire-level ICD:** [docs/ICD.md](docs/ICD.md)
 - **Ground/HIL:** [docs/icd/gs.md](docs/icd/gs.md)
 - **MCU control node:** [docs/icd/mcu-rtos.md](docs/icd/mcu-rtos.md)
+- **Linux payload platform / communications service:** [docs/icd/linux-payload.md](docs/icd/linux-payload.md)
 - **Pi camera service:** [docs/icd/pi-cam.md](docs/icd/pi-cam.md)
 - **FPGA processing node:** [docs/icd/fpga-ai.md](docs/icd/fpga-ai.md)
 
