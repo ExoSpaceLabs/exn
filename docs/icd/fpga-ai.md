@@ -2,16 +2,20 @@
 
 This document specializes the EXN ICD for the FPGA Processing node (APID 0x102). It defines Housekeeping (HK) telemetry, processing settings (Service 210), execution control, and data/result transfer behavior.
 
-Refer to `../ICD.md` for CCSDS/PUS conventions and the master service catalog.
+Refer to `../ICD.md` for CCSDS/PUS conventions and the master service catalog, and `../architecture.md` for the system routing model.
 
 ---
 
 ## 1. Role and Interfaces
+
 - Performs preprocessing (resize/normalize), hardware-accelerated inference, and postprocessing.
 - Receives control and settings from MCU-RTOS and publishes results/telemetry.
 - May receive image data directly from PI-CAM or from MCU-RTOS depending on system configuration.
+- Routes processing results to one or more configured logical endpoints rather than imposing one fixed return path.
 
-Transports: SPI, UART, CAN, or UDP. Application data fields are big-endian. Timestamps use 6-byte CUC where present.
+The FPGA node is an EXN **payload-processing endpoint**. Separate/private FPGA SpaceWire product implementations are outside the EXN architecture.
+
+Transport binding is deployment-specific. Application data fields are big-endian. Timestamps use 6-byte CUC where present.
 
 ---
 
@@ -43,7 +47,9 @@ Notes:
 ---
 
 ## 3. Processing Control (Service 210)
+
 ### 3.1 Execute (TC 210/1)
+
 Controls pipeline execution. If `flags.auto_start` is set, execution may start automatically when input is available.
 
 - Application Data
@@ -54,9 +60,12 @@ Controls pipeline execution. If `flags.auto_start` is set, execution may start a
 | modelId  | uint16 | 16   | Model selection ID |
 | flags    | uint16 | 16   | Bitfield: [0]auto_start, [1]async, [2]save_intermediate |
 
+Result routing for the current wire profile is selected through the processing settings below. A future compatible TC 210/1 revision may add a per-execution route override so each job can carry its route policy directly.
+
 - TM 210/5 ACK/NACK — See `../ICD.md` (Service 210) for structure.
 
 ### 3.2 Processing Settings (TC 210/2 Set, TC 210/3 Get, TM 210/4 Report)
+
 Use TLV per `../ICD.md`. TLV Types: 1=U8,2=U16,3=U32,4=I32,5=F32,6=STR,7=BYTES,8=U64,9=BOOL.
 
 #### 3.2.1 Settings Catalog
@@ -88,17 +97,33 @@ Use TLV per `../ICD.md`. TLV Types: 1=U8,2=U16,3=U32,4=I32,5=F32,6=STR,7=BYTES,8
 | 23  | output.format        | U8  | enum  | 0=raw,1=logits_f32,2=logits_i8,3=classes | 3 | Output result format |
 | 24  | post.topk            | U8  | K     | 1..100     | 5       | Top-K classes reported |
 | 25  | post.threshold       | F32 |       | 0..1       | 0.5     | Score threshold |
+| 26  | result.route_mask    | U8  | mask  | bit0=requester, bit1=MCU, bit2=PI-CAM, bit3=PI-COMMS | 0x01 | One or more result destinations |
 
 Notes:
 - If `quant.enable=1` and `output.format=2`, logits are emitted as INT8 with `quant.scale` and `quant.zero_point` metadata.
+- `result.route_mask` is a logical routing policy. The transport implementation resolves each selected endpoint through the active deployment topology.
+- `PI-COMMS` represents the communications/downlink endpoint. If a ground connection is active and policy permits direct delivery, a result routed to PI-COMMS may be sent directly to ground.
+- A classification result may be routed to MCU so the OBC can make an autonomous mission decision without carrying the original bulk image through the MCU.
 
 ---
 
 ## 4. Data/Result Transfer (Service 23)
-- Input images may be received via TM 23/11 Data Chunk from PI-CAM (APID 0x101) if MCU configures path accordingly.
-- Results are typically returned as TM 23/11 chunks to MCU with a job identifier.
+
+- Input images may be received via TM 23/11 Data Chunk from PI-CAM (APID 0x101) if the configured path uses packetized transfer.
+- Processing results are delivered to the endpoint(s) selected by `result.route_mask`.
+- Result delivery may therefore target MCU, PI-CAM, PI-COMMS, the requester, or more than one endpoint.
+
+Typical flows include:
+
+```text
+FPGA -> MCU                    classification/decision metadata
+FPGA -> PI-CAM                 processed image/product association
+FPGA -> PI-COMMS -> Ground     immediate downlink when available
+FPGA -> PI-CAM + MCU           payload product plus control decision input
+```
 
 ### 4.1 Result Packets
+
 When `output.format` is not `raw`, use the following application data conventions for result TMs (Service 23):
 
 - TM 23/11 Data Chunk (Results)
@@ -118,14 +143,19 @@ When `output.format` is not `raw`, use the following application data convention
 
 If `output.format=3 (classes)`, the first chunk SHOULD begin with a header: `numClasses(U16)`, followed by repeated entries `{classId(U16), score(F32)}`.
 
+The FPGA does not assume that the final consumer is ground, camera, or OBC. Routing remains an execution/configuration policy above the computation itself.
+
 ---
 
 ## 5. Parameter Management (Service 20)
+
 Generic TLV parameters are supported for experimental configuration (keys 100..199 reserved for FPGA-specific extras not covered by Service 210).
 
 ---
 
 ## 6. CCSDSPack Interfaces
+
 - `pkt_fpga_exec_tc`
 - `pkt_xfer_chunk_tm` (results), `pkt_xfer_done_tm` (results)
+
 Interfaces set APID=0x102 and appropriate PUS-A fields per service/subservice.
