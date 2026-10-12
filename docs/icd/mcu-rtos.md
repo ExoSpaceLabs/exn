@@ -159,18 +159,21 @@ The complete wire layout is defined in `gs.md`.
 
 OBC event IDs occupy `0x1000..0x1FFF`.
 
-Examples:
+Initial OBC event allocation:
 
-| Event | Severity |
-|---|---|
-| boot completed | 5/1 informative |
-| endpoint heartbeat lost | 5/2 low or 5/3 medium according to policy |
-| watchdog reset detected | 5/4 high |
-| time synchronization lost | 5/2 or 5/3 according to duration |
-| component recovery failed | 5/3 or 5/4 |
-| recovery policy triggered | 5/2 |
-| recovery succeeded | 5/1 |
-| recovery suppressed/no reset path | 5/3 |
+| Event ID | Event | Severity |
+|---:|---|---|
+| `0x1001` | OBC boot completed | 5/1 informative |
+| `0x1010` | endpoint supervision STALE | 5/2 low |
+| `0x1011` | endpoint supervision OFFLINE | 5/3 medium |
+| `0x1012` | endpoint supervision restored | 5/1 informative |
+| `0x1020` | recovery policy triggered | 5/2 low |
+| `0x1021` | recovery action sent | 5/1 informative |
+| `0x1022` | recovery succeeded | 5/1 informative |
+| `0x1023` | recovery failed | 5/3 or 5/4 according to endpoint criticality |
+| `0x1024` | recovery suppressed / reset path unavailable | 5/3 medium |
+| `0x1030` | watchdog reset detected | 5/4 high |
+| `0x1040` | time synchronization lost | 5/2 or 5/3 according to duration |
 
 Event payload format is the common Service 5 model in `../component-services.md`.
 
