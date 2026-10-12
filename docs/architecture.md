@@ -299,7 +299,7 @@ SpWKit must not require DAS directly, and DAS must not know about SpWKit. HardRT
 
 EXN treats the PUS service catalogue as an application-interface layer above CCSDS packet construction and below endpoint mission logic.
 
-The current EXN-GS/HIL implementation still uses a transitional **PUS-A secondary-header profile with legacy EXN service numbering**. The target coherent system baseline uses the standards-aware service plan in [`services.md`](services.md) and migrates to PUS-C in one coordinated wire revision.
+The normative EXN wire profile is **PUS Revision C** as defined in [`ICD.md`](ICD.md) and [`services.md`](services.md). Any remaining PUS-A code in component repositories is migration debt and shall be replaced rather than extended.
 
 The target service split is:
 
