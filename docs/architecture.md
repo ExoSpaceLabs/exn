@@ -85,7 +85,7 @@ A representative service layout is:
 Linux
  |
  +-- exn-camera.service
- +-- exn-antenna.service
+ +-- exn-comms.service
  +-- exn-platform.service
  +-- system watchdog
  +-- journald / telemetry collection
