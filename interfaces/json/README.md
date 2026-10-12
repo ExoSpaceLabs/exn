@@ -31,3 +31,14 @@ Example TC shape:
 The JSON set is currently partial. Missing JSON does not mean a service is undefined. Normative semantics live in the central ICD documents; JSON shall be generated or cross-validated against that source as the interface tooling matures.
 
 PUS-A JSON definitions are obsolete and shall not be reintroduced.
+
+
+## Camera configuration mirrors
+
+The JSON interface set includes the Service 200 batched Camera configuration messages:
+
+- `pkt_cam_set_config_tc.json` — atomic bounded multi-setting update;
+- `pkt_cam_get_config_tc.json` — configuration query by scope mask;
+- `pkt_cam_config_tm.json` — scoped active configuration report with revision.
+
+Exposure, gain, autofocus mode, white balance, geometry, ISP/HDR and encoding controls are fields inside these messages rather than separate TC subservices.
