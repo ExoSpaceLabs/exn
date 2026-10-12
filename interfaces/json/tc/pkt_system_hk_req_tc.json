@@ -17,23 +17,6 @@
     "sourceId": 16
   },
   "proxyPreamble": false,
-  "appData": [
-    {
-      "name": "transaction_id",
-      "type": "U16",
-      "bits": 16
-    },
-    {
-      "name": "include_mask",
-      "type": "U8",
-      "bits": 8,
-      "description": "bit0 OBC, bit1 PI-CAM, bit2 FPGA, bit3 Antenna, bit4 PI-MGMT"
-    },
-    {
-      "name": "detail_mask",
-      "type": "U16",
-      "bits": 16
-    }
-  ],
-  "notes": "Direct GS -> OBC System HK request."
+  "appData": [],
+  "notes": "Direct GS -> OBC request for the complete current spacecraft HK snapshot. No component/detail selector; OBC supervision policy is configured separately through Service 20."
 }
