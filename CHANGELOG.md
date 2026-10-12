@@ -4,6 +4,9 @@ This document records system, structural, interface-definition, and architecture
 
 ## 2026-10-12
 
+- Define the STM32 OBC as the **spacecraft platform authority**: centralized mission/safety authority with distributed subsystem execution; future AOCS/ADCS, EPS, thermal and mechanism controllers remain subordinate even when they close local real-time loops.
+- Clarify that STM32H755 is the architectural OBC demonstrator baseline, not a claim of flight-qualified radiation-tolerant hardware.
+
 - Declare `ExoSpaceLabs/exn` as the single normative system/ICD authority; component repositories implement the contract and do not own parallel mission-interface definitions.
 - Add `docs/icd/README.md` as the complete endpoint ICD index and formalize the normative document hierarchy.
 
