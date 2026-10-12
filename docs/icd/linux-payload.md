@@ -1,4 +1,4 @@
-# Linux Payload Platform ICD
+# Raspberry Pi Payload Node ICD
 
 This document defines the EXN **Raspberry Pi 5 Payload Node** boundary. In the initial deployment the Pi has two required mission purposes: **Camera** and **Antenna/Communications**. Logical endpoint identity remains separate from physical host identity so the two functions are independently addressable even while co-located.
 
@@ -26,7 +26,7 @@ A representative deployment is:
 
 ```text
 exn-camera.service
-exn-antenna.service
+exn-comms.service
 exn-platform.service
 ```
 
