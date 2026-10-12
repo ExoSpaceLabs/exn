@@ -12,11 +12,11 @@ The Raspberry Pi 5 is required to host two primary EXN mission services in the i
 Raspberry Pi 5
  |
  +-- Camera Payload Service        APID 0x101 / Source ID 0x02
- +-- Antenna        APID 0x103 / Source ID 0x04
+ +-- Antenna Service               APID 0x103 / Source ID 0x04
  +-- Platform Management           local host supervision; no independent APID
 ```
 
-The Pi therefore serves **both** as the camera payload computer and as the spacecraft communications/antenna endpoint. Camera and Antenna remain separate logical endpoints despite sharing the same processor, OS, storage and network hardware. Either service may later move to another Linux computer without changing its mission responsibility.
+The Pi therefore serves **both** as the camera payload computer and as the spacecraft Antenna/Ground-link endpoint. Camera and Antenna remain separate logical endpoints despite sharing the same processor, OS, storage and network hardware. Either service may later move to another Linux computer without changing its mission responsibility.
 
 The Camera service contract remains defined in `pi-cam.md`. Platform Management is currently an implementation support service rather than a third mission packet endpoint; logical endpoints obtain host/watchdog state from it and include relevant health in their own housekeeping.
 
@@ -49,7 +49,7 @@ Endpoint identity:
 
 | Item | Value |
 |---|---|
-| Logical name | `PI-COMMS` / Antenna-Communications |
+| Logical name | `PI-COMMS` (Antenna) |
 | APID | `0x103` |
 | Transitional PUS-A TC Source ID | `0x04` |
 
@@ -90,13 +90,13 @@ The PI-COMMS target service set is deliberately small:
 - Service 20 parameter management;
 - Service 220 payload-object transfer/forwarding where packetized mission objects are carried through the Antenna endpoint.
 
-A dedicated communications-control service is **not allocated yet**. It should only be introduced if concrete radio/link operations cannot be represented coherently through housekeeping, events and parameters. This avoids creating a custom service merely because the process happens to be called `exn-antenna`.
+A dedicated custom Antenna-control PUS service is **not allocated yet**. It should only be introduced if concrete radio/link operations cannot be represented coherently through housekeeping, events and parameters.
 
-The current executable HIL profile still uses legacy PUS-A service identifiers described in `../ICD.md`; new communications implementation work targets `../services.md`.
+The current executable HIL profile still uses legacy PUS-A service identifiers described in `../ICD.md`; new Antenna implementation work targets `../services.md`.
 
 ## 7. Housekeeping
 
-Communications HK should include the master common fields plus communications-specific information such as link state, session state, TX/RX counters, dropped/error counters, current mode, last error, restart count, and timestamp.
+Antenna HK should include the master common fields plus link-specific information such as link state, session state, TX/RX counters, dropped/error counters, current mode, last error, restart count, and timestamp.
 
 The Linux platform-management service should also track host-level metrics such as CPU temperature/load, memory, storage, watchdog state, and service health. Exact binary extensions will be frozen with the corresponding implementation/interface revision.
 
@@ -112,4 +112,4 @@ Where SpWKit is used, Camera, Antenna, MCU and FPGA may expose independent logic
 
 ## 10. Supervision boundary
 
-`exn-platform.service` owns Linux-host supervision concerns such as watchdog feeding, restart accounting, storage health and process state. It does not become spacecraft command authority and does not need its own APID unless a future requirement establishes it as an independently addressable application process. Camera and Communications remain restartable logical services with their own mission identities.
+`exn-platform.service` owns Linux-host supervision concerns such as watchdog feeding, restart accounting, storage health and process state. It does not become spacecraft command authority and does not need its own APID unless a future requirement establishes it as an independently addressable application process. Camera and Antenna remain restartable logical services with their own mission identities.
