@@ -454,7 +454,74 @@ Service 220 is the common bounded object-transfer mechanism.
 
 The producer sends Metadata, Chunks and Complete directly to the requested destination.
 
-### 12.2 Ground destination
+### 12.2 Message payloads
+
+`TC[220,1] Start Object Transfer`:
+
+```text
+transfer_id:u32
+object_id:u64
+destination_apid:u16
+chunk_size:u16
+flags:u16
+```
+
+`destination_apid=0x0F0` means Ground. On-board routing resolves that destination through PI-COMMS/Antenna.
+
+`TM[220,10] Object Metadata`:
+
+```text
+transfer_id:u32
+object_id:u64
+object_type:u16
+format:u16
+created_unix_ms:u64
+total_size:u64
+checksum_type:u8      # 1 = SHA-256 in baseline
+checksum[32]
+metadata_length:u16
+metadata[metadata_length]
+```
+
+`TM[220,11] Object Chunk`:
+
+```text
+transfer_id:u32
+object_id:u64
+offset:u64
+data_length:u16
+data[data_length]
+```
+
+`TM[220,12] Transfer Complete`:
+
+```text
+transfer_id:u32
+object_id:u64
+result:u8
+bytes_transferred:u64
+chunk_count:u32
+checksum[32]
+```
+
+`TC[220,3] Get Transfer Status` contains `transfer_id:u32`.
+
+`TM[220,13] Transfer Status`:
+
+```text
+transfer_id:u32
+object_id:u64
+state:u8             # QUEUED/RUNNING/COMPLETE/CANCELLED/FAILED
+destination_apid:u16
+bytes_transferred:u64
+total_size:u64
+last_error:u16
+updated_unix_ms:u64
+```
+
+Chunking is application-level. CCSDS packets remain unsegmented unless a future interface explicitly adopts CCSDS segmentation.
+
+### 12.3 Ground destination
 
 The OBC never commands Camera/FPGA to open a Ground transport themselves.
 
@@ -470,7 +537,7 @@ Routing resolves logical GROUND through the Antenna endpoint.
 
 The Antenna preserves the original producer identity when forwarding complete EXN packets where the deployed link permits it.
 
-### 12.3 OBC transfer registry
+### 12.4 OBC transfer registry
 
 For every OBC-commanded transfer, the OBC records:
 
@@ -540,7 +607,65 @@ Component IDs include:
 - FPGA node software;
 - FPGA image/bitstream when that platform is selected.
 
-### 14.2 Update flow
+### 14.2 Software-management payloads
+
+`TC[230,1] Get Software Inventory` contains an optional bounded component-ID list; an empty list requests all managed components.
+
+`TM[230,2] Software Inventory Report` contains bounded entries:
+
+```text
+count:u16
+repeat count:
+    component_id:u16
+    state:u8
+    version_length:u8
+    version[version_length]       # max 32 bytes
+    build_id:u32
+    active_slot:u8
+    rollback_available:u8
+    package_hash[32]
+```
+
+`TC[230,3] Stage Update`:
+
+```text
+component_id:u16
+package_object_id:u64
+version_length:u8
+version[version_length]           # max 32 bytes
+expected_sha256[32]
+flags:u16
+```
+
+`TC[230,4] Activate Update`:
+
+```text
+component_id:u16
+activation_mode:u8                # immediate / next-restart
+flags:u16
+```
+
+`TC[230,5] Roll Back Update` contains `component_id:u16`.
+
+`TC[230,6] Get Update Status` contains `component_id:u16`.
+
+`TM[230,7] Update Status Report`:
+
+```text
+component_id:u16
+state:u8                         # IDLE/STAGED/VALIDATING/ACTIVATING/VERIFYING/COMPLETE/FAILED/ROLLED_BACK
+progress_permille:u16
+active_version_length:u8
+active_version[...]
+staged_version_length:u8
+staged_version[...]
+last_error:u16
+updated_unix_ms:u64
+```
+
+All variable fields are bounded. Embedded endpoints may use fixed-size backing buffers and need not allocate dynamically.
+
+### 14.3 Update flow
 
 1. Transfer the update package as a Service 220 object to the update-owning endpoint.
 2. `Stage Update` binds the object to a component/version.
