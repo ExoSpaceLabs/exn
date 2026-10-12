@@ -160,17 +160,26 @@ The existing HIL/ground implementation may still connect GS directly to the MCU.
 
 ### 5.2 Data plane
 
-Payload data may bypass the MCU when no control decision requires the MCU to carry the bytes themselves.
+Payload data may bypass the MCU as a **bulk-data router** while the OBC still controls what is downlinked.
 
-Valid examples include:
+Typical commanded flow:
 
 ```text
+OBC -> Camera: downlink object X
 Camera -> Antenna -> Ground
-Camera -> FPGA -> Camera -> Antenna -> Ground
+
+OBC -> FPGA: downlink result Y
 FPGA -> Antenna -> Ground
 ```
 
-The OBC can still receive metadata, classification results, status, or selected products required for autonomous decisions.
+Other valid data paths include:
+
+```text
+Camera -> FPGA -> Camera -> Antenna -> Ground
+FPGA -> OBC                         decision metadata / small result
+```
+
+The architectural rule is therefore **OBC-controlled, source-to-Antenna data delivery**. The producer sends the bulk bytes directly to the Antenna service, and the Antenna transmits them to Ground. The OBC may still receive metadata, classification results, status, or completion events without forwarding the payload itself.
 
 ## 6. FPGA processing and result routing
 
