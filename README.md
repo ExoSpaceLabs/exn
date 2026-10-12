@@ -21,7 +21,7 @@ EXN separates responsibilities across independently testable logical components:
 - **Raspberry Pi 5 Payload Node:** one physical Embedded Linux computer with **two first-class mission roles**.
   - **Camera role / PI-CAM:** image acquisition, payload-product ownership, storage/preparation, compression, and image transfer.
   - **Antenna role / PI-COMMS:** the Pi provides the spacecraft Ground link. The Antenna service exchanges TCs/TMs with the OBC and sends payload data from PI-CAM or FPGA to Ground without routing those bulk bytes through the OBC.
-  - **Platform Management:** local Linux watchdog/supervision, service health, logging, storage and host housekeeping supporting both mission roles; this is not a third primary payload role.
+  - **Platform Management / PI-MGMT:** local Linux watchdog/supervision, service health, restart/reboot and software-update lifecycle supporting both mission roles; this is infrastructure, not a third Pi mission purpose.
 - **FPGA Processing Node:** hardware-accelerated image preprocessing, inference, postprocessing, and other payload computation. The FPGA is a processing node in EXN, not a communications product.
 - **Ground/HIL:** operator tooling, command/telemetry inspection, subsystem simulation, fault injection, and integration validation.
 
@@ -132,7 +132,7 @@ graph LR
   subgraph "Linux Payload Node - Raspberry Pi"
     CAM[Camera Service]
     ANT[Antenna Service]
-    PM[Platform Management<br/>watchdog / health / logging]
+    PM[PI-MGMT / Platform Management<br/>restart / watchdog / health / update]
   end
 
   subgraph "STM32 Control Node"
@@ -150,6 +150,7 @@ graph LR
   CAM <--> FPGA
   CAM <--> ANT
   FPGA <--> ANT
+  OBC <--> PM
   PM --- CAM
   PM --- ANT
 ```
@@ -161,6 +162,7 @@ Additional sequence diagrams are maintained in [docs/diagrams.md](docs/diagrams.
 ## Interfaces and ICDs
 
 - **System architecture:** [docs/architecture.md](docs/architecture.md)
+- **Component/service contract:** [docs/component-services.md](docs/component-services.md)
 - **PUS service profile:** [docs/services.md](docs/services.md)
 - **Master wire-level ICD:** [docs/ICD.md](docs/ICD.md)
 - **Ground/HIL:** [docs/icd/gs.md](docs/icd/gs.md)
@@ -176,7 +178,7 @@ Additional sequence diagrams are maintained in [docs/diagrams.md](docs/diagrams.
 - JSON mirrors for tooling: [interfaces/json/](interfaces/json/)
 - MCU header-only definitions: [interfaces/mcu-rtos/](interfaces/mcu-rtos/)
 
-Wire-level changes must remain synchronized with these shared definitions. Architecture changes alone must not silently change packet layouts.
+Wire-level changes must remain synchronized with these shared definitions. Architecture changes alone must not silently change packet layouts. `docs/component-services.md` defines the target operational behavior for Camera, Antenna, OBC, FPGA and PI-MGMT.
 
 ## Current implementation status
 
