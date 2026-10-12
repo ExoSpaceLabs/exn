@@ -4,6 +4,9 @@ This page collects representative EXN interactions among Ground Station (GS), ST
 
 The diagrams show **valid flows**, not one mandatory pipeline. EXN separates control authority from payload-data routing, and FPGA processing results may be routed differently depending on the request and mission policy.
 
+> [!NOTE]
+> Packet identifiers shown for the existing HK/HIL flow describe the **transitional PUS-A compatibility profile**. The target PUS-C service allocation is defined in [`services.md`](services.md). In that target, one-shot node HK moves to TC[3,27] / TM[3,25] and EXN System HK moves to mission-specific subtypes 3/128 and 3/129.
+
 ---
 
 ## 1) System Housekeeping Aggregation
