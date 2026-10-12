@@ -101,7 +101,7 @@ Use TLV per `../ICD.md`. TLV Types: 1=U8,2=U16,3=U32,4=I32,5=F32,6=STR,7=BYTES,8
 Notes:
 - If `quant.enable=1` and `output.format=2`, logits are emitted as INT8 with `quant.scale` and `quant.zero_point` metadata.
 - `result.route_mask` is a logical routing policy. The transport implementation resolves each selected endpoint through the active deployment topology.
-- `PI-COMMS` represents the communications/downlink endpoint. If a ground connection is active and policy permits direct delivery, a result routed to PI-COMMS may be sent directly to ground.
+- `PI-COMMS` is the Pi Antenna service. Routing a result there requests Ground downlink through the Antenna link; the FPGA does not communicate with Ground independently.
 - A classification result may be routed to MCU so the OBC can make an autonomous mission decision without carrying the original bulk image through the MCU.
 
 ---
@@ -119,7 +119,7 @@ Typical flows include:
 ```text
 FPGA -> MCU                    classification/decision metadata
 FPGA -> PI-CAM                 processed image/product association
-FPGA -> PI-COMMS -> Ground     immediate downlink when available
+FPGA -> PI-COMMS/Antenna -> Ground   direct payload downlink, bypassing OBC bulk routing
 FPGA -> PI-CAM + MCU           payload product plus control decision input
 ```
 
