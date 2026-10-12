@@ -469,6 +469,15 @@ Recovery action:
 | 4 | `HARD_RESET` | independent reset control available |
 | 5 | `POWER_CYCLE` | independent EPS/power-switch control available |
 
+Last recovery result:
+
+| Value | Result |
+|---:|---|
+| 0 | `NONE` |
+| 1 | `SUCCESS` |
+| 2 | `FAILED` |
+| 3 | `SUPPRESSED` |
+
 A completely unreachable endpoint cannot be recovered by a soft reboot command sent over the failed communication path. EXN shall therefore report `SUPPRESSED` when the configured action requires an independent reset/power path that is not implemented.
 
 Each endpoint supervision record stores:
@@ -476,6 +485,7 @@ Each endpoint supervision record stores:
 - current recovery state/reason/action;
 - cumulative recovery-attempt count;
 - successful-recovery count;
+- last recovery result;
 - last recovery start/completion time;
 - last recovery result/error;
 - whether automatic recovery is currently inhibited by cooldown or retry limit.
@@ -500,7 +510,7 @@ endpoint_restart_count:u32  # last valid value if available
 error_code:u16
 ```
 
-The latest recovery summary is visible in System HK. Detailed journal data is downloadable as a Service 220 object of type `DIAGNOSTIC_LOG`.
+The latest recovery summary is visible in System HK. Detailed journal data is downloadable as a Service 220 object of type `DIAGNOSTIC_LOG` (`object_type=0x0020`). The baseline serialization is CBOR (`format=0x0007`) containing a bounded array of the recovery records above plus OBC software/version metadata.
 
 Common Service 8 function `0x0006 CREATE_DIAGNOSTIC_LOG` asks the target/OBC to snapshot its available diagnostics into an immutable Service 220 object. Ground then downloads that object using the ordinary payload-object transfer mechanism.
 
