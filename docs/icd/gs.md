@@ -132,6 +132,8 @@ repeat endpoint_count:
     recovery_action:u8
     recovery_flags:u8
     recovery_attempts:u16
+    recovery_successes:u16
+    last_recovery_result:u8
     heartbeat_age_ms:u32   # UINT32_MAX if never received
     health_age_ms:u32      # UINT32_MAX if never received
     last_recovery_unix_ms:u64
@@ -161,7 +163,8 @@ A stale/offline endpoint is **not omitted**. Its entry remains present with the 
 - whether OBC recovery policy has triggered;
 - which recovery action was attempted;
 - whether recovery succeeded, failed, or was suppressed;
-- how many recovery attempts have occurred.
+- how many recovery attempts and successful recoveries have occurred;
+- the result and time of the most recent recovery decision.
 
 The cached HEARTBEAT block contains the endpoint's last reported `uptime_ms` and `restart_or_reset_count`. After a successful reboot those values reset/change naturally and the OBC recovery summary explains why.
 
