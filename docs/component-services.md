@@ -108,6 +108,21 @@ repeat count:
 
 Service 1 is used for command verification.
 
+The standard verification reports used by EXN are:
+
+| Message | Meaning |
+|---|---|
+| `TM[1,1]` | acceptance success |
+| `TM[1,2]` | acceptance failure |
+| `TM[1,3]` | execution start success |
+| `TM[1,4]` | execution start failure |
+| `TM[1,5]` | execution progress success |
+| `TM[1,6]` | execution progress failure |
+| `TM[1,7]` | execution completion success |
+| `TM[1,8]` | execution completion failure |
+
+Verification packets identify the original request through the standard PUS request-identification fields. EXN does not add a second mission transaction ID unless the application operation itself needs one, such as `acquisitionId`, `jobId`, or `transferId`.
+
 Baseline policy:
 
 - every state-changing command requests **acceptance** and **completion** verification;
@@ -160,7 +175,43 @@ The OBC may poll or enable periodic heartbeat reports. Recommended integration d
 
 Three consecutive missing heartbeat intervals should mark an endpoint `OFFLINE` and emit an OBC event. Automatic restart policy is configurable and disabled by default until the recovery behavior is verified.
 
-### 5.3 Sensor registry
+### 5.3 Common HEARTBEAT / HEALTH wire prefix
+
+Every `TM[3,25]` starts its Application Data with:
+
+```text
+structure_id:u16
+sample_unix_ms:u64
+```
+
+For `HEARTBEAT (1)`, the remaining fields are:
+
+```text
+endpoint_state:u8
+time_state:u8
+software_version_major:u16
+software_version_minor:u16
+software_version_patch:u16
+uptime_ms:u64
+last_error:u16
+restart_or_reset_count:u32
+```
+
+For `HEALTH (2)`, the prefix is followed by:
+
+```text
+health_flags:u32
+last_error:u16
+error_count:u32
+extension_length:u16
+extension[extension_length]
+```
+
+The extension is endpoint-defined and bounded by that endpoint ICD.
+
+`TC[3,27]` requests a predeclared `structure_id:u16`. Periodic-enable/disable messages reference the same structure ID and generation policy.
+
+### 5.4 Sensor registry
 
 Every endpoint shall expose every sensor/value source that is **actually available** on its selected hardware. The ICD shall not invent sensors that the board cannot measure.
 
@@ -183,7 +234,7 @@ Examples:
 - Antenna: signal/link metrics only when the selected Ground-link technology exposes them;
 - FPGA: die temperature/voltage rails only if the selected FPGA platform exposes those monitors.
 
-### 5.4 Sensor report wire model
+### 5.5 Sensor report wire model
 
 The SENSORS HK block contains bounded entries:
 
@@ -199,6 +250,20 @@ repeat count:
 ```
 
 Sensor IDs are endpoint-local and published by the endpoint capability/ICD. Unsupported sensors are not fabricated with zero values; they are omitted or explicitly marked UNAVAILABLE.
+
+## 5.6 Event report payload
+
+All Service 5 reports use a common EXN Application Data prefix:
+
+```text
+event_id:u16
+event_unix_ms:u64
+source_state:u8
+data_length:u16
+data[data_length]
+```
+
+`data` is event-specific and bounded. Severity is carried by the Service 5 subtype, not duplicated in the event ID or payload.
 
 ## 6. Monitoring and alarms
 
@@ -525,6 +590,36 @@ FPGA -> Antenna -> Ground
 
 without relaying Y through the MCU.
 
+## 11.3 Common payload object types and formats
+
+`object_type:uint16` identifies mission meaning:
+
+| Value | Object type |
+|---:|---|
+| `0x0001` | captured image |
+| `0x0002` | derived/processed image |
+| `0x0003` | processing mask/map |
+| `0x0004` | processing result blob |
+| `0x0005` | thumbnail/preview |
+| `0x0010` | software update package |
+| `0x7FFF` | mission-defined opaque object |
+
+`format:uint16` identifies serialization:
+
+| Value | Format |
+|---:|---|
+| `0x0001` | sensor RAW/Bayer |
+| `0x0002` | DNG |
+| `0x0003` | TIFF |
+| `0x0004` | JPEG |
+| `0x0005` | PNG |
+| `0x0006` | binary/opaque |
+| `0x0007` | CBOR |
+| `0x0008` | JSON UTF-8 |
+| `0x0100..0x7FFF` | mission/component-specific |
+
+The Camera product catalogue maps its product-type mask to these object/format IDs.
+
 ## 12. Payload Object Transfer, Service 220
 
 Service 220 is the common bounded object-transfer mechanism.
@@ -715,7 +810,21 @@ Thermal values are deployment parameters, not protocol constants.
 
 Software updates require explicit lifecycle control rather than treating an uploaded binary as executable merely because it arrived.
 
-### 14.1 Messages
+### 14.1 Software component IDs
+
+| ID | Component |
+|---:|---|
+| `0x0001` | OBC firmware |
+| `0x0101` | PI-CAM service |
+| `0x0102` | Antenna service |
+| `0x0103` | PI-MGMT/platform service |
+| `0x0201` | FPGA node software/adapter |
+| `0x0202` | FPGA bitstream/image |
+| `0x0203` | FPGA processing capability/model bundle |
+
+The last two/three IDs only become activatable when the selected FPGA platform defines a safe lifecycle for them.
+
+### 14.2 Messages
 
 | Message | Name |
 |---|---|
@@ -736,7 +845,7 @@ Component IDs include:
 - FPGA node software;
 - FPGA image/bitstream when that platform is selected.
 
-### 14.2 Software-management payloads
+### 14.3 Software-management payloads
 
 `TC[230,1] Get Software Inventory` contains an optional bounded component-ID list; an empty list requests all managed components.
 
@@ -794,7 +903,7 @@ updated_unix_ms:u64
 
 All variable fields are bounded. Embedded endpoints may use fixed-size backing buffers and need not allocate dynamically.
 
-### 14.3 Update flow
+### 14.4 Update flow
 
 1. Transfer the update package as a Service 220 object to the update-owning endpoint.
 2. `Stage Update` binds the object to a component/version.
