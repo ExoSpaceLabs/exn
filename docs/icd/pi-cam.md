@@ -193,6 +193,107 @@ AF status metadata includes current AF state and read-back lens position.
 | `storage.retention_count` | local retention policy |
 | `storage.minimum_free_bytes` | guard before accepting capture |
 
+## 6.6 Stable control IDs and encoding
+
+Camera control IDs are 16-bit and stable across implementations. Capability reports declare whether an ID is supported by the active Camera Module/libcamera stack.
+
+| ID | Name | Type | Notes |
+|---:|---|---|---|
+| `0x0001` | `sensor.mode` | U16 | capability-reported sensor mode ID |
+| `0x0002` | `output.width` | U16 | pixels |
+| `0x0003` | `output.height` | U16 | pixels |
+| `0x0004` | `output.pixel_format` | U8 | capability-reported EXN format enum |
+| `0x0005` | `frame_rate` | F32 | frames/s |
+| `0x0006` | `crop.x` | U16 | pixels |
+| `0x0007` | `crop.y` | U16 | pixels |
+| `0x0008` | `crop.w` | U16 | pixels |
+| `0x0009` | `crop.h` | U16 | pixels |
+| `0x000A` | `transform.hflip` | BOOL | |
+| `0x000B` | `transform.vflip` | BOOL | |
+| `0x0100` | `ae.enable` | BOOL | |
+| `0x0101` | `exposure_us` | U32 | current/requested exposure |
+| `0x0102` | `analogue_gain` | F32 | |
+| `0x0103` | `exposure_compensation_ev` | F32 | |
+| `0x0104` | `metering_mode` | U8 | capability-reported enum |
+| `0x0105` | `exposure_mode` | U8 | capability-reported enum |
+| `0x0200` | `awb.enable` | BOOL | |
+| `0x0201` | `awb.mode` | U8 | capability-reported enum |
+| `0x0202` | `awb.red_gain` | F32 | |
+| `0x0203` | `awb.blue_gain` | F32 | |
+| `0x0300` | `af.mode` | U8 | 0=MANUAL, 1=AUTO, 2=CONTINUOUS |
+| `0x0301` | `af.trigger` | U8 | 1=START, 2=CANCEL; command-like/write-only |
+| `0x0302` | `af.range` | U8 | capability-reported enum |
+| `0x0303` | `af.speed` | U8 | capability-reported enum |
+| `0x0304` | `lens.position_dioptres` | F32 | 0 = infinity |
+| `0x0305` | `af.window.x` | U16 | normalized 0..65535 |
+| `0x0306` | `af.window.y` | U16 | normalized 0..65535 |
+| `0x0307` | `af.window.w` | U16 | normalized 0..65535 |
+| `0x0308` | `af.window.h` | U16 | normalized 0..65535 |
+| `0x0400` | `hdr.enable` | BOOL | |
+| `0x0401` | `brightness` | F32 | driver range |
+| `0x0402` | `contrast` | F32 | driver range |
+| `0x0403` | `saturation` | F32 | driver range |
+| `0x0404` | `sharpness` | F32 | driver range |
+| `0x0405` | `denoise.mode` | U8 | capability-reported enum |
+| `0x0500` | `jpeg.quality` | U8 | 1..100 |
+| `0x0501` | `thumbnail.enable` | BOOL | |
+| `0x0502` | `thumbnail.max_width` | U16 | pixels |
+| `0x0600` | `storage.retention_count` | U32 | 0 = policy-defined/unbounded by count |
+| `0x0601` | `storage.minimum_free_bytes` | U64 | capture admission guard |
+
+### 6.7 Set/Get wire payloads
+
+`TC[200,3] Set Camera Controls`:
+
+```text
+count:u16
+repeat count:
+    control_id:u16
+    value_type:u8
+    value_length:u16
+    value[value_length]
+```
+
+`TC[200,4] Get Camera Controls`:
+
+```text
+count:u16
+control_id[count]:u16
+```
+
+`TM[200,5] Camera Controls Report`:
+
+```text
+count:u16
+repeat count:
+    control_id:u16
+    status:u8
+    value_type:u8
+    value_length:u16
+    value[value_length]
+```
+
+A Set request is validated before application. Where the underlying camera API supports atomic application, all requested controls are committed together; otherwise failure semantics shall identify which control could not be applied.
+
+### 6.8 Capabilities report
+
+`TM[200,7]` contains:
+
+- Camera identity/model string with bounded length;
+- active driver/libcamera version;
+- supported sensor modes;
+- supported product types;
+- repeated control descriptors:
+  - control ID;
+  - value type;
+  - access flags READ/WRITE/TRIGGER;
+  - minimum;
+  - maximum;
+  - default;
+  - current support status.
+
+Variable-size strings/arrays shall have explicit bounded lengths. No Camera implementation may require unbounded dynamic packet fields.
+
 ## 7. Product generation and storage
 
 Each captured source frame has a `captureId`. One capture may generate several stored products.
@@ -244,6 +345,56 @@ PI-CAM owns:
 - garbage collection according to configured storage policy.
 
 The OBC may list products before deciding whether to process, retain, transfer to OBC, transfer to FPGA, or downlink to Ground.
+
+### 7.4 Product catalog messages
+
+`TC[200,8] List Products` contains:
+
+```text
+filter_flags:u16
+after_object_id:u64
+max_entries:u16
+```
+
+`TM[200,9] Product Catalog Report` contains a bounded number of entries:
+
+```text
+count:u16
+repeat count:
+    object_id:u64
+    acquisition_id:u32
+    capture_id:u64
+    created_unix_ms:u64
+    product_type:u16
+    width:u16
+    height:u16
+    byte_size:u64
+    checksum_type:u8
+    checksum[32]        # SHA-256 in baseline
+    state:u8
+```
+
+Additional format-specific metadata is obtained from Service 220 Object Metadata when the object is transferred.
+
+`TC[200,10] Delete Product` contains a bounded list of object IDs. Deletion fails for an object that is locked by an active acquisition/derivation/transfer unless an explicit force policy is later introduced.
+
+### 7.5 Acquisition status
+
+`TM[200,12]` contains:
+
+```text
+acquisition_id:u32
+mode:u8
+state:u8
+requested_count:u16
+captured_count:u16
+failed_count:u16
+product_count:u16
+last_capture_id:u64
+started_unix_ms:u64
+updated_unix_ms:u64
+last_error:u16
+```
 
 ## 8. Payload transfer
 
