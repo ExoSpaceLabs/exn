@@ -70,10 +70,14 @@ Existing Camera 200/5 and FPGA 210/5 ACK/NACK messages are retained only for com
 
 ### 4.2 Service 3: Housekeeping
 
-Use the standard one-shot housekeeping request/report pair:
+Use the standard housekeeping messages needed by EXN:
 
+- **TC[3,5]**: enable periodic housekeeping report generation;
+- **TC[3,6]**: disable periodic housekeeping report generation;
 - **TC[3,27]**: generate a one-shot housekeeping parameter report;
 - **TM[3,25]**: housekeeping parameter report.
+
+EXN uses predeclared structure IDs HEARTBEAT/HEALTH/SENSORS/LINKS rather than requiring Ground to create arbitrary report definitions in the first baseline.
 
 EXN's aggregated System HK remains useful but is mission-specific behavior added to the standard service using mission-specific subtype identifiers:
 
@@ -126,6 +130,13 @@ The old EXN 17/1 and 17/2 assignments shall not be used by new implementations.
 ### 4.6 Service 12: On-board Monitoring
 
 Use a deliberately small PUS Service 12 profile for sensor/health limit monitoring.
+
+The initial message subset is:
+
+- **TC[12,15]** / **TC[12,16]**: enable/disable the parameter monitoring function;
+- **TC[12,1]** / **TC[12,2]**: enable/disable predeclared parameter monitoring definitions;
+- **TC[12,10]** / **TM[12,11]**: request/report current out-of-limits state;
+- **TC[12,13]** / **TM[12,14]**: request/report monitoring-definition status.
 
 The first EXN baseline uses **predeclared monitoring definitions** rather than dynamic creation of arbitrary definitions from Ground. Monitoring covers temperature, voltage/power-state indicators, storage thresholds, link loss and other endpoint-specific health parameters actually available on the selected hardware.
 
