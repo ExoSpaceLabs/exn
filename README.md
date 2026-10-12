@@ -195,6 +195,7 @@ Mission packet/service semantics remain above that transport choice.
 - **Component/service contract:** [docs/component-services.md](docs/component-services.md)
 - **PUS service profile:** [docs/services.md](docs/services.md)
 - **Master wire-level ICD:** [docs/ICD.md](docs/ICD.md)
+- **Complete endpoint ICD index:** [docs/icd/README.md](docs/icd/README.md)
 - **Ground/HIL:** [docs/icd/gs.md](docs/icd/gs.md)
 - **MCU control node:** [docs/icd/mcu-rtos.md](docs/icd/mcu-rtos.md)
 - **Raspberry Pi payload node / Antenna service:** [docs/icd/linux-payload.md](docs/icd/linux-payload.md)
