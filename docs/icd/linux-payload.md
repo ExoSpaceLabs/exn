@@ -1,6 +1,6 @@
 # Raspberry Pi Payload Node ICD
 
-This document defines the EXN **Raspberry Pi 5 Payload Node** boundary. In the initial deployment the Pi has two required mission purposes: **Camera** and **Antenna/Communications**. Logical endpoint identity remains separate from physical host identity so the two functions are independently addressable even while co-located.
+This document defines the EXN **Raspberry Pi 5 Payload Node** boundary. In the initial deployment the Pi has two required mission purposes: **Camera** and **Antenna**. Logical endpoint identity remains separate from physical host identity so the two functions are independently addressable even while co-located.
 
 Refer to `../architecture.md` for system architecture, `../ICD.md` for the current wire contract, and `../services.md` for the target PUS service profile.
 
@@ -12,11 +12,11 @@ The Raspberry Pi 5 is required to host two primary EXN mission services in the i
 Raspberry Pi 5
  |
  +-- Camera Payload Service        APID 0x101 / Source ID 0x02
- +-- Antenna/Communications        APID 0x103 / Source ID 0x04
+ +-- Antenna        APID 0x103 / Source ID 0x04
  +-- Platform Management           local host supervision; no independent APID
 ```
 
-The Pi therefore serves **both** as the camera payload computer and as the spacecraft communications/antenna endpoint. Camera and Antenna/Communications remain separate logical endpoints despite sharing the same processor, OS, storage and network hardware. Either service may later move to another Linux computer without changing its mission responsibility.
+The Pi therefore serves **both** as the camera payload computer and as the spacecraft communications/antenna endpoint. Camera and Antenna remain separate logical endpoints despite sharing the same processor, OS, storage and network hardware. Either service may later move to another Linux computer without changing its mission responsibility.
 
 The Camera service contract remains defined in `pi-cam.md`. Platform Management is currently an implementation support service rather than a third mission packet endpoint; logical endpoints obtain host/watchdog state from it and include relevant health in their own housekeeping.
 
@@ -26,24 +26,24 @@ A representative deployment is:
 
 ```text
 exn-camera.service
-exn-comms.service
+exn-antenna.service
 exn-platform.service
 ```
 
 The implementation may use `systemd` for process supervision, dependency ordering, restart policy, watchdog integration, and resource limits. Mission-facing health is reported through EXN Housekeeping/Event services rather than Linux-local logs alone.
 
-## 3. Antenna / Communications endpoint
+## 3. Antenna endpoint
 
 Responsibilities:
 
-- act as the spacecraft Ground-facing communications endpoint for the demonstrator;
+- act as the spacecraft Ground-facing Antenna endpoint for the demonstrator;
 - maintain the deployed RF/Wi-Fi/network communications path to Ground;
 - communicate with the STM32 OBC and deliver Ground telecommands toward it;
 - carry OBC telemetry back toward Ground;
 - downlink Camera and FPGA payload products directly without routing the bulk bytes through the OBC;
 - report communications-link/session health, counters and faults.
 
-The communications endpoint is not the spacecraft command authority. The STM32 OBC remains responsible for command supervision and mission decisions. PI-COMMS is the communications gateway: it moves command/telemetry traffic between Ground and OBC and also owns the direct Ground data path for payload products.
+The Antenna endpoint is not the spacecraft command authority. The STM32 OBC remains responsible for command supervision and mission decisions. PI-COMMS is simply the logical/APID name of this Antenna service, not a separate communications subsystem.
 
 Endpoint identity:
 
@@ -60,14 +60,14 @@ The logical identity remains valid if the service later moves away from the Rasp
 The nominal flight-like path is:
 
 ```text
-Ground -> Antenna/Communications -> STM32 OBC -> selected endpoint
+Ground -> Antenna -> STM32 OBC -> selected endpoint
 ```
 
-A GS/HIL deployment may bypass the communications endpoint and connect directly to the OBC. Both deployment profiles use the same mission packet semantics.
+A GS/HIL deployment may bypass the Antenna endpoint and connect directly to the OBC. Both deployment profiles use the same mission packet semantics.
 
 ## 5. Payload-data path
 
-The communications endpoint may accept payload data directly from Camera or FPGA when mission policy permits it.
+The Antenna endpoint accepts payload data directly from Camera or FPGA when the OBC or mission policy requests a Ground downlink.
 
 Representative routes include:
 
@@ -77,7 +77,7 @@ FPGA -> Antenna -> Ground
 Camera -> FPGA -> Antenna -> Ground
 ```
 
-Direct payload downlink does not require the MCU to carry bulk data. The OBC may still receive metadata, status, classification results, events, or completion reports as required.
+Here, `direct` means the payload producer sends bulk data straight to the Antenna service rather than through the OBC. The Antenna service is still the physical/logical path to Ground. The OBC may still receive metadata, status, classification results, events, or completion reports.
 
 ## 6. PUS service support
 
@@ -88,7 +88,7 @@ The PI-COMMS target service set is deliberately small:
 - Service 5 event reporting;
 - Service 9 time reporting/synchronization where applicable;
 - Service 20 parameter management;
-- Service 220 payload-object transfer/forwarding where packetized mission objects are carried through the communications endpoint.
+- Service 220 payload-object transfer/forwarding where packetized mission objects are carried through the Antenna endpoint.
 
 A dedicated communications-control service is **not allocated yet**. It should only be introduced if concrete radio/link operations cannot be represented coherently through housekeeping, events and parameters. This avoids creating a custom service merely because the process happens to be called `exn-antenna`.
 
