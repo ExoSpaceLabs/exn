@@ -29,7 +29,7 @@ In the initial EXN deployment, **Camera and Antenna execute on the same Raspberr
 
 ## High-Level Service Map
 
-The diagram below shows **where each EXN service lives and what it is responsible for**. Service numbers refer to the target PUS-C mission profile.
+The diagram below shows **where each EXN service lives and what it is responsible for**. Service numbers refer to the active **PUS Revision C** mission profile.
 
 ```mermaid
 flowchart LR
@@ -69,7 +69,7 @@ flowchart LR
   PM -.->|"restart / supervise"| ANT
 ```
 
-**Common service meaning:** Service 1 provides request verification; Service 3 housekeeping/heartbeat; Service 5 events; Service 8 function/recovery management; Service 9 time; Service 12 monitoring/alarms; Service 20 parameters; Service 200 Camera control; Service 210 FPGA processing; Service 220 payload-object transfer; Service 230 software management.
+**Common service meaning:** Service 1 provides request verification; Service 3 housekeeping/heartbeat; Service 5 events; Service 8 function/recovery management; Service 9 time; Service 12 monitoring/alarms; **Service 20 is only runtime/persistent configuration parameters**; Service 200 Camera control; Service 210 FPGA processing; Service 220 payload-object transfer; Service 230 software management. Detailed purpose, ownership, examples and exclusions for every service are defined in [docs/services.md](docs/services.md).
 
 The key ownership rule is deliberately simple: **OBC decides, Camera acquires, FPGA processes, Antenna talks to Ground, and PI-MGMT keeps the Pi services alive and updateable.** Bulk payload bytes may flow directly from Camera or FPGA to Antenna without passing through the OBC.
 
@@ -217,9 +217,9 @@ The architecture is ahead of the component implementations, deliberately:
 
 | Area | Current state |
 |---|---|
-| System architecture / ICD | defined; service profile normalization in progress |
-| CCSDSPack | released and qualified; v2.0.0 remains the current stable EXN baseline |
-| EXN-GS / HIL | implemented on the transitional PUS-A wire profile |
+| System architecture / ICD | defined on PUS Revision C; implementation alignment in progress |
+| CCSDSPack | released and qualified; v2.0.0 is the current released EXN baseline |
+| EXN-GS / HIL | implementation is being migrated from its old PUS-A code path to the normative PUS-C profile |
 | STM32 OBC | repository still requires implementation against HardRT + DAS |
 | Raspberry Pi dual-role payload node | existing repository is legacy/experimental; target implementation must provide both PI-CAM and PI-COMMS on the same Pi 5 |
 | FPGA processing | architecture defined; implementation repository remains a placeholder |
@@ -227,21 +227,25 @@ The architecture is ahead of the component implementations, deliberately:
 | DAS | released v0.1.0 for STM32H755 / NUCLEO-H755ZI-Q |
 | SpWKit | released v0.7.0; optional EXN transport integration, not a mandatory architecture dependency |
 
-The current PUS-A templates are a **transitional compatibility profile**, not the final service-tailoring baseline. Several legacy EXN service identifiers collide with standardized PUS-C meanings. New flight/payload implementation work shall follow [docs/services.md](docs/services.md) rather than extending those legacy assignments.
+**PUS Revision C is the only active EXN packet profile.** PUS-A remains historical implementation debt only; no new interface, test or component work shall extend it.
 
 ## Integration Direction
 
 The current integration direction is:
 
-1. freeze the EXN PUS-C service tailoring and request-verification policy defined in `docs/services.md`;
+1. use **PUS Revision C everywhere**; migrate the existing GS/HIL and simulator now rather than maintaining a PUS-A compatibility branch;
 2. keep released CCSDSPack v2.0.0 as the reproducible dependency until a newer release is actually published and adopted;
-3. migrate shared packet templates, MCU headers, EXN-GS and simulators together to the normalized service profile;
-4. bring the MCU application up on **HardRT 0.5.1 + DAS v0.1.0** against the central EXN architecture/ICD;
-5. evolve the Pi repository from its camera-only legacy implementation into the **dual-role Raspberry Pi payload node**, implementing both PI-CAM and PI-COMMS under Linux supervision;
-6. keep the FPGA focused on image/AI processing with configurable result routing;
-7. use direct payload-data paths where they reduce unnecessary MCU traffic;
+3. keep the central ICD, CCSDSPack templates, JSON/tooling artifacts, MCU header and component implementations synchronized to the same PUS-C service catalogue;
+4. bring the MCU application up on **HardRT 0.5.1 + DAS v0.1.0** against the central EXN ICD;
+5. evolve the Pi repository from its camera-only legacy implementation into the dual-role Camera + Antenna node under PI-MGMT supervision;
+6. keep the FPGA focused on image/AI processing with advertised capabilities and configurable result routing;
+7. use direct producer -> Antenna payload paths where they avoid unnecessary MCU bulk traffic;
 8. adopt **SpWKit v0.7.x** only where its logical-link/transport model improves EXN integration, and validate that integration explicitly;
-9. restore complete node-to-node HIL/system regression before freezing an EXN system release.
+9. restore complete PUS-C node-to-node HIL/system regression before freezing an EXN system release.
+
+### Documentation quality rule
+
+A service is not considered defined merely because it has a number and a title. Before freezing a service, the central ICD must explain its **purpose, owner/users, what belongs in it, what does not, message/subservice allocation, payloads, and error/state behavior**. Generic services such as Service 20 must include concrete examples so implementers do not have to infer what “parameter management” was supposed to mean.
 
 ## License
 
