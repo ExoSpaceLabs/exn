@@ -1,6 +1,6 @@
 # EXN Component and Service Contract
 
-This document defines the **target functional service contract** for the EXN components.
+This document defines the **normative target functional service contract** for all EXN components. It is part of the central EXN ICD and is implemented by the component repositories.
 
 It complements:
 
@@ -9,7 +9,7 @@ It complements:
 - `ICD.md` — exact packet/header/routing rules;
 - device ICDs under `docs/icd/` — endpoint-specific fields and capabilities.
 
-The intent is to make the system implementable without inventing behavior independently in each component repository.
+The intent is to make the system implementable without inventing behavior independently in each component repository. Component implementations shall not assign or reinterpret mission-visible fields locally; missing contract elements are added here first.
 
 ## 1. Endpoint model
 
