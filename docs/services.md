@@ -59,9 +59,7 @@ EXN initially needs:
 - completion success/failure;
 - start/progress verification only where asynchronous operations benefit from them.
 
-The TC acknowledgement flags shall be selected deliberately per command class. The current blanket value of zero is transitional behavior.
-
-Existing Camera 200/5 and FPGA 210/5 ACK/NACK messages are retained only for compatibility until Service 1 migration is complete.
+The TC acknowledgement flags are selected deliberately per command class as defined in `ICD.md`. EXN does not use mission-specific Camera/FPGA ACK packets; Service 1 is the single request-verification mechanism.
 
 ### 4.2 Service 3: Housekeeping
 
@@ -73,6 +71,8 @@ Use the standard housekeeping messages needed by EXN:
 - **TM[3,25]**: housekeeping parameter report.
 
 EXN uses predeclared structure IDs HEARTBEAT/HEALTH/SENSORS/LINKS rather than requiring Ground to create arbitrary report definitions in the first baseline.
+
+**Purpose:** Service 3 reports what a component *is doing and what its hardware is measuring*. The `SENSORS` structure is not generic hand-waving: for selected reference hardware its sensor IDs, units and required availability are defined centrally in `icd/hardware-sensors.md`. `HEALTH` contains software/resource state such as CPU load, storage, throttling flags and reset reason. Threshold evaluation belongs to Service 12; changing threshold/policy values belongs to Service 20.
 
 EXN's aggregated System HK remains useful but is mission-specific behavior added to the standard service using mission-specific subtype identifiers:
 
