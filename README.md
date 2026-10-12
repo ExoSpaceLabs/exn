@@ -17,7 +17,7 @@ The detailed logical architecture is defined in [docs/architecture.md](docs/arch
 
 EXN separates responsibilities across independently testable logical components:
 
-- **STM32 Control Node / OBC:** system supervision, command/telemetry handling, health and fault management, time distribution, configuration, and control-plane routing/orchestration.
+- **STM32 Control Node / OBC:** the **spacecraft platform authority**. It owns mission/platform mode, command authorization and dispatch, spacecraft-wide supervision, health/fault management and FDIR, time authority, configuration, and orchestration of both platform subsystems and payloads. The current demonstrator implements only a subset of those responsibilities.
 - **Raspberry Pi 5 Payload Node:** one physical Embedded Linux computer with **two first-class mission roles**.
   - **Camera role / PI-CAM:** image acquisition, payload-product ownership, storage/preparation, compression, and image transfer.
   - **Antenna role / PI-COMMS:** the Pi provides the spacecraft Ground link. The Antenna service exchanges TCs/TMs with the OBC and sends payload data from PI-CAM or FPGA to Ground without routing those bulk bytes through the OBC.
@@ -71,7 +71,37 @@ flowchart LR
 
 **Common service meaning:** Service 1 provides request verification; Service 3 housekeeping/heartbeat; Service 5 events; Service 8 function/recovery management; Service 9 time; Service 12 monitoring/alarms; **Service 20 is only runtime/persistent configuration parameters**; Service 200 Camera control; Service 210 FPGA processing; Service 220 payload-object transfer; Service 230 software management. Detailed purpose, ownership, examples and exclusions for every service are defined in [docs/services.md](docs/services.md).
 
-The key ownership rule is deliberately simple: **OBC decides, Camera acquires, FPGA processes, Antenna talks to Ground, and PI-MGMT keeps the Pi services alive and updateable.** Bulk payload bytes may flow directly from Camera or FPGA to Antenna without passing through the OBC.
+The key ownership rule is deliberately simple: **the OBC is spacecraft authority; distributed subsystems execute under that authority.** Camera acquires, FPGA processes, Antenna talks to Ground, and PI-MGMT keeps the Pi services alive and updateable. Future platform subsystems such as AOCS/ADCS, EPS and thermal control may have their own local controllers and fast loops, but spacecraft mode, safety policy, command authorization and recovery remain OBC-owned. Bulk payload bytes may flow directly from Camera or FPGA to Antenna without passing through the OBC.
+
+## Spacecraft Authority Model
+
+EXN models the STM32 node as the **spacecraft OBC**, not merely as a payload router.
+
+The architectural rule is **centralized authority with distributed execution**:
+
+- the OBC owns spacecraft mode, mission sequencing, command authorization, time, supervision and FDIR;
+- subsystem controllers may execute local real-time control loops and expose services to the OBC;
+- payload computers/HPCs may execute expensive or high-volume processing;
+- no payload or subsystem controller becomes spacecraft authority merely because it has more compute.
+
+Future platform functions are intentionally outside the current implementation scope but already belong under OBC authority:
+
+```text
+                    STM32 OBC
+                 spacecraft authority
+                        |
+        +---------------+----------------+
+        |               |                |
+     AOCS/ADCS          EPS            Thermal
+   local control     local control    local control
+        |
+        +-------------------------------+
+                        |
+                      Payload
+                 Camera / FPGA-HPC
+```
+
+The exact AOCS, EPS, thermal and actuator services are **not defined yet** because they are not needed for the current stage. Their absence from the present implementation shall not be interpreted as transferring spacecraft authority to a payload computer.
 
 ## Routing Model
 
