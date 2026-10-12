@@ -145,7 +145,7 @@ It owns:
 - processing status/result metadata;
 - controllable result routing.
 
-Processing results are not hard-wired to a single endpoint. The job or mission policy may route a result to the OBC, Camera service, Communications service, requester, or multiple endpoints.
+Processing results are not hard-wired to a single endpoint. The job or mission policy may route a result to the OBC, Camera service, Antenna service, requester, or multiple endpoints.
 
 The final Execute request shall include or reference:
 
@@ -193,7 +193,7 @@ Service 23 is reserved for its standardized PUS-C File Management meaning.
 
 EXN shall not use Service 23 for generic image or result chunking in the target profile.
 
-### 4.10 Communications endpoint
+### 4.10 Antenna endpoint
 
 PI-COMMS initially requires no dedicated mission-specific service.
 
@@ -205,7 +205,7 @@ Its management should use:
 - Service 20 for configurable parameters;
 - Service 220 for payload-object forwarding where the packetized object-transfer path is used.
 
-A dedicated communications-control service shall only be allocated if concrete requirements cannot be represented coherently by those services.
+No separate 'communications' subsystem is introduced: PI-COMMS is the logical identifier for the Pi Antenna service. A dedicated antenna-control service shall only be allocated if concrete radio/link operations cannot be represented coherently by the common services.
 
 ### 4.11 Legacy Service 250
 
@@ -219,7 +219,7 @@ Service 250 remains reserved during migration so old HIL traffic can be recogniz
 
 The target service ownership is:
 
-| Service | GS/HIL | OBC | Camera | FPGA processing | Communications |
+| Service | GS/HIL | OBC | Camera | FPGA processing | Antenna |
 |---|---|---|---|---|---|
 | 1 Request verification | consume | provide/consume | provide/consume | provide/consume | provide/consume |
 | 3 Housekeeping | request/consume | provide + aggregate | provide | provide | provide |
@@ -279,7 +279,7 @@ No new interface shall be added using a legacy-colliding assignment merely becau
 4. Generalize payload transfer from `imageId` to object/transfer semantics under Service 220.
 5. Migrate shared CCSDSPack templates, JSON/tooling definitions and MCU headers.
 6. Migrate EXN-GS packet builders and simulator together.
-7. Implement MCU, Camera, Communications and FPGA endpoints against the normalized profile.
+7. Implement MCU, Camera, Antenna and FPGA endpoints against the normalized profile.
 8. Add golden-vector and cross-repository interoperability tests.
 9. Remove legacy service aliases only after no supported component depends on them.
 
