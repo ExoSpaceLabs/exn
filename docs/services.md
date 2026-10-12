@@ -79,7 +79,7 @@ EXN's aggregated System HK remains useful but is mission-specific behavior added
 - **TC[3,128]**: Request System HK;
 - **TM[3,129]**: System HK Report.
 
-The current System HK application-data structure may be retained unless implementation work reveals a better aggregate representation.
+`TC[3,128]` has no Application Data: Ground asks for the complete current spacecraft snapshot. `TM[3,129]` contains the OBC's cached HK view of every registered endpoint, including explicit supervision state for stale/offline/non-responsive devices. Poll cadence and freshness/offline policy are OBC Service 20 configuration, not per-request Ground options.
 
 ### 4.3 Service 5: Event Reporting
 
