@@ -480,6 +480,17 @@ Last recovery result:
 
 A completely unreachable endpoint cannot be recovered by a soft reboot command sent over the failed communication path. EXN shall therefore report `SUPPRESSED` when the configured action requires an independent reset/power path that is not implemented.
 
+Recovery flags in System HK:
+
+| Bit | Meaning |
+|---:|---|
+| 0 | automatic recovery enabled for this endpoint |
+| 1 | recovery cooldown currently active |
+| 2 | automatic retry limit reached |
+| 3 | independent hard-reset path available |
+| 4 | independent power-cycle path available |
+| 5..7 | reserved |
+
 Each endpoint supervision record stores:
 
 - current recovery state/reason/action;
