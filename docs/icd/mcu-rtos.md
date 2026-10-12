@@ -1,22 +1,23 @@
 # MCU-RTOS Device/Service ICD
 
-This document specializes the EXN master ICD for the STM32 MCU-RTOS control node. The wire-level packet profile, APID policy, PUS revision, CRC policy, proxy preamble, and common service payloads are authoritative in `../ICD.md`.
+This document specializes the EXN master ICD for the STM32 MCU-RTOS/OBC control node. The wire-level packet profile, APID policy, CRC policy, proxy preamble and current compatibility payloads are authoritative in `../ICD.md`; the target PUS service tailoring is authoritative in `../services.md`.
 
 ## 1. Role and identifiers
 
 - Node APID: `0x100`.
 - PUS-A TC Source ID: `0x01`.
-- Acts as the northbound GS endpoint, system controller, downstream command router, System HK aggregator, and time master.
-- Issues device TCs to PI-CAM (`0x101`) and FPGA-AI (`0x102`).
+- Acts as the northbound logical Ground endpoint, system controller, downstream command router, System HK aggregator, and time master.
+- Issues device TCs to PI-CAM (`0x101`), FPGA-AI (`0x102`) and PI-COMMS (`0x103`).
 - Receives and forwards device TMs while retaining the producing device APID.
+- Intended implementation baseline: **HardRT 0.5.1** for runtime/scheduling and **DAS v0.1.0** for STM32H755 device/board access.
 
-All currently defined MCU packets use the EXN **PUS revision-A** profile from the master ICD. Service numbers do not select a different PUS revision.
+All currently executable MCU/HIL packet definitions use the EXN **transitional PUS revision-A** profile. The target OBC implementation shall migrate to the PUS-C service profile in `../services.md` before its public packet API is frozen.
 
 ## 2. Packet/APID behavior
 
 EXN APID semantics are direction-specific:
 
-- TCs emitted by MCU use the **destination APID**: PI `0x101` or FPGA `0x102`.
+- TCs emitted by MCU use the **destination APID**: PI-CAM `0x101`, FPGA `0x102`, or PI-COMMS `0x103`.
 - TMs produced by MCU use APID `0x100`.
 - GS-originated TCs received by MCU use destination APID `0x100` and PUS-A TC Source ID `0x10`.
 
@@ -24,7 +25,7 @@ The MCU maintains sequence state for each Packet Identification stream it origin
 
 ## 3. GS northbound proxying
 
-GS physically communicates with MCU. Device-directed GS operations therefore use two packet hops.
+Ground traffic logically terminates at MCU for supervised control. The HIL profile connects GS directly to MCU; the flight-like profile carries the same OBC-destined packets through PI-COMMS. Device-directed GS operations therefore use an MCU routing hop.
 
 ### 3.1 Device-directed operation
 
@@ -35,7 +36,7 @@ GS physically communicates with MCU. Device-directed GS operations therefore use
 4. MCU constructs a new TC addressed to the target APID with Source ID `0x01` and only the service-specific payload.
 5. MCU correlates downstream responses to `transactionId` and forwards them to GS.
 
-Valid proxy targets are `1=PI` and `2=FPGA`. MCU-local operations do not use this preamble.
+Valid proxy targets are `1=PI-CAM`, `2=FPGA-AI`, and `3=PI-COMMS`. MCU-local operations do not use this preamble.
 
 ### 3.2 Direct MCU services
 
@@ -51,7 +52,7 @@ For TC `3/10`, MCU:
 
 1. records `transactionId`, `include_mask`, and `detailMask`;
 2. collects MCU self-HK when bit0 is set;
-3. issues TC `3/1` to PI and/or FPGA when bits1/2 are set;
+3. issues TC `3/1` to PI-CAM, FPGA and/or PI-COMMS when bits1/2/3 are set;
 4. waits for the selected TM `3/2` reports up to the configured aggregation timeout;
 5. produces TM `3/100` using APID `0x100` and echoes `transactionId`;
 6. reports `present_mask` and `status=OK/PARTIAL/TIMEOUT/ERROR` according to collected data.
@@ -60,9 +61,11 @@ Recommended integration defaults remain approximately 200 ms per device and no m
 
 ## 5. MCU packet scope
 
+The packet numbers in this section describe the **transitional compatibility profile**. Target service numbers and verification behavior are defined in `../services.md`.
+
 ### Emits TCs
 
-- `3/1` HK Request to PI/FPGA.
+- `3/1` HK Request to PI-CAM/FPGA/PI-COMMS.
 - `17/1` Set Time to each target node.
 - `20/1` Set Parameter and `20/2` Get Parameter.
 - `23/1` Start Transfer and `23/2` Stop Transfer.
@@ -95,9 +98,9 @@ When MCU produces TM `3/2`, Application Data uses big-endian encoding:
 | `uptime_ms` | uint64 | 64 | System uptime in milliseconds |
 | `reset_cause` | uint8 | 8 | `0=POR,1=PIN,2=IWDG,3=WWDG,4=SW,5=LPWR,6=BOR` |
 | `fw_version` | uint32 | 32 | `major<<24 | minor<<16 | patch<<8 | build` |
-| `heap_used_bytes` | uint32 | 32 | Current heap usage |
-| `heap_free_bytes` | uint32 | 32 | Free heap |
-| `task_count` | uint16 | 16 | Number of RTOS tasks |
+| `static_ram_used_bytes` | uint32 | 32 | Static RAM committed by the firmware/runtime configuration |
+| `static_ram_free_bytes` | uint32 | 32 | Remaining RAM budget not committed to static regions/stacks |
+| `task_count` | uint16 | 16 | Number of HardRT application tasks |
 | `stack_low_water_min` | uint16 | 16 | Lowest remaining stack margin |
 | `link_status` | uint16 | 16 | Platform-defined active-link bitmask |
 | `tc_sent` | uint32 | 32 | TCs emitted |
@@ -107,9 +110,9 @@ When MCU produces TM `3/2`, Application Data uses big-endian encoding:
 
 An optional diagnostic TLV extension may follow when requested by `detailMask`.
 
-## 7. Time management, Service 17
+## 7. Legacy time assignment, Service 17
 
-Service 17 uses the same **PUS revision-A** secondary header as every current EXN service.
+The current compatibility profile uses Service 17 for time messages. PUS-C standardizes **Service 9** for Time Management and **Service 17** for Test; new OBC implementation work shall therefore use the Service 9 target profile from `../services.md`.
 
 - TC `17/1`: Application Data contains `time_cuc[6]`.
 - TM `17/2`: Application Data contains `time_cuc[6]` and optional quality/status fields.
@@ -120,37 +123,40 @@ The six-octet CUC value is mission Application Data. It is not a PUS-C secondary
 
 Service 5 also uses PUS revision A. Event ID is Application Data, not a separate PUS-B field.
 
-Suggested MCU event IDs:
+Target MCU event severity follows PUS-C Service 5:
 
 | Event ID | Severity/subservice | Description |
 |---:|---|---|
-| `0x0001` | `5/1` Info | Boot completed |
-| `0x0002` | `5/2` Warn | Link degraded |
-| `0x0003` | `5/3` Error | Watchdog reset occurred |
+| `0x0001` | `5/1` informative | Boot completed |
+| `0x0002` | `5/2` low severity | Link degraded |
+| `0x0003` | `5/4` high severity | Watchdog reset detected after reboot |
+
+Subtype `5/3` is reserved for medium-severity anomalies in the target profile.
 
 Application Data starts with `eventId:uint16`, followed by event-specific bytes.
 
-## 9. Parameter keys, Service 20
+## 9. Parameter management
 
-Keys are 8-bit and values use the master ICD TLV encoding.
+The previous design listed transport-selection keys such as `SPI/UART/CAN/UDP` and a runtime `crc.enable` switch. Those are **not frozen mission parameters**:
 
-| Key | Name | TLV | Range/Enum | Default | Notes |
-|---:|---|---|---|---|---|
-| 1 | `link.primary` | U8 | `0=SPI,1=UART,2=CAN,3=UDP` | 0 | Preferred control transport |
-| 2 | `link.baud` | U32 | `9600..3000000` | 115200 | UART only |
-| 3 | `can.bitrate` | U32 | `125000..1000000` | 500000 | CAN only |
-| 4 | `time.distribution_enable` | BOOL | `0/1` | 1 | Enables Service 17 distribution using current Rev-A profile |
-| 5 | `crc.enable` | BOOL | `0/1` | 1 | Current baseline requires enabled CRC16 |
+- physical/link transport selection belongs to deployment/integration policy unless a real runtime-switching requirement is demonstrated;
+- SpWKit is a logical transport option, not another MCU peripheral enum;
+- CRC16 is part of the selected packet profile and shall not be casually disabled through a mission parameter;
+- Service 20 message meanings shall follow the normalized PUS-C profile before parameter IDs are frozen.
 
+MCU parameter identifiers will be allocated with the OBC implementation and recorded in this ICD once the associated runtime behavior exists. This avoids publishing configuration knobs for software that does not yet exist.
 ## 10. CCSDSPack v2 mapping
 
-MCU-hosted/filesystem consumers use the `.cfg` templates under `interfaces/ccsdspack/`. Bare-metal consumers use `interfaces/mcu-rtos/exn_interfaces.h` and construct packets programmatically.
+The `.cfg` templates and `interfaces/mcu-rtos/exn_interfaces.h` currently mirror the transitional PUS-A profile for EXN-GS/HIL compatibility. They are not the final OBC service API.
 
 Key rules:
 
-- downstream TC template APID is the destination (`0x101` or `0x102`);
+- downstream TC template APID is the destination (`0x101`, `0x102`, or `0x103`);
 - MCU-produced TM APID is `0x100`;
 - TC selector is `PUS:revA:TC`, source-ID width one octet, Source ID `0x01`;
 - TM selector is `PUS:revA:TM`, destination-ID width zero octets;
 - packet error control is CRC16;
 - service-specific timestamps remain Application Data.
+
+
+The target OBC interface migrates to CCSDSPack PUS-C TC/TM headers, standard Service 1 verification, normalized Services 3/5/9/20, and mission-specific Services 200/210/220. That migration shall be performed together with EXN-GS and the shared interface artifacts rather than piecemeal.
