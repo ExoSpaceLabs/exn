@@ -33,7 +33,8 @@ typedef enum {
   APID_MCU  = 0x100u,
   APID_PI       = 0x101u,
   APID_FPGA     = 0x102u,
-  APID_PI_COMMS = 0x103u
+  APID_PI_COMMS = 0x103u,
+  APID_PI_MGMT  = 0x104u
 } exn_apid_t;
 
 /* PUS-A TC Source IDs. */
@@ -42,6 +43,7 @@ typedef enum {
   SRCID_PI   = 0x02u,
   SRCID_FPGA     = 0x03u,
   SRCID_PI_COMMS = 0x04u,
+  SRCID_PI_MGMT  = 0x05u,
   SRCID_GS       = 0x10u
 } exn_srcid_t;
 
@@ -155,7 +157,7 @@ static inline uint32_t be_get_u32(const uint8_t *p) {
 /* GS -> MCU downstream-device proxy preamble. Not used for MCU-local 3/10 System HK. */
 typedef struct EXN_PACKED {
   uint16_t transactionId;
-  uint8_t target;  /* 1=PI-CAM, 2=FPGA, 3=PI-COMMS */
+  uint8_t target;  /* 1=PI-CAM, 2=FPGA, 3=PI-COMMS/Antenna, 4=PI-MGMT */
   uint8_t options; /* bit0=mirror to GS, bit1=mirror to peer */
 } exn_proxy_preamble_t;
 
@@ -169,7 +171,7 @@ typedef struct EXN_PACKED {
 
 typedef struct EXN_PACKED {
   uint16_t transactionId;
-  uint8_t include_mask; /* bit0=MCU, bit1=PI-CAM, bit2=FPGA, bit3=PI-COMMS */
+  uint8_t include_mask; /* bit0=MCU, bit1=PI-CAM, bit2=FPGA, bit3=PI-COMMS, bit4=PI-MGMT */
   uint16_t detailMask;
 } exn_sys_hk_req_t;
 
