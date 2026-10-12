@@ -551,9 +551,9 @@ PI-CAM is designed around Raspberry Pi Camera Module 3 / IMX708, while capabilit
 |---|---|
 | `TC[200,1]` | Start Acquisition |
 | `TC[200,2]` | Stop Acquisition |
-| `TC[200,3]` | Set Camera Controls |
-| `TC[200,4]` | Get Camera Controls |
-| `TM[200,5]` | Camera Controls Report |
+| `TC[200,3]` | Set Camera Configuration |
+| `TC[200,4]` | Get Camera Configuration |
+| `TM[200,5]` | Camera Configuration Report |
 | `TC[200,6]` | Get Camera Capabilities |
 | `TM[200,7]` | Camera Capabilities Report |
 | `TC[200,8]` | List Products |
@@ -585,7 +585,13 @@ Modes:
 
 For SINGLE, `count=1`. For BURST, `count>=1`. TIMELAPSE uses `count` and `interval_ms`. STREAM is a long-running acquisition terminated by `TC[200,2]` or `duration_ms`.
 
-### 9.3 Camera controls
+### 9.3 Camera configuration
+
+Camera image settings are changed as one bounded configuration transaction. EXN does not allocate one TC/subservice per field. The complete batch is validated before application and shall either be applied coherently or rejected.
+
+`TC[200,4]` selects report scope rather than enumerating individual controls in the command. `TM[200,5]` includes a configuration revision number plus the current values for the requested scopes.
+
+Camera configuration scopes are sensor/output geometry, exposure/gain, white-balance/colour, focus, ISP/HDR, and encoding/product. Runtime storage policy remains Service 20.
 
 The target control model includes:
 
