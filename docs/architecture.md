@@ -11,7 +11,7 @@ EXN is a modular avionics and payload demonstrator. The architecture intentional
 The main rules are:
 
 1. **STM32 is the spacecraft control authority.** It owns supervision, command orchestration, health/fault handling, time distribution, and control-plane routing.
-2. **The Raspberry Pi 5 is a dual-role Embedded Linux payload node.** In the initial EXN deployment it performs both the Camera role and the Antenna/Communications role. Those roles are separate logical endpoints/services even though they share one physical computer.
+2. **The Raspberry Pi 5 is a dual-role Embedded Linux payload node.** In the initial EXN deployment it performs both the Camera role and the Antenna role. Those roles are separate logical endpoints/services even though they share one physical computer.
 3. **The FPGA is a processing node.** Its EXN role is image preprocessing, inference, postprocessing, and other hardware-accelerated payload computation.
 4. **Processing results do not have one fixed destination.** The requester or mission policy selects where a result is delivered.
 5. **Bulk payload data need not transit the MCU.** Control traffic should remain MCU-centric, while high-volume data paths may connect payload endpoints directly.
@@ -26,7 +26,7 @@ graph LR
   GS[Ground Station]
   OBC[STM32 OBC / Control Node]
   CAM[Camera Payload Service]
-  ANT[Antenna / Communications Service]
+  ANT[Antenna Service]
   FPGA[FPGA AI / Processing Node]
 
   GS <--> ANT
@@ -68,14 +68,14 @@ Ground Station
        HardRT + DAS           Image/AI acceleration
 ```
 
-Camera and Antenna/Communications are therefore **two first-class responsibilities of the initial Raspberry Pi 5** while remaining independent logical services. The Pi is expected to do both: acquire/manage payload imagery and provide the spacecraft communications endpoint toward Ground/OBC. A later deployment may move either service to a different Linux computer without changing its mission responsibility.
+Camera and Antenna are therefore **two first-class responsibilities of the initial Raspberry Pi 5** while remaining independent logical services. The Pi is expected to do both: acquire/manage payload imagery and provide the spacecraft communications endpoint toward Ground/OBC. A later deployment may move either service to a different Linux computer without changing its mission responsibility.
 
 ## 4. Raspberry Pi dual-role payload node
 
 The Raspberry Pi shall be treated as one physical spacecraft payload computer with two mission-facing functions rather than as one camera executable with optional extras:
 
 1. **PI-CAM** acquires and owns payload imagery/products.
-2. **PI-COMMS** acts as the Antenna/Communications endpoint, maintaining the Ground-facing communications path, communicating with the OBC, and transmitting telemetry/payload products directly to Ground when routing policy allows it.
+2. **PI-COMMS is the Antenna service.** It owns the Ground-facing link, exchanges TCs/TMs with the OBC, and transmits payload products from Camera or FPGA to Ground.
 
 Linux platform management supervises both functions but is not itself a third primary mission role.
 
@@ -85,7 +85,7 @@ A representative service layout is:
 Linux
  |
  +-- exn-camera.service
- +-- exn-comms.service
+ +-- exn-antenna.service
  +-- exn-platform.service
  +-- system watchdog
  +-- journald / telemetry collection
@@ -107,17 +107,17 @@ Responsibilities include:
 
 The Camera service remains the natural owner of captured payload products even when computation is delegated to FPGA.
 
-### 4.2 Antenna / Communications service
+### 4.2 Antenna service
 
 Responsibilities include:
 
-- ground-facing RF/network link handling;
-- uplink ingress and downlink egress;
-- delivery of ground TCs toward the OBC control path;
-- direct transmission of payload data when mission policy permits it;
-- communications-link health and status reporting.
+- own the Ground-facing RF/Wi-Fi/network link;
+- receive Ground TCs and forward them to the OBC;
+- receive OBC TMs and forward them to Ground;
+- accept payload data directly from PI-CAM or FPGA and downlink it to Ground when commanded/policy permits;
+- report link/session health and status.
 
-The communications service is **not** the spacecraft command authority. The Pi provides the communications path, while the OBC remains the authority: Ground commands enter through PI-COMMS and are delivered to the OBC for control-plane handling. In the reverse direction, the Pi can downlink OBC telemetry and can transfer bulk Camera/FPGA products directly to Ground without forcing those bytes through the OBC.
+The Antenna service is **not** the spacecraft command authority. The OBC remains the authority. Ground TCs pass `Ground -> Antenna -> OBC`; OBC TMs pass `OBC -> Antenna -> Ground`. For bulk data, the OBC may command PI-CAM or FPGA to send an object to the Antenna service, which then transmits it to Ground. This bypasses the OBC as a bulk-data router while preserving OBC control.
 
 ### 4.3 Platform service
 
@@ -144,7 +144,7 @@ The nominal flight-like command path is:
 
 ```text
 Ground
-  -> Antenna/Communications Service
+  -> Antenna Service
   -> STM32 OBC
   -> selected payload endpoint
 ```
@@ -195,8 +195,7 @@ A processing result may be routed to one or more of:
 
 - **OBC**, for autonomous decisions, event generation, or subsequent commanding;
 - **Camera service**, to associate the result with the source image, store it, or generate another payload product;
-- **Antenna/Communications service**, for immediate downlink;
-- **Ground**, when a communications path is established and policy allows direct delivery;
+- **Antenna service**, which performs the actual Ground downlink;
 - **requesting endpoint**, for request/response-style processing;
 - **multiple endpoints**, when both control and payload consumers need the result.
 
@@ -245,7 +244,7 @@ sequenceDiagram
   ANT-->>GS: result downlink
 ```
 
-Direct downlink is conditional on link availability and mission policy. Loss of the ground link must not make FPGA execution semantics depend on the ground station being present.
+Direct downlink is conditional on Antenna link availability and mission policy. The FPGA routes the result to the Antenna service; it does not own a Ground link itself. Loss of the Ground link must not make FPGA execution semantics depend on the ground station being present.
 
 ## 7. SpWKit in EXN
 
