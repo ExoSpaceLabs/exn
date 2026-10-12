@@ -6,7 +6,7 @@
 
 **EXN** is an ExoSpaceLabs system-integration project for demonstrating a modular Earth-observation avionics and payload architecture across an **STM32 control computer**, an **Embedded Linux payload platform**, an **FPGA processing node**, and a **ground/HIL environment**.
 
-The platform exercises realistic spacecraft engineering boundaries: CCSDS/ECSS packet interfaces, embedded supervision, image acquisition, hardware-accelerated image/AI processing, communications services, telemetry/telecommand workflows, flexible payload-data routing, and end-to-end integration testing.
+The platform exercises realistic spacecraft engineering boundaries: CCSDS/ECSS packet interfaces, embedded supervision, image acquisition, hardware-accelerated image/AI processing, Ground communications, telemetry/telecommand workflows, flexible payload-data routing, and end-to-end integration testing.
 
 The detailed logical architecture is defined in [docs/architecture.md](docs/architecture.md). The wire-level packet contract remains [docs/ICD.md](docs/ICD.md), while [docs/services.md](docs/services.md) defines the PUS service-tailoring profile and migration direction.
 
@@ -165,7 +165,7 @@ Additional sequence diagrams are maintained in [docs/diagrams.md](docs/diagrams.
 - **Master wire-level ICD:** [docs/ICD.md](docs/ICD.md)
 - **Ground/HIL:** [docs/icd/gs.md](docs/icd/gs.md)
 - **MCU control node:** [docs/icd/mcu-rtos.md](docs/icd/mcu-rtos.md)
-- **Linux payload platform / communications service:** [docs/icd/linux-payload.md](docs/icd/linux-payload.md)
+- **Raspberry Pi payload node / Antenna service:** [docs/icd/linux-payload.md](docs/icd/linux-payload.md)
 - **Pi camera service:** [docs/icd/pi-cam.md](docs/icd/pi-cam.md)
 - **FPGA processing node:** [docs/icd/fpga-ai.md](docs/icd/fpga-ai.md)
 
