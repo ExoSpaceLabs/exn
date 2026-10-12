@@ -20,12 +20,12 @@ EXN separates responsibilities across independently testable logical components:
 - **STM32 Control Node / OBC:** system supervision, command/telemetry handling, health and fault management, time distribution, configuration, and control-plane routing/orchestration.
 - **Raspberry Pi 5 Payload Node:** one physical Embedded Linux computer with **two first-class mission roles**.
   - **Camera role / PI-CAM:** image acquisition, payload-product ownership, storage/preparation, compression, and image transfer.
-  - **Antenna / Communications role / PI-COMMS:** the Pi acts as the spacecraft ground-communications endpoint, carrying communications with the OBC, accepting uplink traffic, and transferring telemetry/payload data directly to Ground when appropriate.
+  - **Antenna role / PI-COMMS:** the Pi provides the spacecraft Ground link. The Antenna service exchanges TCs/TMs with the OBC and sends payload data from PI-CAM or FPGA to Ground without routing those bulk bytes through the OBC.
   - **Platform Management:** local Linux watchdog/supervision, service health, logging, storage and host housekeeping supporting both mission roles; this is not a third primary payload role.
 - **FPGA Processing Node:** hardware-accelerated image preprocessing, inference, postprocessing, and other payload computation. The FPGA is a processing node in EXN, not a communications product.
 - **Ground/HIL:** operator tooling, command/telemetry inspection, subsystem simulation, fault injection, and integration validation.
 
-In the initial EXN deployment, **Camera and Antenna/Communications execute on the same Raspberry Pi 5**. They remain separate logical endpoints and services because they have different mission responsibilities, even though one physical Pi performs both roles. A later deployment may split them across computers without changing the interfaces.
+In the initial EXN deployment, **Camera and Antenna execute on the same Raspberry Pi 5**. They remain separate logical endpoints and services because they have different mission responsibilities, even though one physical Pi performs both roles. A later deployment may split them across computers without changing the interfaces.
 
 ## Routing Model
 
@@ -34,12 +34,12 @@ EXN distinguishes the **control plane** from the **bulk data plane**.
 The nominal flight-like command path is:
 
 ```text
-Ground -> Antenna/Communications -> STM32 OBC -> selected payload endpoint
+Ground -> Antenna -> STM32 OBC -> selected payload endpoint
 ```
 
 The current HIL environment may still connect the Ground Station directly to the MCU. That is a deployment profile, not a change of command authority.
 
-Bulk payload data does not need to pass through the MCU. Valid flows include:
+Bulk payload data does not need to pass through the MCU. **Direct to Ground** means the producing payload endpoint sends the data to the Pi Antenna service, which transmits it over the Ground link; it does not mean bypassing the spacecraft antenna. Valid flows include:
 
 ```text
 Camera -> Antenna -> Ground
@@ -48,7 +48,7 @@ FPGA -> Antenna -> Ground
 FPGA -> OBC
 ```
 
-The **FPGA result destination is controllable**. A processing result may be routed to the OBC for autonomous decision-making, back to the Camera service for product ownership/storage, to the Antenna service for immediate downlink, to the requesting endpoint, or to multiple consumers when policy requires it.
+The **FPGA result destination is controllable**. A processing result may be routed to the OBC for autonomous decision-making, back to the Camera service for product ownership/storage, or to the Antenna service for immediate Ground downlink. Multiple destinations are allowed when policy requires them.
 
 The exact wire encoding of per-job processing-result routing will be introduced through the corresponding Service 210/interface revision. The architectural requirement is already fixed: the FPGA must not impose one hard-coded result path.
 
@@ -131,7 +131,7 @@ graph LR
 
   subgraph "Linux Payload Node - Raspberry Pi"
     CAM[Camera Service]
-    ANT[Antenna / Communications Service]
+    ANT[Antenna Service]
     PM[Platform Management<br/>watchdog / health / logging]
   end
 
