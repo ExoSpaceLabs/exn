@@ -177,6 +177,10 @@ typedef enum {
 #define EXN_CAM_CONFIG_DEFER_UNTIL_IDLE (1u << 1)
 #define EXN_CAM_CONFIG_REQUIRE_EXACT    (1u << 2)
 
+#define EXN_CAM_ACQ_USE_CURRENT_FOCUS         (1u << 0)
+#define EXN_CAM_ACQ_FAIL_IF_PRODUCT_UNAVAILABLE (1u << 1)
+#define EXN_CAM_ACQ_KEEP_PARTIAL_PRODUCTS     (1u << 2)
+
 typedef enum {
   EXN_CAM_CONFIG_OK                          = 0u,
   EXN_CAM_CONFIG_UNSUPPORTED                 = 1u,
@@ -211,7 +215,6 @@ typedef enum {
   EXN_CAM_AWB_BLUE_GAIN            = 0x0203u,
 
   EXN_CAM_AF_MODE                  = 0x0300u,
-  EXN_CAM_AF_TRIGGER               = 0x0301u,
   EXN_CAM_AF_RANGE                 = 0x0302u,
   EXN_CAM_AF_SPEED                 = 0x0303u,
   EXN_CAM_LENS_POSITION_DIOPTRES   = 0x0304u,
