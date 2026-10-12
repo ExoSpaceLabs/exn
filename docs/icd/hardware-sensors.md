@@ -247,3 +247,17 @@ The reference profiles are based on the capabilities of the actual selected hard
 - AMD KV260: K26 monitoring plus INA260 SOM 5 V power telemetry.
 
 This document defines the EXN mission contract. Low-level Linux/DAS/AMD driver paths are implementation details and may change without changing the sensor IDs or engineering units.
+
+
+## 11. Reference documents
+
+The reference profile assignments above are grounded in the selected hardware documentation:
+
+- STMicroelectronics STM32H755xI datasheet: internal calibrated temperature sensor, VREFINT and VBAT ADC paths.
+- Raspberry Pi hardware documentation: thermal-zone temperature reporting, PMIC ADC telemetry including `EXT5V_V`, PMIC reset information and power-supply health.
+- AMD Kria K26 SOM Data Sheet (DS987): integrated System Monitor, power-domain monitors and SOM platform management devices.
+- AMD Kria SOM Carrier Card Design Guide (UG1091): K26 System Monitor coverage for PS/PL power rails.
+- AMD Kria K26 Thermal Design Guide (UG1090): K26 junction-temperature monitoring and grade-specific thermal limits.
+- AMD Kria KV260 Starter Kit Data Sheet/User Guide (DS986/UG1089): INA260-based SOM 5 V power telemetry and AMD platform telemetry utilities.
+
+These external documents establish what the hardware can measure. The stable EXN sensor IDs, units, ownership and packet semantics are defined by this ICD.
