@@ -12,13 +12,13 @@ The exact common packet/header rules remain controlled by [ICD.md](ICD.md); endp
 
 ## 1. Standards baseline
 
-The service audit uses the published **ECSS-E-ST-70-41C, 15 April 2016** Packet Utilisation Standard as its normative PUS service reference.
+EXN uses **ECSS-E-ST-70-41C PUS Revision C** as its only active PUS profile.
 
-CCSDSPack v2 supports standards-oriented PUS revision A and revision C secondary headers. EXN originally migrated its existing traffic to the PUS-A header profile because that minimized immediate changes to the ground/HIL implementation. That header choice did **not** make the existing EXN service-number assignments standard PUS services.
+CCSDSPack v2.0.0 provides the required PUS-C TC/TM secondary headers, fixed two-octet TC source ID and TM destination ID, acknowledgement flags, message type counter and CUC telemetry time support.
 
-For a new EXN system baseline, the target is **PUS revision C service semantics and headers**, with mission tailoring documented here and in the master ICD.
+PUS-A is historical for EXN. Existing code that still uses Revision A is migration work, not a second supported mission profile.
 
-This is a coordinated wire migration. Until the corresponding interface definitions, EXN-GS, simulator, and endpoint implementations are migrated together, the current PUS-A packet templates remain the executable compatibility baseline.
+The normative packet/header tailoring is defined in `ICD.md`; this document defines what each PUS service means in EXN.
 
 ## 2. Service identifier rules
 
@@ -32,27 +32,22 @@ EXN follows the PUS-C identifier allocation rules:
 
 Consequently, EXN shall not redefine a standardized service/subservice identifier with unrelated semantics.
 
-## 3. Audit of the current transitional profile
+## 3. Service-definition rule
 
-The current EXN interface set is internally understandable, but several assignments collide with standardized PUS-C meanings.
+EXN shall not freeze a service merely by assigning it a number and a short name.
 
-| Current EXN assignment | Current EXN meaning | PUS-C status | Target treatment |
-|---|---|---|---|
-| 3/1, 3/2 | request/report HK | Not the standard one-shot HK pair | Migrate to TC[3,27] / TM[3,25] |
-| 3/10, 3/100 | System HK aggregation | EXN-specific subtypes inside a standard service | Move to mission-specific 3/128 and 3/129 |
-| 5/1 | info event | Matches informative event report | Keep |
-| 5/2 | warn event | Standard meaning is low-severity anomaly | Rename/align semantics |
-| 5/3 | error event | Standard meaning is medium-severity anomaly | Align and add 5/4 high severity |
-| 17/1, 17/2 | set/report time | PUS-C Service 17 is Test | Retire; use Service 9 |
-| 20/1, 20/2, 20/3 | set/get/value | Standard Service 20 uses different subtype semantics | Migrate to standard 20/1, 20/2, 20/3 meanings |
-| 23/* | image/result transfer | PUS-C Service 23 is File Management | Retire; use mission-specific Payload Object Transfer |
-| 200/* | Camera control | Mission-specific service type | Keep and refine |
-| 210/* | FPGA processing | Mission-specific service type | Keep and refine |
-| 250/1 | GS link/proxy ACK | Mission-specific, but duplicates verification/link-local concerns | Deprecate unless a concrete mission requirement remains |
+Every service definition shall explain:
 
-The current profile must therefore be described as **EXN legacy/transitional service numbering transported in a PUS-A secondary header**, not as a conformant realization of the corresponding PUS standard services.
+1. why the service exists;
+2. which endpoints provide/consume it;
+3. what belongs in it, with concrete examples;
+4. what similar operations explicitly belong elsewhere;
+5. its service/subservice allocation;
+6. its payload/state/error semantics.
 
-## 4. Target EXN service catalogue
+This is especially important for generic PUS services such as Service 20. A generic standard service is used only when its responsibility is clearer than a mission-specific alternative.
+
+## 4. Active EXN service catalogue
 
 ### 4.1 Service 1: Request Verification
 
@@ -155,17 +150,41 @@ Thresholds, hysteresis and dwell/debounce values are configurable parameters. Li
 
 The target may later expand to additional Service 12 capabilities without changing the endpoint ownership model.
 
-### 4.7 Service 20: Parameter Management
+### 4.7 Service 20: On-board Parameter Management
+#### EXN use: runtime configuration parameters
 
-Adopt the standardized Service 20 message semantics:
+**Purpose:** provide one standard way to read and change bounded runtime or persistent **configuration values**.
 
-- **TC[20,1]**: request/report parameter values;
-- **TM[20,2]**: parameter value report;
-- **TC[20,3]**: set parameter values.
+A Service 20 parameter is a setting. It is not an operation.
 
-The exact EXN parameter identifier and value representation shall be documented as mission tailoring. Existing one-byte keys may remain a valid implementation choice if they are represented consistently in all endpoints and tools.
+Examples that belong here:
 
-The current EXN meaning of 20/1 = Set, 20/2 = Get, and 20/3 = Value is transitional and shall be migrated before the flight/payload nodes freeze their APIs.
+- OBC heartbeat period and missed-heartbeat limit;
+- OBC automatic-restart enable;
+- OBC time-resynchronization period;
+- Antenna uplink/downlink/payload-forwarding enable flags;
+- Antenna software rate limit;
+- PI-MGMT restart-storm, storage and thermal thresholds;
+- FPGA default timeout/queue policy when not tied to one processing operation.
+
+Examples that do **not** belong here:
+
+- Camera exposure, autofocus, sensor mode or JPEG capture controls -> Service 200;
+- start/stop acquisition -> Service 200;
+- restart/reboot -> Service 8;
+- synchronize time -> Service 9;
+- submit/cancel FPGA job -> Service 210;
+- transfer an image/result/package -> Service 220;
+- activate/rollback software -> Service 230;
+- request HK -> Service 3.
+
+EXN uses the standard PUS-C message semantics:
+
+- **TC[20,1]** request/report parameter values;
+- **TM[20,2]** parameter value report;
+- **TC[20,3]** set parameter values.
+
+The common EXN parameter-ID/value encoding is defined in `component-services.md`. An endpoint may legitimately implement zero Service 20 parameters if all of its meaningful configuration belongs to a mission-specific service.
 
 ### 4.8 Service 200: Camera Control
 
@@ -278,9 +297,11 @@ PUS Service 13 remains available when EXN specifically needs the standardized **
 
 ### 4.11 Service 23: File Management
 
-Service 23 is reserved for its standardized PUS-C File Management meaning.
+PUS-C Service 23 keeps its standardized File Management meaning.
 
-EXN shall not use Service 23 for generic image or result chunking in the target profile.
+EXN does **not** currently require a mission-facing arbitrary file-management interface. Mission payload products use Service 220 object transfer, and software activation uses Service 230.
+
+Service 23 is therefore **not part of the initial implemented EXN service set**. It remains reserved for future use only if a concrete file-management requirement appears.
 
 ### 4.12 Antenna endpoint
 
@@ -318,14 +339,6 @@ PI-MGMT owns Camera/Antenna/platform service updates so a mission service does n
 
 An update is complete only after post-activation heartbeat/HK validation succeeds.
 
-### 4.14 Legacy Service 250
-
-Service 250/1 currently represents a GS-originated link/proxy acknowledgement.
-
-This is not part of the target service profile. Ground-daemon/link acknowledgement belongs to local ground IPC, while spacecraft request verification belongs to Service 1.
-
-Service 250 remains reserved during migration so old HIL traffic can be recognized, but new mission behavior shall not depend on it.
-
 ## 5. Endpoint service matrix
 
 The target service ownership is:
@@ -346,23 +359,20 @@ The target service ownership is:
 
 "Route" does not mean that the OBC must carry bulk object bytes. The architecture continues to permit direct payload data paths.
 
-## 6. PUS-C wire migration
+## 6. PUS-C wire profile requirement
 
-The service normalization and the secondary-header migration must be performed as one controlled interface change.
+All active EXN interface artifacts and component implementations use the PUS-C profile defined in `ICD.md`.
 
-The target baseline shall use CCSDSPack's PUS-C TC/TM types. At minimum the migration must freeze:
+Required properties include:
 
-- PUS-C TC source identifiers;
-- PUS-C TM destination identifiers;
-- telemetry timestamp policy;
-- acknowledgement-flag policy;
-- service/subservice identifiers;
-- packet sequence ownership;
-- APID policy;
-- CRC policy;
-- application-data schemas.
+- `PUS:revC:TC` / `ccsds::pus::rev_c::TcHeader`;
+- `PUS:revC:TM` / `ccsds::pus::rev_c::TmHeader`;
+- fixed two-octet PUS-C source/destination IDs;
+- command-specific PUS-C acknowledgement flags;
+- PUS-C message type counters;
+- six-octet CUC TM timestamps using the EXN mission epoch.
 
-Existing APID allocation remains valid unless a separate system decision changes it.
+Revision A shall not be added to new tests, fixtures, templates or implementation paths.
 
 ## 7. Interface source of truth
 
@@ -385,26 +395,24 @@ The current manually maintained `.cfg`, JSON and C-header mirrors are acceptable
 
 No new interface shall be added using a legacy-colliding assignment merely because an older EXN packet already used that number.
 
-## 8. Migration sequence
+## 8. Implementation order
 
-1. Freeze this service-tailoring plan.
-2. Freeze PUS-C header tailoring and request-verification policy.
-3. Replace the legacy Service 17, 20 and 23 mappings in the master ICD.
-4. Generalize payload transfer from `imageId` to object/transfer semantics under Service 220.
-5. Migrate shared CCSDSPack templates, JSON/tooling definitions and MCU headers.
-6. Migrate EXN-GS packet builders and simulator together.
-7. Implement MCU, Camera, Antenna, PI-MGMT and FPGA endpoints against the normalized profile.
-8. Add golden-vector and cross-repository interoperability tests.
-9. Remove legacy service aliases only after no supported component depends on them.
+1. Maintain the full normative interface in this repository.
+2. Keep CCSDSPack templates, JSON/tooling artifacts and MCU headers synchronized with the PUS-C ICD.
+3. Implement/migrate EXN-GS and its simulator to the same PUS-C definitions.
+4. Implement the OBC against the same shared contract.
+5. Implement Camera, Antenna and PI-MGMT against their endpoint ICDs.
+6. Implement FPGA processing against Service 210/220 and the common management services.
+7. Add cross-repository golden-vector and interoperability tests.
+8. Reject any implementation-local protocol extension that has not first been defined here.
 
 ## 9. Release gate
 
-EXN shall not declare a coherent flight/payload integration baseline until:
+EXN shall not declare a coherent integration baseline until:
 
-- the target PUS service profile is frozen;
-- all supported packet artifacts agree with it;
-- EXN-GS and simulators interoperate with the same profile;
-- each implemented endpoint declares which standard and mission-specific services it supports;
-- request verification, error behavior, health/monitoring, time synchronization, recovery, software-update lifecycle and routing are covered by integration tests.
-
-The architecture is already sufficiently stable to continue implementation. The service profile is the interface work that must be normalized before the currently placeholder MCU/FPGA repositories acquire incompatible APIs.
+- all supported packet artifacts use PUS Revision C;
+- GS/HIL, simulator and endpoint implementations consume the same service/subservice catalogue;
+- request verification uses Service 1 rather than mission-specific ACK packets;
+- Service 20 parameters are explicitly documented as configuration values with stable IDs;
+- heartbeat/HK, monitoring, time synchronization, recovery, object transfer and software-update behavior have integration tests;
+- no active component depends on a PUS-A compatibility path.
