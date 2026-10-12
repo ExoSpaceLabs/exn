@@ -123,7 +123,18 @@ EXN also requires a way to initialize/correct endpoint mission time. Because tha
 
 - **TC[9,128]**: Set Mission Time.
 
-Its payload is the mission-selected CUC time representation plus any time-quality/source fields frozen by the final ICD. Verification is provided through Service 1.
+Its EXN Application Data is fixed as:
+
+```text
+unix_ms:uint64
+source:uint8
+uncertainty_ms:uint16
+sequence:uint16
+```
+
+The OBC is the time authority and distributes this command to PI-CAM, Antenna, PI-MGMT and FPGA. Endpoint application clocks derive synchronized Unix time from a monotonic clock plus offset. The target PUS-C **telemetry timestamp** remains the mission CUC representation defined in `component-services.md`.
+
+Verification is provided through Service 1.
 
 The old EXN 17/1 and 17/2 assignments shall not be used by new implementations.
 
