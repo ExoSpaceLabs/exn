@@ -77,9 +77,9 @@ These map to the common OBC endpoint states.
 |---|---|---|
 | `TC[200,1]` | Start Acquisition | create single/burst/timelapse/stream acquisition |
 | `TC[200,2]` | Stop Acquisition | stop active finite/stream acquisition |
-| `TC[200,3]` | Set Camera Controls | set one or more camera controls atomically where possible |
-| `TC[200,4]` | Get Camera Controls | request current control values |
-| `TM[200,5]` | Camera Controls Report | current/read-back controls |
+| `TC[200,3]` | Set Camera Configuration | set one or more camera controls atomically where possible |
+| `TC[200,4]` | Get Camera Configuration | request current control values |
+| `TM[200,5]` | Camera Configuration Report | current/read-back controls |
 | `TC[200,6]` | Get Camera Capabilities | request available controls/modes/ranges |
 | `TM[200,7]` | Camera Capabilities Report | capabilities and dynamic ranges |
 | `TC[200,8]` | List Products | query stored Camera products |
@@ -123,9 +123,13 @@ STREAM is intentionally represented now so later live/video work does not requir
 
 For finite capture modes, Stop cancels remaining frames. For STREAM it terminates the stream/session cleanly.
 
-## 6. Camera controls
+## 6. Camera configuration
 
-`TC[200,3]` and `TC[200,4]` operate on stable EXN control IDs. Actual support/range is reported by `TM[200,7]`.
+Camera configuration is intentionally **batched**. EXN does not allocate a different TC for exposure, autofocus, gain, crop, white balance, JPEG quality, and similar settings.
+
+`TC[200,3] Set Camera Configuration` carries a bounded set of configuration entries and applies them as one logical transaction. `TC[200,4]` requests the active configuration by scope; `TM[200,5]` reports it.
+
+Actual control support/range is reported by `TM[200,7]`.
 
 ### 6.1 Sensor/output geometry
 
@@ -183,15 +187,15 @@ AF status metadata includes current AF state and read-back lens position.
 | `denoise.mode` | denoise policy |
 | `hdr.enable` | sensor/HDR mode request where supported |
 
-### 6.5 Product controls
+### 6.5 Encoding/product controls
 
 | Control | Meaning |
 |---|---|
 | `jpeg.quality` | JPEG encoder quality |
 | `thumbnail.enable` | create preview product |
 | `thumbnail.max_width` | preview bound |
-| `storage.retention_count` | local retention policy |
-| `storage.minimum_free_bytes` | guard before accepting capture |
+
+Storage retention and minimum-free-space policy are **not Camera image controls**. They are PI-CAM Service 20 runtime configuration parameters.
 
 ## 6.6 Stable control IDs and encoding
 
@@ -238,14 +242,29 @@ Camera control IDs are 16-bit and stable across implementations. Capability repo
 | `0x0500` | `jpeg.quality` | U8 | 1..100 |
 | `0x0501` | `thumbnail.enable` | BOOL | |
 | `0x0502` | `thumbnail.max_width` | U16 | pixels |
-| `0x0600` | `storage.retention_count` | U32 | 0 = policy-defined/unbounded by count |
-| `0x0601` | `storage.minimum_free_bytes` | U64 | capture admission guard |
 
-### 6.7 Set/Get wire payloads
+### 6.7 Configuration scopes
 
-`TC[200,3] Set Camera Controls`:
+Scopes are used by `TC[200,4]` / `TM[200,5]` to request/report coherent groups without assigning new subservices.
+
+| Bit | Scope |
+|---:|---|
+| 0 | sensor/output geometry |
+| 1 | exposure/gain |
+| 2 | white balance / colour |
+| 3 | focus/autofocus |
+| 4 | ISP/HDR/image processing |
+| 5 | encoding/product |
+| 6..15 | reserved |
+
+`scope_mask=0xFFFF` means **all supported Camera configuration**.
+
+### 6.8 Set Camera Configuration payload
+
+`TC[200,3]`:
 
 ```text
+flags:u16
 count:u16
 repeat count:
     control_id:u16
@@ -254,16 +273,49 @@ repeat count:
     value[value_length]
 ```
 
-`TC[200,4] Get Camera Controls`:
+Configuration flags:
+
+| Bit | Meaning |
+|---:|---|
+| 0 | `VALIDATE_ONLY` — validate complete batch, do not apply |
+| 1 | `DEFER_UNTIL_IDLE` — if acquisition is active, stage until Camera becomes idle |
+| 2 | `REQUIRE_EXACT` — fail rather than clamp/adapt a requested value |
+| 3..15 | reserved |
+
+**Atomicity rule:** the complete batch is validated first. If any requested entry is unsupported, invalid, conflicts with another entry, or cannot satisfy `REQUIRE_EXACT`, the configuration update fails and the active configuration is unchanged.
+
+If the underlying Camera API cannot apply a requested multi-control update coherently, PI-CAM shall stage the values and apply them at a safe configuration boundary or reject the request. Partial silent application is not allowed.
+
+Typical one-TC image setup therefore looks like:
 
 ```text
-count:u16
-control_id[count]:u16
+TC[200,3]
+    output.width = 4608
+    output.height = 2592
+    ae.enable = false
+    exposure_us = 12000
+    analogue_gain = 2.0
+    af.mode = AUTO
+    awb.enable = true
+    hdr.enable = false
+    jpeg.quality = 92
 ```
 
-`TM[200,5] Camera Controls Report`:
+One Service 1 acceptance/completion sequence verifies the whole transaction.
+
+### 6.9 Get/Report Camera Configuration
+
+`TC[200,4]`:
 
 ```text
+scope_mask:u16       # 0xFFFF = all
+```
+
+`TM[200,5]`:
+
+```text
+configuration_revision:u32
+scope_mask:u16
 count:u16
 repeat count:
     control_id:u16
@@ -273,9 +325,21 @@ repeat count:
     value[value_length]
 ```
 
-A Set request is validated before application. Where the underlying camera API supports atomic application, all requested controls are committed together; otherwise failure semantics shall identify which control could not be applied.
+`configuration_revision` increments after every successful applied configuration transaction and allows Ground/OBC to detect a changed Camera setup without comparing every field.
 
-### 6.8 Capabilities report
+Entry status:
+
+| Value | Meaning |
+|---:|---|
+| 0 | `OK` |
+| 1 | `UNSUPPORTED` |
+| 2 | `UNAVAILABLE_IN_CURRENT_MODE` |
+| 3 | `READ_ONLY` |
+| 4 | `INVALID` |
+
+A report for `scope_mask=0xFFFF` is the complete active image configuration snapshot.
+
+### 6.10 Capabilities report
 
 `TM[200,7]` contains:
 
@@ -293,6 +357,20 @@ A Set request is validated before application. Where the underlying camera API s
   - current support status.
 
 Variable-size strings/arrays shall have explicit bounded lengths. No Camera implementation may require unbounded dynamic packet fields.
+
+## 6.11 PI-CAM Service 20 policy parameters
+
+Service 20 is used only for Camera-service runtime/persistent **policy**, not image settings.
+
+Initial PI-CAM parameters:
+
+| ID | Name | Type | Meaning |
+|---:|---|---|---|
+| `0x1001` | `storage.retention_count` | U32 | local product-retention count; 0 = policy-defined/unbounded by count |
+| `0x1002` | `storage.minimum_free_bytes` | U64 | reject new capture before crossing this free-space guard |
+| `0x1003` | `catalog.max_entries_per_report` | U16 | bounded catalog page size |
+
+Exposure, gain, focus, crop, colour, HDR and encoder settings remain Service 200 Camera configuration.
 
 ## 7. Product generation and storage
 
