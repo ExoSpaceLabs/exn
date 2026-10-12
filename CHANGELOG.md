@@ -15,6 +15,7 @@ This document records system, structural, interface-definition, and architecture
 - Remove the implied dynamic-heap requirement from the planned MCU HK definition and align the OBC documentation with HardRT/DAS static-oriented execution.
 - Refresh the released reusable-component baseline: CCSDSPack v2.0.0, HardRT 0.5.1, DAS v0.1.0, SpWKit v0.7.0.
 - Mark the existing CCSDSPack templates, JSON mirrors, and MCU header as compatibility artifacts that must migrate together with EXN-GS.
+- Clarify the initial Raspberry Pi 5 as a **dual-role payload node**: PI-CAM camera/payload acquisition and PI-COMMS antenna/communications, including OBC communications and direct payload-data downlink to Ground.
 
 ## 2026-09-11
 
