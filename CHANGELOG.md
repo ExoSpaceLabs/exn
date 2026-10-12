@@ -4,6 +4,9 @@ This document records system, structural, interface-definition, and architecture
 
 ## 2026-10-12
 
+- Declare `ExoSpaceLabs/exn` as the single normative system/ICD authority; component repositories implement the contract and do not own parallel mission-interface definitions.
+- Add `docs/icd/README.md` as the complete endpoint ICD index and formalize the normative document hierarchy.
+
 - Fully define the target component service contract in `docs/component-services.md`.
 - Add PI-MGMT APID `0x104` as Pi platform-management infrastructure for service restart, Pi reboot, platform HK/alarms and software lifecycle; Camera and Antenna remain the Pi's only mission roles.
 - Adopt target PUS Service 8 Function Management and a minimal predeclared Service 12 monitoring profile.
@@ -15,7 +18,7 @@ This document records system, structural, interface-definition, and architecture
 - Add heartbeat/HK structure classes, sensor registry rules, monitoring/alarm behavior, component state model and software-update health validation.
 
 - Audit the current EXN architecture against the implemented/released dependency state and the published ECSS PUS service catalogue.
-- Confirm the logical architecture remains valid: STM32/OBC control authority, independently supervised Linux Camera and Communications services, FPGA image/AI processing, controllable result routing, and direct bulk-data paths.
+- Confirm the logical architecture remains valid: STM32/OBC control authority, independently supervised Linux Camera and Antenna services, FPGA image/AI processing, controllable result routing, and direct bulk-data paths.
 - Add `docs/services.md` as the service-tailoring authority.
 - Classify the existing PUS-A Service 17/20/23 mappings as a transitional compatibility profile rather than the target PUS service baseline.
 - Select PUS-C as the target EXN service profile and define the migration direction for standard Services 1, 3, 5, 9 and 20.
