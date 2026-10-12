@@ -9,13 +9,27 @@ Logical endpoints may be co-located on one physical computer. In particular, PI-
 EXN currently uses:
 
 - CCSDS Space Packet Protocol, Packet Version Number `0`;
-- CCSDSPack **v2.x**, with **v2.0.0** as the initial migration baseline;
-- **PUS revision A** TC/TM secondary headers for all currently defined EXN services;
+- CCSDSPack **v2.x**, with released **v2.0.0** as the current reproducible baseline;
+- **PUS revision A** TC/TM secondary headers for the current transitional EXN wire profile;
 - CRC-16/CCITT-FALSE packet error control;
 - big-endian application-data integers;
 - unsegmented CCSDS Space Packets by default. Service 23 chunking is application-level chunking, not CCSDS packet segmentation.
 
-PUS revision and PUS service number are separate concepts. Service 5 (events) and Service 17 (time) therefore use the same PUS revision-A secondary-header profile as the other current services. EXN does not define a PUS-B secondary-header format, and Service 17 does not imply a PUS-C header.
+PUS revision and PUS service number are separate concepts. The current PUS-A header profile describes the bytes emitted by the existing EXN-GS/HIL baseline; it does **not** mean that every current EXN service-number assignment is a standard PUS-A/PUS-C service realization.
+
+### Service-tailoring status
+
+The service audit identified legacy EXN assignments that conflict with the published PUS-C catalogue. In particular:
+
+- PUS Service 9 is Time Management; EXN currently uses legacy Service 17 for time;
+- PUS Service 17 is Test;
+- PUS Service 13 is Large Packet Transfer;
+- PUS Service 20 is Parameter Management, but the current EXN subtype meanings do not match the standard;
+- PUS Service 23 is File Management; EXN currently uses it for image/result chunk transfer.
+
+The **target EXN system profile is PUS-C with explicit mission tailoring**, defined in [`services.md`](services.md). The current PUS-A definitions below remain normative only for the transitional compatibility baseline until EXN-GS, shared interface artifacts and endpoint implementations migrate together.
+
+No new endpoint implementation shall extend the legacy Service 17/20/23 assignments. Mission-specific behavior shall use the standard extension rules or mission-specific service types in the 128..255 range.
 
 ### Nodes
 
@@ -184,9 +198,9 @@ This avoids the previous duplicate `transactionId` definition around System HK.
 
 ---
 
-## 5. Service catalogue
+## 5. Current transitional service catalogue
 
-All entries below use the PUS revision-A profile from Section 2.
+All entries below describe the **currently executable compatibility profile** and use the PUS revision-A header from Section 2. They are preserved so existing EXN-GS/HIL traffic remains documented. They are not the target service allocation for new flight/payload implementations; see [`services.md`](services.md).
 
 | Service/Sub | Name | Packet type | Direct endpoint / APID policy |
 |---|---|---|---|
@@ -277,7 +291,9 @@ Application Data begins with:
 
 `eventId` is application data, not a separate PUS-B secondary-header field.
 
-### 5.3 Time management, Service 17
+### 5.3 Legacy EXN time assignment, Service 17
+
+Service 17 is **not** Time Management in PUS-C; it is the standardized Test service. The following definitions are therefore transitional EXN assignments and shall migrate to Service 9.
 
 #### TC 17/1 Set Time
 
@@ -287,15 +303,21 @@ Application Data: mission-defined `time_cuc[6]`.
 
 Application Data: mission-defined `time_cuc[6]` plus any node-specific quality/status fields defined by the device ICD.
 
-### 5.4 Parameter management, Service 20
+### 5.4 Legacy EXN parameter assignment, Service 20
+
+The current subtype allocation does not match standardized PUS-C Service 20 semantics. It is retained only for compatibility:
 
 - TC 20/1 Set Parameter: `key:uint8` + `value:TLV`.
 - TC 20/2 Get Parameter: `key:uint8`.
 - TM 20/3 Parameter Value: `key:uint8` + `value:TLV`.
 
+The target mapping uses TC[20,1] to request/report parameter values, TM[20,2] for the value report, and TC[20,3] to set values.
+
 For GS device-directed requests, the four-octet proxy preamble precedes these service fields on the GS -> MCU hop.
 
-### 5.5 Data transfer, Service 23
+### 5.5 Legacy payload transfer assignment, Service 23
+
+Service 23 is standardized as File Management in PUS-C. EXN's current image/result transfer messages are transitional and migrate to mission-specific Service 220 Payload Object Transfer.
 
 - TC 23/1 Start Transfer: `{imageId:uint16, dest:uint8, chunk_size:uint16}`.
 - TC 23/2 Stop Transfer: `{imageId:uint16}`.
@@ -323,7 +345,7 @@ For PI-CAM transfers, the current `dest` endpoint codes are `0=FPGA`, `1=MCU`, `
 - TM 210/4 Settings/Result Report: device ICD defines payload.
 - TM 210/5 ACK/NACK: `{orig_service:uint8,orig_sub:uint8,resultCode:uint8,detail:uint16}`.
 
-FPGA processing results shall **not** be hard-wired to one consumer. The current Service 210 wire format controls result routing through processing settings defined by the FPGA device ICD. A future compatible interface revision may add a per-execution route override to TC 210/1.
+FPGA processing results shall **not** be hard-wired to one consumer. Service 210 remains a valid mission-specific service type. The target profile moves request verification to standard Service 1 and makes result routing an explicit job/policy property; see `services.md`.
 
 ### 5.8 GS link/proxy acknowledgement, Service 250
 
@@ -335,13 +357,13 @@ TM/report 250/1 is produced by GS when an application-level GS acknowledgement i
 | `ackCode` | uint8 | `0=Accepted,1=Rejected,2=Cancelled,3=Invalid,4=Timeout` |
 | `detail` | uint16 | implementation-defined detail |
 
-Because EXN Packet Type describes requesting vs reporting semantics rather than physical link direction, a GS-originated reporting packet may have Packet Type `TM` and APID `0x0F0`.
+Because EXN Packet Type describes requesting vs reporting semantics rather than physical link direction, the transitional profile permits a GS-originated reporting packet with Packet Type `TM` and APID `0x0F0`. This Service 250 behavior is **legacy/HIL compatibility**, not part of the target PUS-C mission profile; request verification migrates to Service 1 and ground-daemon acknowledgements remain local IPC.
 
 ---
 
 ## 6. CCSDSPack v2 configuration mapping
 
-Authoritative `.cfg` templates are under `interfaces/ccsdspack/`.
+Authoritative `.cfg` templates for the **transitional PUS-A compatibility profile** are under `interfaces/ccsdspack/`. They shall be migrated as a coordinated interface change after the PUS-C service profile is frozen.
 
 Current TC templates use:
 
@@ -379,7 +401,7 @@ Implementations and tests shall enforce at least the following:
 
 1. CCSDS Packet Version Number is `0`.
 2. Packet Data Length equals `packet_size - 7` on a complete packet.
-3. Current EXN application packets have a PUS revision-A secondary header.
+3. Packets in the current compatibility baseline have a PUS revision-A secondary header; the target coherent profile migrates to PUS-C.
 4. TC source-ID width is one octet; TM destination-ID width is zero octets.
 5. CRC16 is included and validated at packet endpoints.
 6. TC APID follows destination-endpoint policy; TM APID follows producer-endpoint policy.
@@ -387,6 +409,8 @@ Implementations and tests shall enforce at least the following:
 8. The GS transport daemon and PI-COMMS service may move packets, but mission scheduling and control decisions remain application/OBC responsibilities.
 9. FPGA processing-result routing is configurable and shall not be implemented as one fixed destination.
 10. Physical co-location of PI-CAM and PI-COMMS shall not collapse their logical endpoint identities.
+11. No new implementation shall introduce additional use of the legacy Service 17 time, Service 20 subtype, or Service 23 payload-transfer assignments.
+12. Target service semantics and mission-specific allocations shall conform to `docs/services.md`.
 
 Device-specific constraints remain in:
 
