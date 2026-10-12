@@ -1,6 +1,6 @@
 # PI-CAM Device/Service ICD — Raspberry Pi 5 + Camera Module 3
 
-This document specializes the EXN ICD for the Camera Payload service (APID 0x101), initially hosted on a Raspberry Pi 5 with Raspberry Pi Camera Module 3. The Camera service is a logical endpoint on the Embedded Linux Payload Platform and remains independent from the co-located Antenna/Communications service.
+This document specializes the EXN ICD for the **Camera half** of the dual-role Raspberry Pi 5 Payload Node (PI-CAM, APID 0x101) with Raspberry Pi Camera Module 3. The same physical Pi is also required to provide the PI-COMMS Antenna/Communications role (APID 0x103), defined in `linux-payload.md`. The two roles remain separate logical endpoints despite sharing one computer.
 
 It defines the Camera service Housekeeping (HK) telemetry, camera settings catalog (Service 200), and payload-product transfer behavior. The existing Service 23 packet definitions are transitional; the target service is mission-specific Service 220 Payload Object Transfer.
 
