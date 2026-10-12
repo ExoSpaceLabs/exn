@@ -228,6 +228,20 @@ typedef enum {
 } exn_endpoint_state_t;
 
 typedef enum {
+  EXN_SUPERVISION_UNKNOWN = 0u,
+  EXN_SUPERVISION_OK      = 1u,
+  EXN_SUPERVISION_STALE   = 2u,
+  EXN_SUPERVISION_OFFLINE = 3u,
+  EXN_SUPERVISION_ERROR   = 4u
+} exn_supervision_state_t;
+
+typedef enum {
+  EXN_SYSTEM_HK_OK       = 0u,
+  EXN_SYSTEM_HK_DEGRADED = 1u,
+  EXN_SYSTEM_HK_ERROR    = 2u
+} exn_system_hk_status_t;
+
+typedef enum {
   EXN_TIME_UNSYNCED = 0u,
   EXN_TIME_SYNCED   = 1u,
   EXN_TIME_HOLDOVER = 2u,
@@ -301,18 +315,27 @@ typedef struct EXN_PACKED {
   uint8_t options;
 } exn_route_envelope_t;
 
-typedef struct EXN_PACKED {
-  uint8_t transaction_id_be[2];
-  uint8_t include_mask;
-  uint8_t detail_mask_be[2];
-} exn_system_hk_request_t;
+/* TC[3,128] System HK Request has no Application Data. */
 
 typedef struct EXN_PACKED {
-  uint8_t transaction_id_be[2];
-  uint8_t present_mask;
-  uint8_t status;
-  uint8_t block_count;
+  exn_request_id_t request_id;
+  uint8_t snapshot_unix_ms_be[8];
+  uint8_t system_status;
+  uint8_t endpoint_count;
 } exn_system_hk_report_prefix_t;
+
+typedef struct EXN_PACKED {
+  uint8_t producer_apid_be[2];
+  uint8_t supervision_state;
+  uint8_t endpoint_state;
+  uint8_t structure_count;
+} exn_system_hk_endpoint_prefix_t;
+
+typedef struct EXN_PACKED {
+  uint8_t structure_id_be[2];
+  uint8_t age_ms_be[4];
+  uint8_t block_length_be[2];
+} exn_system_hk_structure_prefix_t;
 
 typedef struct EXN_PACKED {
   uint8_t structure_id_be[2];
