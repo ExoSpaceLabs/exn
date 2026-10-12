@@ -1,12 +1,12 @@
 # Linux Payload Platform ICD
 
-This document defines the EXN Embedded Linux payload platform boundary. The initial deployment target is a Raspberry Pi 5, while logical endpoint identity remains separate from physical host identity.
+This document defines the EXN **Raspberry Pi 5 Payload Node** boundary. In the initial deployment the Pi has two required mission purposes: **Camera** and **Antenna/Communications**. Logical endpoint identity remains separate from physical host identity so the two functions are independently addressable even while co-located.
 
 Refer to `../architecture.md` for system architecture, `../ICD.md` for the current wire contract, and `../services.md` for the target PUS service profile.
 
-## 1. Logical services
+## 1. Dual mission role
 
-The Raspberry Pi may host multiple independent EXN services:
+The Raspberry Pi 5 is required to host two primary EXN mission services in the initial architecture:
 
 ```text
 Raspberry Pi 5
@@ -16,7 +16,7 @@ Raspberry Pi 5
  +-- Platform Management           local host supervision; no independent APID
 ```
 
-Camera and Antenna/Communications remain separate logical endpoints even when co-located. Either service may later move to another Linux computer without changing its mission responsibility.
+The Pi therefore serves **both** as the camera payload computer and as the spacecraft communications/antenna endpoint. Camera and Antenna/Communications remain separate logical endpoints despite sharing the same processor, OS, storage and network hardware. Either service may later move to another Linux computer without changing its mission responsibility.
 
 The Camera service contract remains defined in `pi-cam.md`. Platform Management is currently an implementation support service rather than a third mission packet endpoint; logical endpoints obtain host/watchdog state from it and include relevant health in their own housekeeping.
 
@@ -36,13 +36,14 @@ The implementation may use `systemd` for process supervision, dependency orderin
 
 Responsibilities:
 
-- ground-link ingress and egress;
-- delivery of ground telecommands toward the STM32 OBC;
-- downlink of telemetry and payload products;
-- communications-link health reporting;
-- direct payload-data delivery when routing policy permits it.
+- act as the spacecraft Ground-facing communications endpoint for the demonstrator;
+- maintain the deployed RF/Wi-Fi/network communications path to Ground;
+- communicate with the STM32 OBC and deliver Ground telecommands toward it;
+- carry OBC telemetry back toward Ground;
+- downlink Camera and FPGA payload products directly without routing the bulk bytes through the OBC;
+- report communications-link/session health, counters and faults.
 
-The communications endpoint is not the spacecraft command authority. The STM32 OBC remains responsible for command supervision and mission decisions.
+The communications endpoint is not the spacecraft command authority. The STM32 OBC remains responsible for command supervision and mission decisions. PI-COMMS is the communications gateway: it moves command/telemetry traffic between Ground and OBC and also owns the direct Ground data path for payload products.
 
 Endpoint identity:
 
@@ -101,7 +102,7 @@ The Linux platform-management service should also track host-level metrics such 
 
 ## 8. Local service communication
 
-When Camera and Antenna execute on the same Linux host, their local data path may use Unix-domain sockets, shared memory, file/object references, or another local IPC mechanism.
+Because Camera and Antenna execute on the same Raspberry Pi 5 in the initial deployment, their local bulk-data path should exploit co-location where useful, using Unix-domain sockets, shared memory, file/object references, or another local IPC mechanism.
 
 The mission-level Camera-to-Antenna interface must not require co-location. A later deployment may map the same logical relationship onto SpWKit or another inter-node transport.
 
