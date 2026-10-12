@@ -1,41 +1,47 @@
 # EXN CCSDSPack v2 packet templates
 
-These `.cfg` files are CCSDSPack v2 templates for the **current transitional wire profile** documented in `docs/ICD.md`. The target PUS service profile is `docs/services.md`.
+These `.cfg` files are machine-readable realizations of the normative PUS-C EXN ICD.
 
-## Current compatibility profile
+## Active profile
 
-All current templates use:
+All templates use:
 
 - CCSDS Space Packet Version Number `0`;
 - CRC-16/CCITT-FALSE packet error control;
-- unsegmented Space Packets;
-- PUS revision A for the currently implemented EXN-GS/HIL service set;
-- TC selector `PUS:revA:TC`, one-octet source ID, acknowledgement flags `0`;
-- TM selector `PUS:revA:TM`, zero-octet destination ID, no secondary-header timestamp or packet subcounter.
+- unsegmented Space Packets by default;
+- **PUS Revision C** only;
+- TC selector `PUS:revC:TC`;
+- TM selector `PUS:revC:TM`;
+- fixed two-octet PUS-C source/destination identifiers;
+- command-specific PUS-C acknowledgement flags;
+- PUS-C TM message type counters;
+- six-octet CUC TM timestamps using the EXN agency-defined Unix epoch.
 
-PUS revision is independent from service number. Several legacy EXN service identifiers have meanings that do not match the published PUS-C catalogue. In particular, the current Service 17 time and Service 23 payload-transfer assignments are compatibility definitions, not target PUS service allocations.
+PUS-A selectors are not valid active EXN interface artifacts.
 
-Do **not** add new templates by extending those legacy assignments. New interface work follows `docs/services.md` and will migrate these templates to PUS-C in a coordinated change.
-
-## APID policy
+## APID and PUS identifier policy
 
 - TC APID identifies the destination EXN endpoint.
 - TM APID identifies the producing EXN endpoint.
+- PUS-C source/destination IDs use the 16-bit endpoint identities from `docs/ICD.md`.
 
-Templates whose endpoint can vary use a documented default APID and are expected to be overridden by the application when targeting another node.
+Templates whose endpoint can vary document a default APID/ID and are overridden by the application for another valid endpoint.
 
-The GS-specific System HK template is direct GS -> MCU and therefore uses APID `0x100`, Source ID `0x10`, Service `3/10`.
+## Service examples
 
-## Layout
+- one-shot HK: TC 3/27 -> TM 3/25;
+- System HK: TC 3/128 -> TM 3/129;
+- parameters: TC 20/1 -> TM 20/2, TC 20/3 set;
+- mission time set: TC 9/128;
+- Camera acquisition: TC 200/1;
+- processing job: TC 210/1;
+- object transfer: Service 220;
+- request verification: Service 1.
 
-- `tc/` — telecommand/request templates.
-- `tm/` — telemetry/report templates.
+Custom Camera/FPGA ACK packets and GS Service 250 are intentionally absent; Service 1 owns request verification.
 
-`data_field_size` is a template capacity/default and is not the CCSDS Packet Data Length wire value. CCSDSPack calculates Packet Data Length from the finalized secondary header, Application Data, and packet error-control trailer.
+## Authority
 
-The JSON directory is currently a partial tooling mirror, not an authoritative second definition. The `.cfg` files and master ICD are authoritative until JSON generation/validation is automated.
+The normative meaning comes from `docs/ICD.md`, `docs/services.md`, `docs/component-services.md`, and `docs/icd/`.
 
-
-## Planned migration
-
-The target interface set will use CCSDSPack PUS-C TC/TM headers, standard request verification and normalized PUS service semantics. Existing files remain authoritative only for supported transitional EXN-GS/HIL traffic until that migration lands. Service-number changes must update the master ICD, templates, JSON/tooling mirrors, MCU headers, GS builders and simulator fixtures together.
+These templates must agree with those documents. They are not an independent protocol definition.
