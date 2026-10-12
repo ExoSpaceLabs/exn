@@ -1,46 +1,33 @@
 # EXN Packet Interfaces (JSON)
 
-This directory contains machine-readable mirrors used by tooling and validation. The authoritative current wire contract is `docs/ICD.md`; authoritative compatibility-profile CCSDSPack runtime templates are under `interfaces/ccsdspack/`; the target PUS service allocation is `docs/services.md`.
+This directory contains partial machine-readable mirrors of the normative EXN ICD for tooling/validation.
 
-The JSON set is currently **partial**, not a complete mirror of every `.cfg` file. Do not infer that a missing JSON file means the corresponding service is undefined.
+The active wire profile is **PUS Revision C**:
 
-## Current transitional protocol model
+- CCSDS Space Packet version 0;
+- CRC-16/CCITT-FALSE;
+- TC selector `PUS:revC:TC`;
+- TM selector `PUS:revC:TM`;
+- fixed 16-bit PUS-C source/destination identifiers;
+- PUS-C TM message type counter;
+- six-octet CUC TM timestamp using the EXN agency-defined Unix epoch;
+- TC APID = destination;
+- TM APID = producer.
 
-- CCSDS Space Packet version 0.
-- CRC-16 packet error control.
-- PUS revision A for the currently represented compatibility services.
-- TC selector: `PUS:revA:TC`, one-octet source ID.
-- TM selector: `PUS:revA:TM`, zero-octet destination ID.
-- TC APID identifies the destination endpoint.
-- TM APID identifies the producing endpoint.
-- Packet Data Length and sequence count are runtime packet state and are not fixed interface constants.
-
-Example shape:
+Example TC shape:
 
 ```json
 {
-  "name": "pkt_name",
-  "packetErrorControl": "crc16",
-  "primaryHeader": {
-    "version": 0,
-    "type": "TC",
-    "apid": 256,
-    "apidPolicy": "destination",
-    "secHdrFlag": 1,
-    "seqFlags": "UNSEG"
-  },
   "pusHeader": {
-    "selector": "PUS:revA:TC",
-    "sourceIdOctets": 1,
-    "acknowledgementFlags": 0,
+    "selector": "PUS:revC:TC",
+    "acknowledgementFlags": 8,
     "service": 3,
-    "subservice": 10,
+    "subservice": 128,
     "sourceId": 16
-  },
-  "appData": []
+  }
 }
 ```
 
-Service-specific event IDs, CUC time values, transaction IDs, and similar fields belong to Application Data unless the master ICD explicitly states otherwise.
+The JSON set is currently partial. Missing JSON does not mean a service is undefined. Normative semantics live in the central ICD documents; JSON shall be generated or cross-validated against that source as the interface tooling matures.
 
-The present JSON files intentionally mirror legacy EXN-GS/HIL packet identifiers. They shall not be used to infer the target service catalogue. The next interface migration should replace the partial hand-maintained mirrors with generated or cross-validated definitions sourced from one mission interface model.
+PUS-A JSON definitions are obsolete and shall not be reintroduced.
