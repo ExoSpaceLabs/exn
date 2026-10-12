@@ -19,47 +19,35 @@ If an implementation requires a new command, telemetry item, field, state, event
 
 Logical endpoints may be co-located on one physical computer. In particular, PI-CAM, PI-COMMS/Antenna and the PI-MGMT supervisor execute on the same Raspberry Pi while retaining independent endpoint identities. PI-MGMT is management infrastructure, not a third Pi mission purpose.
 
-## 0. Current protocol baseline
+## 0. Active protocol baseline
 
-EXN currently uses:
+EXN uses one normative packet profile for all new and maintained components:
 
 - CCSDS Space Packet Protocol, Packet Version Number `0`;
-- CCSDSPack **v2.x**, with released **v2.0.0** as the current reproducible baseline;
-- **PUS revision A** TC/TM secondary headers for the current transitional EXN wire profile;
+- CCSDSPack **v2.0.0**, the latest released CCSDSPack baseline;
+- **ECSS PUS Revision C** TC/TM secondary headers;
 - CRC-16/CCITT-FALSE packet error control;
-- big-endian application-data integers;
-- unsegmented CCSDS Space Packets by default. Service 23 chunking is application-level chunking, not CCSDS packet segmentation.
+- big-endian mission Application Data;
+- unsegmented CCSDS Space Packets by default;
+- six-octet CUC timestamps in PUS-C telemetry;
+- Unix epoch as the EXN mission-defined CUC epoch.
 
-PUS revision and PUS service number are separate concepts. The current PUS-A header profile describes the bytes emitted by the existing EXN-GS/HIL baseline; it does **not** mean that every current EXN service-number assignment is a standard PUS-A/PUS-C service realization.
+There is no active PUS-A mission profile. Historical PUS-A traffic belongs only to repository history and migration notes. Components still using it, including the existing GS/HIL implementation, shall be migrated to this PUS-C contract rather than extended.
 
-### Service-tailoring status
+### 0.1 Normative endpoint identities
 
-The service audit identified legacy EXN assignments that conflict with the published PUS-C catalogue. In particular:
-
-- PUS Service 9 is Time Management; EXN currently uses legacy Service 17 for time;
-- PUS Service 17 is Test;
-- PUS Service 13 is Large Packet Transfer;
-- PUS Service 20 is Parameter Management, but the current EXN subtype meanings do not match the standard;
-- PUS Service 23 is File Management; EXN currently uses it for image/result chunk transfer.
-
-The **target EXN system profile is PUS-C with explicit mission tailoring**, defined in [`services.md`](services.md). The current PUS-A definitions below remain normative only for the transitional compatibility baseline until EXN-GS, shared interface artifacts and endpoint implementations migrate together.
-
-No new endpoint implementation shall extend the legacy Service 17/20/23 assignments. Mission-specific behavior shall use the standard extension rules or mission-specific service types in the 128..255 range.
-
-### Nodes
-
-| Node | APID | Transitional/target Source ID | Role |
+| Node | APID | PUS-C Source/Destination ID | Role |
 |---|---:|---:|---|
-| GS | `0x0F0` | `0x10` | Ground station/operator client |
-| MCU-RTOS / OBC | `0x100` | `0x01` | command authority, orchestration and time master |
-| PI-CAM | `0x101` | `0x02` | Camera/image payload service |
-| FPGA-AI | `0x102` | `0x03` | Processing/inference node |
-| PI-COMMS / Antenna | `0x103` | `0x04` | single Ground-link service |
-| PI-MGMT | `0x104` | `0x05` | Pi platform supervisor, restart/reboot/update management |
+| GS | `0x0F0` | `0x0010` | Ground station/operator client |
+| MCU-RTOS / OBC | `0x100` | `0x0001` | command authority, orchestration and time master |
+| PI-CAM | `0x101` | `0x0002` | Camera/image payload service |
+| FPGA-AI | `0x102` | `0x0003` | Processing/inference node |
+| PI-COMMS / Antenna | `0x103` | `0x0004` | single Ground-link service |
+| PI-MGMT | `0x104` | `0x0005` | Pi platform supervisor, restart/reboot/update management |
 
-PI-CAM and PI-COMMS are the two Pi mission endpoints. PI-MGMT is a supporting management endpoint owned by `exn-platform.service`; it exists so the OBC can restart/update a failed Pi mission service without addressing the failed process itself.
+PUS-C source and destination identifiers are fixed at two octets by the selected header profile. EXN keeps the numeric identity values small for readability; their on-wire width is still 16 bits.
 
----
+PI-CAM and PI-COMMS are the two Pi mission endpoints. PI-MGMT is supporting infrastructure owned by `exn-platform.service`, allowing the OBC to recover/update Pi mission services even when the failed process cannot receive commands.
 
 ## 1. CCSDS Space Packet profile
 
@@ -116,41 +104,95 @@ The two CRC octets are part of the CCSDS Packet Data Field length calculation.
 
 ---
 
-## 2. PUS revision-A profile
+## 2. PUS Revision C profile
+
+EXN uses PUS-C everywhere. A packet is not considered EXN-conformant merely because it carries a valid CCSDS primary header; its PUS-C direction, service/subservice, identifiers, acknowledgement policy and telemetry timestamp shall match this ICD.
 
 ### 2.1 Telecommand secondary header
 
-EXN uses CCSDSPack selector `PUS:revA:TC` with:
+EXN telecommands use CCSDSPack `ccsds::pus::rev_c::TcHeader` / selector `PUS:revC:TC`.
 
-- source-ID width: **1 octet**;
-- secondary-header spare octets: `0`;
-- acknowledgement flags: `0` by default;
-- service type: one octet;
-- service subtype: one octet.
+The PUS-C TC header is:
 
-With this tailoring, the current TC secondary header is four octets on wire: version/ACK field, Service, Subservice, Source ID.
+| Field | Width | EXN policy |
+|---|---:|---|
+| PUS version | 4 bits | Revision C encoding |
+| acknowledgement flags | 4 bits | command-specific, below |
+| service type | 8 bits | `docs/services.md` |
+| service subtype | 8 bits | `docs/services.md` |
+| source ID | 16 bits | endpoint ID from Section 0.1 |
 
-Application data follows immediately after the secondary header. There is no EXN/PUS-A secondary-header application-data length field; CCSDS Packet Data Length owns packet sizing.
+No source-ID-width tailoring exists in EXN PUS-C.
+
+Acknowledgement policy:
+
+- **read/report requests:** acceptance verification, flag mask `0x8`;
+- **state-changing finite commands:** acceptance + completion verification, mask `0x9`;
+- **long-running commands:** acceptance + start + completion (`0xD`) where start-of-execution has useful semantics;
+- **progress verification:** enabled only for commands whose endpoint ICD defines progress semantics.
+
+The bit values follow the PUS-C acknowledgement field; EXN does not define a second ACK convention.
 
 ### 2.2 Telemetry secondary header
 
-EXN uses CCSDSPack selector `PUS:revA:TM` with:
+EXN telemetry uses CCSDSPack `ccsds::pus::rev_c::TmHeader` / selector `PUS:revC:TM`.
 
-- destination-ID width: **0 octets**;
-- packet subcounter: absent;
-- timestamp in secondary header: absent;
-- spare octets: `0`;
-- service type and subtype present.
+The PUS-C TM header carries:
 
-With this tailoring, the current TM secondary header is three octets on wire: version/spare field, Service, Subservice.
+| Field | Width | EXN policy |
+|---|---:|---|
+| PUS version | 4 bits | Revision C encoding |
+| spacecraft time reference status | 4 bits | EXN mapping below |
+| service type | 8 bits | producer service |
+| service subtype | 8 bits | producer subtype |
+| message type counter | 16 bits | modulo-65536 per producer/service/subservice stream |
+| destination ID | 16 bits | logical intended consumer |
+| time | 6 octets | CUC, 4 coarse + 2 fine |
 
-TM producer identity is carried by APID. Mission timestamps, when required, remain explicit Application Data fields.
+EXN mission tailoring for the PUS-C TM timestamp:
+
+- `timestampPresent = true`;
+- CUC epoch: **agency-defined = Unix epoch, 1970-01-01T00:00:00Z**;
+- P-field: implicit;
+- coarse octets: 4;
+- fine octets: 2.
+
+The destination ID is the PUS-C logical destination identifier, not the CCSDS APID. Typical values are OBC `0x0001` and Ground `0x0010`.
+
+EXN defines the four time-reference-status values currently used:
+
+| Value | Meaning |
+|---:|---|
+| 0 | UNSYNCED |
+| 1 | SYNCED |
+| 2 | HOLDOVER |
+| 3 | INVALID |
+
+Other values are reserved.
 
 ### 2.3 Time representation
 
-Where this ICD specifies `ts_cuc`, EXN currently uses a six-octet mission CUC representation in Application Data. Service 17 distributes or reports that application time value. It does not switch the packet to a PUS-C secondary header.
+The OBC is the on-board time authority.
 
----
+Application logic uses:
+
+- `monotonic_ms:uint64` for timers and elapsed time;
+- `unix_ms:uint64` for synchronized mission time.
+
+PUS-C telemetry carries the six-octet CUC timestamp defined above. Endpoint application code shall derive that timestamp from its synchronized mission-time state; filesystem or host wall-clock timestamps are not mission authority.
+
+### 2.4 Service-definition clarity requirement
+
+No EXN service or subservice is considered frozen until its normative documentation states:
+
+1. **Purpose** — why the service exists;
+2. **Owner/users** — which endpoints provide and consume it;
+3. **What belongs in it** — concrete examples;
+4. **What does not belong in it** — nearby concepts owned by another service;
+5. **Messages/payloads** — service/subservice allocation and wire fields;
+6. **state/error semantics** where applicable.
+
+A service name alone is not an interface definition.
 
 ## 3. Ground ingress, MCU routing and correlation
 
@@ -216,224 +258,173 @@ This avoids the previous duplicate `transactionId` definition around System HK.
 
 ---
 
-## 5. Current transitional service catalogue
+## 5. Normative service catalogue
 
-All entries below describe the **currently executable compatibility profile** and use the PUS revision-A header from Section 2. They are preserved so existing EXN-GS/HIL traffic remains documented. They are not the target service allocation for new flight/payload implementations; see [`services.md`](services.md).
+The authoritative service/subservice allocation is `docs/services.md`; complete operational payloads are in `docs/component-services.md` and the endpoint ICDs.
 
-| Service/Sub | Name | Packet type | Direct endpoint / APID policy |
-|---|---|---|---|
-| 3/1 | Request HK | TC | target node APID; GS device request first targets MCU `0x100` with proxy preamble |
-| 3/2 | Report HK | TM | producer node APID |
-| 3/10 | Request System HK | TC | MCU `0x100`, direct, no proxy preamble |
-| 3/100 | System HK Report | TM | MCU `0x100` |
-| 5/1 | Event Info | TM | producer node APID |
-| 5/2 | Event Warn | TM | producer node APID |
-| 5/3 | Event Error | TM | producer node APID |
-| 17/1 | Set Time | TC | target node APID; one packet per target |
-| 17/2 | Time Report | TM | producer node APID |
-| 20/1 | Set Parameter | TC | target node APID; GS device request uses MCU proxy hop |
-| 20/2 | Get Parameter | TC | target node APID; GS device request uses MCU proxy hop |
-| 20/3 | Parameter Value | TM | producer node APID |
-| 23/1 | Start Transfer | TC | data-source node APID; GS request uses MCU proxy hop |
-| 23/2 | Stop Transfer | TC | data-source node APID; GS request uses MCU proxy hop |
-| 23/10 | Transfer Metadata | TM | data-source node APID |
-| 23/11 | Transfer Chunk | TM | data-source node APID |
-| 23/12 | Transfer Complete | TM | data-source node APID |
-| 200/1 | Camera Capture | TC | PI-CAM `0x101`; GS request uses MCU proxy hop |
-| 200/2 | Camera Settings Set | TC | PI-CAM `0x101`; GS request uses MCU proxy hop |
-| 200/3 | Camera Settings Get | TC | PI-CAM `0x101`; GS request uses MCU proxy hop |
-| 200/4 | Camera Settings Report | TM | PI-CAM `0x101` |
-| 200/5 | Camera ACK/NACK | TM | PI-CAM `0x101` |
-| 210/1 | Execute | TC | FPGA `0x102`; GS request uses MCU proxy hop |
-| 210/2 | Processing Settings Set | TC | FPGA `0x102`; GS request uses MCU proxy hop |
-| 210/3 | Processing Settings Get | TC | FPGA `0x102`; GS request uses MCU proxy hop |
-| 210/4 | Processing Settings Report | TM | FPGA `0x102` |
-| 210/5 | FPGA ACK/NACK | TM | FPGA `0x102` |
-| 250/1 | GS Link/Proxy ACK | TM/report | producer GS APID `0x0F0`, routed to MCU |
+This section exists as the high-level wire-facing map and, deliberately, explains the purpose of each service instead of assuming the number is self-explanatory.
 
-PI-COMMS/Antenna currently uses common compatibility services where applicable. The target profile adds PI-MGMT, Service 8 recovery, Service 12 monitoring, Service 220 object transfer and Service 230 software management as defined in `services.md` and `component-services.md`.
+### 5.1 Service 1 — Request Verification
 
-### 5.1 Housekeeping, Service 3
+**Purpose:** report whether a TC was accepted and whether execution started/progressed/completed successfully.
 
-#### TC 3/1 Request HK
+**Belongs here:** command acceptance/completion status.
 
-Application Data after any required GS proxy preamble:
+**Does not belong here:** Camera-specific results, FPGA job results, or Ground-daemon link acknowledgements.
 
-| Field | Type | Notes |
-|---|---|---|
-| `detailMask` | uint16, optional | `0` means default/all groups |
+EXN uses standard PUS-C TM[1,1..8] verification reports according to the acknowledgement flags requested by the TC.
 
-#### TM 3/2 Report HK
+### 5.2 Service 3 — Housekeeping
 
-| Field | Type | Notes |
-|---|---|---|
-| `uptime_ms` | uint64 | device uptime |
-| `temperature_cC` | int16 | centi-degrees Celsius |
-| `status_flags` | uint16 | node-defined health flags |
-| `last_error` | uint16 | last error code |
-| `ts_cuc` | bytes[6] | report timestamp |
+**Purpose:** obtain and periodically report component liveness, health, sensors and link state.
 
-#### TC 3/10 Request System HK
+**Belongs here:** HEARTBEAT, HEALTH, SENSORS, LINKS and System-HK aggregation.
 
-Exactly five Application Data octets, no proxy preamble:
+**Does not belong here:** threshold-definition logic (Service 12), arbitrary configuration changes (Service 20), or operational commands.
 
-| Field | Type | Notes |
-|---|---|---|
-| `transactionId` | uint16 | correlation ID; current GS client uses non-zero IDs |
-| `include_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS/Antenna, bit4 PI-MGMT |
-| `detailMask` | uint16 | common HK detail selection |
+Standard one-shot messages:
 
-#### TM 3/100 System HK Report
+- `TC[3,27]` Generate one-shot HK report;
+- `TM[3,25]` HK report.
 
-Header fields:
+EXN System HK extensions:
 
-| Field | Type | Notes |
-|---|---|---|
-| `transactionId` | uint16 | echoes request |
-| `present_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS/Antenna, bit4 PI-MGMT |
-| `status` | uint8 | `0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR` |
-| `reserved` | uint8 | zero |
+- `TC[3,128]` Request System HK;
+- `TM[3,129]` System HK Report.
 
-Then repeat `[block_len:uint16][node_hk_bytes...]` for each included node.
+### 5.3 Service 5 — Event Reporting
 
-### 5.2 Event reporting, Service 5
+**Purpose:** asynchronous notification of state changes, warnings, faults and alarms.
 
-Subservice defines severity: `1=Info`, `2=Warn`, `3=Error`.
+**Belongs here:** boot/ready, link loss/restoration, thermal/storage alarms, capture failures, processing failures.
 
-Application Data begins with:
+**Does not belong here:** sampled HK values or command verification.
 
-| Field | Type | Notes |
-|---|---|---|
-| `eventId` | uint16 | event identifier |
-| `eventData` | bytes[] | event-specific payload |
+EXN uses the PUS-C severity subtypes 5/1 through 5/4.
 
-`eventId` is application data, not a separate PUS-B secondary-header field.
+### 5.4 Service 8 — Function Management
 
-### 5.3 Legacy EXN time assignment, Service 17
+**Purpose:** invoke named management functions whose semantics are actions rather than configuration values.
 
-Service 17 is **not** Time Management in PUS-C; it is the standardized Test service. The following definitions are therefore transitional EXN assignments and shall migrate to Service 9.
+**Belongs here:** reinitialize endpoint, restart Camera/Antenna through PI-MGMT, reboot Pi, clear recoverable faults.
 
-#### TC 17/1 Set Time
+**Does not belong here:** setting heartbeat periods or thresholds (Service 20), software-package lifecycle (Service 230).
 
-Application Data: mission-defined `time_cuc[6]`.
+EXN uses standard `TC[8,1]` Perform a Function with centrally assigned function IDs.
 
-#### TM 17/2 Time Report
+### 5.5 Service 9 — Time Management
 
-Application Data: mission-defined `time_cuc[6]` plus any node-specific quality/status fields defined by the device ICD.
+**Purpose:** establish and report mission time.
 
-### 5.4 Legacy EXN parameter assignment, Service 20
+**Belongs here:** OBC time synchronization/distribution and time-report policy.
 
-The current subtype allocation does not match standardized PUS-C Service 20 semantics. It is retained only for compatibility:
+**Does not belong here:** timer periods used by unrelated services; those are service configuration parameters.
 
-- TC 20/1 Set Parameter: `key:uint8` + `value:TLV`.
-- TC 20/2 Get Parameter: `key:uint8`.
-- TM 20/3 Parameter Value: `key:uint8` + `value:TLV`.
+EXN adds `TC[9,128]` Set Mission Time with the payload defined in `docs/component-services.md`.
 
-The target mapping uses TC[20,1] to request/report parameter values, TM[20,2] for the value report, and TC[20,3] to set values.
+### 5.6 Service 12 — On-board Monitoring
 
-For GS device-directed requests, the four-octet proxy preamble precedes these service fields on the GS -> MCU hop.
+**Purpose:** monitor declared health/sensor values against configured limits and expose current out-of-limit state.
 
-### 5.5 Legacy payload transfer assignment, Service 23
+**Belongs here:** temperature/storage/voltage/link-loss monitor state, warning/critical threshold evaluation.
 
-Service 23 is standardized as File Management in PUS-C. EXN's current image/result transfer messages are transitional and migrate to mission-specific Service 220 Payload Object Transfer.
+**Does not belong here:** the sampled sensor value itself (Service 3) or changing the threshold value (Service 20).
 
-- TC 23/1 Start Transfer: `{imageId:uint16, dest:uint8, chunk_size:uint16}`.
-- TC 23/2 Stop Transfer: `{imageId:uint16}`.
-- TM 23/10 Metadata: `{imageId:uint16,height:uint16,width:uint16,channels:uint8,pixel_type:uint8,total_size:uint32,chunk_size:uint16,ts_cuc[6]}`.
-- TM 23/11 Chunk: `{imageId:uint16,offset:uint32,data[]}`.
-- TM 23/12 Complete: `{imageId:uint16,totalChunks:uint16}`.
+EXN initially uses predeclared monitoring definitions rather than dynamic definition creation.
 
-Each 23/11 packet is currently an independent UNSEGMENTED CCSDS Space Packet. `offset` and `imageId` provide application-level reassembly.
+### 5.7 Service 20 — On-board Parameter Management
+#### EXN meaning: runtime configuration parameters
 
-For PI-CAM transfers, the current `dest` endpoint codes are `0=FPGA`, `1=MCU`, `2=PI-COMMS`. Other producers may specialize destination semantics in their device ICDs until Service 23 is generalized around a transport-independent object/transfer identifier.
+**Purpose:** read and change bounded runtime/persistent configuration values that are **settings**, not operations.
 
-### 5.6 Camera control, Service 200
+This service is intentionally narrow. It prevents every component from inventing its own generic setter/getter service while also preventing Service 20 from becoming a miscellaneous command drawer.
 
-- TC 200/1 Capture: `{mode:uint8,burst_count:uint16,exposure_us:uint32}`.
-- TC 200/2 Settings Set: `key:uint8 + value:TLV`.
-- TC 200/3 Settings Get: `key:uint8`.
-- TM 200/4 Settings Report: device-defined key/value report.
-- TM 200/5 ACK/NACK: `{orig_service:uint8,orig_sub:uint8,resultCode:uint8,detail:uint16}`.
+**Belongs here:**
 
-### 5.7 FPGA processing, Service 210
+- OBC heartbeat period, missed-heartbeat limit, automatic-restart enable;
+- OBC time-resynchronization period;
+- Antenna link/uplink/downlink enable flags and software rate limit;
+- PI-MGMT restart-storm/storage/thermal thresholds;
+- FPGA default queue/timeout policy when not operation-specific.
 
-- TC 210/1 Execute: `{pipeline:uint8,modelId:uint16,flags:uint16}`.
-- TC 210/2 Settings Set: `key:uint8 + value:TLV`.
-- TC 210/3 Settings Get: `key:uint8`.
-- TM 210/4 Settings/Result Report: device ICD defines payload.
-- TM 210/5 ACK/NACK: `{orig_service:uint8,orig_sub:uint8,resultCode:uint8,detail:uint16}`.
+**Does not belong here:**
 
-FPGA processing results shall **not** be hard-wired to one consumer. Service 210 remains a valid mission-specific service type. The target profile moves request verification to standard Service 1 and makes result routing an explicit job/policy property; see `services.md`.
+- Camera exposure, autofocus, sensor mode or acquisition controls → **Service 200**;
+- starting/stopping acquisition → **Service 200**;
+- restart/reboot actions → **Service 8**;
+- time synchronization → **Service 9**;
+- FPGA job submission/cancellation → **Service 210**;
+- payload transfer → **Service 220**;
+- software activation/rollback → **Service 230**;
+- housekeeping request → **Service 3**.
 
-### 5.8 GS link/proxy acknowledgement, Service 250
+Standard PUS-C message meanings used by EXN:
 
-TM/report 250/1 is produced by GS when an application-level GS acknowledgement is required:
+- `TC[20,1]` request/report parameter values;
+- `TM[20,2]` parameter value report;
+- `TC[20,3]` set parameter values.
 
-| Field | Type | Notes |
-|---|---|---|
-| `transactionId` | uint16 | associated proxy transaction |
-| `ackCode` | uint8 | `0=Accepted,1=Rejected,2=Cancelled,3=Invalid,4=Timeout` |
-| `detail` | uint16 | implementation-defined detail |
+An endpoint does **not** implement Service 20 merely because it has setters. If all meaningful configuration belongs to a mission-specific service, its Service 20 parameter set may be empty.
 
-Because EXN Packet Type describes requesting vs reporting semantics rather than physical link direction, the transitional profile permits a GS-originated reporting packet with Packet Type `TM` and APID `0x0F0`. This Service 250 behavior is **legacy/HIL compatibility**, not part of the target PUS-C mission profile; request verification migrates to Service 1 and ground-daemon acknowledgements remain local IPC.
+### 5.8 Service 200 — Camera Control
 
----
+**Purpose:** operate PI-CAM as a Camera Module 3 payload service.
+
+**Belongs here:** acquisition modes, exposure/AE, autofocus, Camera capabilities, stored-product catalog.
+
+**Does not belong here:** moving an already-created object between endpoints (Service 220) or restarting the Camera process (Service 8 through PI-MGMT).
+
+Normative subtypes and payloads are defined in `docs/icd/pi-cam.md`.
+
+### 5.9 Service 210 — Processing
+
+**Purpose:** operate the FPGA as a generic advertised processing-job engine.
+
+**Belongs here:** capability discovery, submit/cancel job, job status, small processing result.
+
+**Does not belong here:** bulk object bytes (Service 220), generic FPGA runtime configuration (Service 20), reset/reboot (Service 8).
+
+### 5.10 Service 220 — Payload Object Transfer
+
+**Purpose:** transfer bounded mission objects such as RAW/TIFF/JPEG images, masks, processed products, result blobs and update packages.
+
+**Belongs here:** object metadata, chunk data, transfer completion/status.
+
+**Does not belong here:** Camera capture semantics (Service 200), processing semantics (Service 210), software activation (Service 230).
+
+### 5.11 Service 230 — Software Management
+
+**Purpose:** control the lifecycle of software/update packages after the package bytes have been transferred.
+
+**Belongs here:** inventory, stage, activate, rollback, update status.
+
+**Does not belong here:** update-package bytes themselves (Service 220) or ordinary process restart (Service 8).
 
 ## 6. CCSDSPack v2 configuration mapping
 
-Authoritative `.cfg` templates for the **transitional PUS-A compatibility profile** are under `interfaces/ccsdspack/`. They shall be migrated as a coordinated interface change after the PUS-C service profile is frozen.
+The active templates under `interfaces/ccsdspack/` use the same normative PUS-C profile as this ICD:
 
-Current TC templates use:
+- TC selector: `PUS:revC:TC`;
+- TM selector: `PUS:revC:TM`;
+- PUS-C fixed 16-bit source/destination identifiers;
+- CRC-16 packet error control;
+- PUS-C TM message-type counter;
+- six-octet CUC telemetry timestamp using the EXN Unix agency-defined epoch.
 
-```text
-ccsds_packet_error_control:string=crc16
-ccsds_version_number:int=0
-ccsds_segmented:bool=false
-define_secondary_header:bool=true
-secondary_header_type:string=PUS:revA:TC
-pus_source_id_octets:int=1
-secondary_header_spare_octets:int=0
-pus_acknowledgement_flags:uint=0
-```
+The templates are machine-readable realizations of this ICD, not a compatibility layer for another revision.
 
-Current TM templates use:
-
-```text
-ccsds_packet_error_control:string=crc16
-ccsds_version_number:int=0
-ccsds_segmented:bool=false
-define_secondary_header:bool=true
-secondary_header_type:string=PUS:revA:TM
-pus_destination_id_octets:int=0
-secondary_header_spare_octets:int=0
-pus_destination_id:uint=0
-```
-
-Direction and Secondary Header Flag come from the installed directional secondary-header object. Legacy EXN keys such as `ccsds_type`, `ccsds_data_field_header_flag`, `pus_version`, `pus_service_sub_type`, and selectors `PusA/PusB/PusC` are not part of the EXN v2 profile.
-
----
+The JSON mirrors and MCU C header shall carry the same service/subservice assignments. Interface CI shall reject reintroduction of `PUS:revA:TC` or `PUS:revA:TM` in active EXN interface artifacts.
 
 ## 7. Implementation invariants
 
-Implementations and tests shall enforce at least the following:
-
-1. CCSDS Packet Version Number is `0`.
-2. Packet Data Length equals `packet_size - 7` on a complete packet.
-3. Packets in the current compatibility baseline have a PUS revision-A secondary header; the target coherent profile migrates to PUS-C.
-4. TC source-ID width is one octet; TM destination-ID width is zero octets.
-5. CRC16 is included and validated at packet endpoints.
-6. TC APID follows destination-endpoint policy; TM APID follows producer-endpoint policy.
-7. GS -> MCU System HK `3/10` carries exactly the five service payload octets and no proxy preamble.
-8. The GS transport daemon and PI-COMMS service may move packets, but mission scheduling and control decisions remain application/OBC responsibilities.
-9. FPGA processing-result routing is configurable and shall not be implemented as one fixed destination.
-10. Physical co-location of PI-CAM, PI-COMMS and PI-MGMT shall not collapse their logical endpoint identities.
-11. No new implementation shall introduce additional use of the legacy Service 17 time, Service 20 subtype, or Service 23 payload-transfer assignments.
-12. Target service semantics and mission-specific allocations shall conform to `docs/services.md`.
-
-Device-specific constraints remain in:
-
-- `docs/icd/gs.md`
-- `docs/icd/mcu-rtos.md`
-- `docs/icd/linux-payload.md`
-- `docs/icd/pi-cam.md`
-- `docs/icd/fpga-ai.md`
+1. All maintained EXN application packets use **PUS Revision C**.
+2. TC APID identifies the destination endpoint; TM APID identifies the producing endpoint.
+3. PUS-C source/destination IDs are 16-bit endpoint identities from Section 0.1.
+4. TM packets carry the EXN six-octet CUC timestamp.
+5. Request verification uses Service 1; mission services do not invent parallel ACK packets.
+6. The OBC remains command authority even when bulk payload bytes bypass it.
+7. Ground downlink of Camera/FPGA data means producer -> Antenna -> Ground.
+8. Service 20 is limited to runtime/persistent configuration parameters; operational actions remain in their owning service.
+9. Physical co-location of PI-CAM, PI-COMMS and PI-MGMT shall not collapse their logical identities.
+10. Every mission-visible ID, payload, state and semantic is defined in this repository before component implementations rely on it.
+11. Interface artifacts under `interfaces/` shall agree with this ICD and shall not preserve an alternate legacy profile.
