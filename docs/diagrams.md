@@ -105,28 +105,48 @@ sequenceDiagram
 
 ---
 
-## 5) Direct FPGA Result Downlink
+## 5) OBC-Controlled Direct FPGA Result Downlink
 
 When a ground link exists and policy permits it, a processing result may bypass the OBC data path.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant CAM as Camera Service
+  participant MCU as STM32 OBC
   participant FPGA as FPGA Processing
   participant ANT as Antenna
   participant GS as Ground
 
-  CAM->>FPGA: image + request, route=communications
+  MCU->>FPGA: downlink result/job via Antenna
   FPGA-->>ANT: processing result
-  ANT-->>GS: direct result downlink
+  ANT-->>GS: result downlink
 ```
 
 The OBC may still receive separate status, metadata, or decision-relevant information. `Direct` here means FPGA -> Antenna -> Ground without routing the bulk result through the OBC; it does not bypass the Antenna link.
 
 ---
 
-## 6) Logical Links over Shared Ethernet
+## 6) OBC-Controlled Direct Camera Downlink
+
+The OBC controls the operation, but the image bytes do not transit the MCU.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant MCU as STM32 OBC
+  participant CAM as Camera Service
+  participant ANT as Antenna
+  participant GS as Ground
+
+  MCU->>CAM: downlink payload object via Antenna
+  CAM-->>ANT: payload object
+  ANT-->>GS: payload downlink
+  CAM-->>MCU: status / completion metadata
+```
+
+---
+
+## 7) Logical Links over Shared Ethernet
 
 SpWKit may represent multiple logical relationships over one physical Ethernet carrier.
 
