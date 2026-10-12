@@ -1,115 +1,291 @@
 # Raspberry Pi Payload Node ICD
 
-This document defines the EXN **Raspberry Pi 5 Payload Node** boundary. In the initial deployment the Pi has two required mission purposes: **Camera** and **Antenna**. Logical endpoint identity remains separate from physical host identity so the two functions are independently addressable even while co-located.
+This document defines the EXN **Raspberry Pi 5 Payload Node** boundary.
 
-Refer to `../architecture.md` for system architecture, `../ICD.md` for the current wire contract, and `../services.md` for the target PUS service profile.
+The Pi has exactly **two mission purposes**:
 
-## 1. Dual mission role
+1. **PI-CAM** — Camera / payload acquisition.
+2. **PI-COMMS** — Antenna / Ground-link service.
 
-The Raspberry Pi 5 is required to host two primary EXN mission services in the initial architecture:
+A third process, **PI-MGMT**, exists only as platform-management infrastructure. It is not a third payload function; it gives the OBC a reliable way to supervise, restart and update the two mission services.
 
-```text
-Raspberry Pi 5
- |
- +-- Camera Payload Service        APID 0x101 / Source ID 0x02
- +-- Antenna Service               APID 0x103 / Source ID 0x04
- +-- Platform Management           local host supervision; no independent APID
-```
+Refer to:
 
-The Pi therefore serves **both** as the camera payload computer and as the spacecraft Antenna/Ground-link endpoint. Camera and Antenna remain separate logical endpoints despite sharing the same processor, OS, storage and network hardware. Either service may later move to another Linux computer without changing its mission responsibility.
+- `../architecture.md` for system architecture;
+- `../component-services.md` for common component behavior;
+- `../services.md` for the target PUS profile;
+- `../ICD.md` for packet/routing rules;
+- `pi-cam.md` for Camera-specific behavior.
 
-The Camera service contract remains defined in `pi-cam.md`. Platform Management is currently an implementation support service rather than a third mission packet endpoint; logical endpoints obtain host/watchdog state from it and include relevant health in their own housekeeping.
+## 1. Logical endpoints
+
+| Endpoint | APID | Source ID | Purpose |
+|---|---:|---:|---|
+| PI-CAM | `0x101` | `0x02` | Camera / payload acquisition |
+| PI-COMMS | `0x103` | `0x04` | Antenna / Ground link |
+| PI-MGMT | `0x104` | `0x05` | Pi platform supervision and software lifecycle |
+
+PI-CAM and PI-COMMS are the two mission endpoints. PI-MGMT is management infrastructure only.
 
 ## 2. Linux service model
 
-A representative deployment is:
+The target process layout is:
 
 ```text
-exn-camera.service
-exn-antenna.service
-exn-platform.service
+Raspberry Pi OS / Linux
+ |
+ +-- exn-camera.service       PI-CAM / 0x101
+ +-- exn-antenna.service      PI-COMMS / 0x103
+ +-- exn-platform.service     PI-MGMT / 0x104
+ +-- persistent payload/update storage
+ +-- journald / diagnostics
 ```
 
-The implementation may use `systemd` for process supervision, dependency ordering, restart policy, watchdog integration, and resource limits. Mission-facing health is reported through EXN Housekeeping/Event services rather than Linux-local logs alone.
+`systemd` may provide process supervision, watchdog integration, dependency ordering and restart execution, while EXN mission-visible control/health is exposed through PI-MGMT.
 
-## 3. Antenna endpoint
+The two mission services shall be independently restartable.
+
+## 3. Antenna endpoint, PI-COMMS
+
+PI-COMMS is the **Antenna service**. Antenna and communications are the same EXN function.
 
 Responsibilities:
 
-- act as the spacecraft Ground-facing Antenna endpoint for the demonstrator;
-- maintain the deployed RF/Wi-Fi/network communications path to Ground;
-- communicate with the STM32 OBC and deliver Ground telecommands toward it;
-- carry OBC telemetry back toward Ground;
-- downlink Camera and FPGA payload products directly without routing the bulk bytes through the OBC;
-- report communications-link/session health, counters and faults.
+- own the Ground-facing RF/Wi-Fi/network link;
+- receive Ground TCs and forward them to the OBC;
+- receive OBC TMs and forward them to Ground;
+- receive payload objects from PI-CAM or FPGA and transmit them to Ground;
+- maintain link/session state and forwarding counters;
+- report Antenna health/events.
 
-The Antenna endpoint is not the spacecraft command authority. The STM32 OBC remains responsible for command supervision and mission decisions. PI-COMMS is simply the logical/APID name of this Antenna service, not a separate communications subsystem.
+The Antenna is not command authority. The OBC decides what the spacecraft does and what payload data should be downlinked.
 
-Endpoint identity:
+## 4. Antenna routing behavior
 
-| Item | Value |
-|---|---|
-| Logical name | `PI-COMMS` (Antenna) |
-| APID | `0x103` |
-| Transitional PUS-A TC Source ID | `0x04` |
+### 4.1 Ground uplink
 
-The logical identity remains valid if the service later moves away from the Raspberry Pi.
-
-## 4. Control path
-
-The nominal flight-like path is:
+Nominal path:
 
 ```text
-Ground -> Antenna -> STM32 OBC -> selected endpoint
+Ground -> Antenna -> OBC
 ```
 
-A GS/HIL deployment may bypass the Antenna endpoint and connect directly to the OBC. Both deployment profiles use the same mission packet semantics.
+Ground control traffic is delivered to the OBC logical destination. The Antenna does not independently execute Camera or FPGA commands.
 
-## 5. Payload-data path
+### 4.2 OBC telemetry downlink
 
-The Antenna endpoint accepts payload data directly from Camera or FPGA when the OBC or mission policy requests a Ground downlink.
-
-Representative routes include:
+Nominal path:
 
 ```text
-Camera -> Antenna -> Ground
+OBC -> Antenna -> Ground
+```
+
+The Antenna forwards valid OBC reporting packets and preserves packet identity as defined by the deployed transport.
+
+### 4.3 Direct payload downlink
+
+For bulk data:
+
+```text
+OBC -> PI-CAM: downlink object X
+PI-CAM -> Antenna -> Ground
+
+OBC -> FPGA: downlink result Y
 FPGA -> Antenna -> Ground
-Camera -> FPGA -> Antenna -> Ground
 ```
 
-Here, `direct` means the payload producer sends bulk data straight to the Antenna service rather than through the OBC. The Antenna service is still the physical/logical path to Ground. The OBC may still receive metadata, status, classification results, events, or completion reports.
+"Direct" means the payload bytes bypass the OBC as a router. They do **not** bypass the Antenna.
 
-## 6. PUS service support
+The Antenna shall accept Service 220 object transfers addressed to Ground/downlink policy and forward them to the active Ground session.
 
-The PI-COMMS target service set is deliberately small:
+## 5. Antenna services
 
-- Service 1 request verification;
-- Service 3 housekeeping;
-- Service 5 event reporting;
-- Service 9 time reporting/synchronization where applicable;
-- Service 20 parameter management;
-- Service 220 payload-object transfer/forwarding where packetized mission objects are carried through the Antenna endpoint.
+PI-COMMS provides/consumes:
 
-A dedicated custom Antenna-control PUS service is **not allocated yet**. It should only be introduced if concrete radio/link operations cannot be represented coherently through housekeeping, events and parameters.
+- Service 1 Request Verification where the Antenna itself is commanded;
+- Service 3 Housekeeping;
+- Service 5 Event Reporting;
+- Service 9 Time Management;
+- Service 12 On-board Monitoring for link/forwarding health;
+- Service 20 Parameter Management;
+- Service 220 Payload Object Transfer / Ground forwarding.
 
-The current executable HIL profile still uses legacy PUS-A service identifiers described in `../ICD.md`; new Antenna implementation work targets `../services.md`.
+A custom Antenna PUS service is not required in the first baseline.
 
-## 7. Housekeeping
+### 5.1 Antenna parameters
 
-Antenna HK should include the master common fields plus link-specific information such as link state, session state, TX/RX counters, dropped/error counters, current mode, last error, restart count, and timestamp.
+At minimum:
 
-The Linux platform-management service should also track host-level metrics such as CPU temperature/load, memory, storage, watchdog state, and service health. Exact binary extensions will be frozen with the corresponding implementation/interface revision.
+| Parameter | Meaning |
+|---|---|
+| `link.enable` | enable/disable Ground link processing |
+| `uplink.enable` | permit Ground uplink |
+| `downlink.enable` | permit downlink |
+| `payload_forwarding.enable` | permit direct payload-object forwarding |
+| `rate_limit_bps` | optional software forwarding limit |
 
-## 8. Local service communication
+Technology-specific network/radio setup remains deployment configuration until a real operational requirement needs it remotely mutable.
 
-Because Camera and Antenna execute on the same Raspberry Pi 5 in the initial deployment, their local bulk-data path should exploit co-location where useful, using Unix-domain sockets, shared memory, file/object references, or another local IPC mechanism.
+### 5.2 Antenna HK
 
-The mission-level Camera-to-Antenna interface must not require co-location. A later deployment may map the same logical relationship onto SpWKit or another inter-node transport.
+HEARTBEAT:
 
-## 9. SpWKit deployment option
+- service state;
+- software version;
+- Ground link/session state;
+- time-sync state;
+- uptime;
+- last error;
+- restart count.
 
-Where SpWKit is used, Camera, Antenna, MCU and FPGA may expose independent logical links over one shared Ethernet carrier. SpWKit remains below mission semantics. Private/commercial FPGA SpaceWire implementation repositories are outside EXN scope.
+HEALTH/LINKS:
 
-## 10. Supervision boundary
+- RX/TX packet counters;
+- RX/TX byte counters;
+- drop/error counters;
+- current throughput;
+- Ground session connected/disconnected state;
+- forwarding queue depth;
+- last receive/transmit time;
+- technology-specific signal quality/RSSI only when the selected Ground-link implementation exposes it.
 
-`exn-platform.service` owns Linux-host supervision concerns such as watchdog feeding, restart accounting, storage health and process state. It does not become spacecraft command authority and does not need its own APID unless a future requirement establishes it as an independently addressable application process. Camera and Antenna remain restartable logical services with their own mission identities.
+Representative events:
+
+- Ground link established/lost;
+- uplink rejected/disabled;
+- downlink disabled;
+- forwarding queue overflow;
+- repeated transport error;
+- Ground session restored.
+
+## 6. PI-MGMT endpoint
+
+PI-MGMT is implemented by `exn-platform.service`.
+
+It exists because the OBC must be able to recover a Camera or Antenna service that is itself unresponsive.
+
+PI-MGMT provides:
+
+- Service 1 Request Verification;
+- Service 3 platform Housekeeping;
+- Service 5 platform/service events;
+- Service 8 Function Management;
+- Service 9 Time Management;
+- Service 12 platform monitoring;
+- Service 20 platform parameters;
+- Service 220 receipt/storage of update packages;
+- Service 230 Software Management.
+
+## 7. PI-MGMT function management
+
+Required Service 8 functions:
+
+| Function ID | Action |
+|---:|---|
+| `0x0101` | restart `exn-camera.service` |
+| `0x0102` | restart `exn-antenna.service` |
+| `0x0103` | restart both mission services |
+| `0x0104` | reboot Raspberry Pi |
+| `0x0105` | orderly Raspberry Pi shutdown |
+| `0x0106` | clear service restart/fault counters |
+
+Restart completion requires the selected systemd service to return active **and** its EXN heartbeat to recover.
+
+## 8. PI-MGMT Housekeeping
+
+### HEARTBEAT
+
+- platform supervisor state/version;
+- uptime;
+- mission time-sync state;
+- Camera service active state;
+- Antenna service active state;
+- last platform error;
+- reboot count.
+
+### HEALTH
+
+- CPU load;
+- memory used/free;
+- payload-store used/free;
+- update-store used/free;
+- service restart counters;
+- watchdog state;
+- systemd failed-unit count;
+- network-interface states.
+
+### SENSORS
+
+Every host sensor/health source actually available through the selected Pi/kernel stack, including:
+
+- SoC temperature;
+- throttling/undervoltage status;
+- other board values only when they are genuinely exposed.
+
+Camera-sensor-specific values remain Camera-owned unless they are only obtainable through the platform layer.
+
+## 9. Platform monitoring
+
+PI-MGMT Service 12 predeclared monitoring definitions include, when available:
+
+- Pi SoC temperature warning/critical;
+- undervoltage/throttling condition;
+- payload storage low/critical;
+- update storage low/critical;
+- Camera service crash/restart storm;
+- Antenna service crash/restart storm;
+- watchdog failure;
+- selected spacecraft-side network link loss.
+
+Limit transitions produce Service 5 events consumed by the OBC.
+
+Thresholds and restart-storm windows are Service 20 parameters.
+
+## 10. Software inventory and update
+
+PI-MGMT owns Software Management for:
+
+- PI-CAM service;
+- Antenna service;
+- PI-MGMT itself;
+- Pi-level supporting packages/configuration explicitly included in an EXN update bundle.
+
+Workflow:
+
+```text
+OBC/GS -> Service 220 update package -> PI-MGMT
+OBC -> PI-MGMT: Stage Update
+PI-MGMT: verify size/hash/compatibility/signature policy
+OBC -> PI-MGMT: Activate Update
+PI-MGMT: restart only affected service(s)
+PI-MGMT: verify heartbeat/HK
+PI-MGMT -> OBC: completion / status
+```
+
+Camera and Antenna service updates shall not require a full Pi reboot unless the package explicitly changes shared platform dependencies.
+
+A failed post-activation health check triggers rollback where a previous version is available.
+
+## 11. Time
+
+PI-CAM, PI-COMMS and PI-MGMT consume OBC `TC[9,128] Set Mission Time`.
+
+PI-MGMT may also synchronize the Linux wall clock as an implementation convenience, but EXN mission timestamps shall use the synchronized mission-time abstraction rather than assuming Linux wall clock is authoritative.
+
+## 12. Local Camera -> Antenna data path
+
+Because Camera and Antenna are co-located, the local implementation should avoid needless copying.
+
+Permitted implementation mechanisms include:
+
+- file/object references into the payload object store;
+- Unix-domain sockets for metadata/control;
+- shared memory for bounded streaming buffers.
+
+The logical Service 220 semantics remain the same. A future deployment can split Camera and Antenna across nodes without changing the mission contract.
+
+## 13. SpWKit deployment option
+
+Where SpWKit is used, Camera, Antenna, PI-MGMT, OBC and FPGA may expose separate logical relationships over shared Ethernet.
+
+SpWKit remains below mission semantics. EXN does not depend on any private/commercial FPGA SpaceWire implementation.
