@@ -138,6 +138,21 @@ typedef enum {
 } exn_subservice_t;
 
 typedef enum {
+  EXN_FUNCTION_CLEAR_FAULTS          = 0x0001u,
+  EXN_FUNCTION_REINITIALIZE          = 0x0002u,
+  EXN_FUNCTION_REBOOT_NODE           = 0x0003u,
+  EXN_FUNCTION_ENTER_IDLE            = 0x0004u,
+  EXN_FUNCTION_LEAVE_IDLE            = 0x0005u,
+  EXN_FUNCTION_CREATE_DIAGNOSTIC_LOG = 0x0006u,
+
+  EXN_FUNCTION_PI_RESTART_CAMERA     = 0x0101u,
+  EXN_FUNCTION_PI_RESTART_ANTENNA    = 0x0102u,
+  EXN_FUNCTION_PI_RESTART_MISSION    = 0x0103u,
+  EXN_FUNCTION_PI_REBOOT             = 0x0104u,
+  EXN_FUNCTION_PI_SHUTDOWN           = 0x0105u
+} exn_function_id_t;
+
+typedef enum {
   EXN_VALUE_BOOL   = 1u,
   EXN_VALUE_U8     = 2u,
   EXN_VALUE_U16    = 3u,
@@ -236,6 +251,42 @@ typedef enum {
 } exn_supervision_state_t;
 
 typedef enum {
+  EXN_RECOVERY_NONE               = 0u,
+  EXN_RECOVERY_PENDING            = 1u,
+  EXN_RECOVERY_ACTION_SENT        = 2u,
+  EXN_RECOVERY_WAITING_FOR_HEALTH = 3u,
+  EXN_RECOVERY_RECOVERED          = 4u,
+  EXN_RECOVERY_FAILED             = 5u,
+  EXN_RECOVERY_SUPPRESSED         = 6u
+} exn_recovery_state_t;
+
+typedef enum {
+  EXN_RECOVERY_REASON_NONE              = 0u,
+  EXN_RECOVERY_REASON_HEARTBEAT_TIMEOUT = 1u,
+  EXN_RECOVERY_REASON_HEALTH_TIMEOUT    = 2u,
+  EXN_RECOVERY_REASON_PROTOCOL_ERROR    = 3u,
+  EXN_RECOVERY_REASON_CRASH_LOOP        = 4u,
+  EXN_RECOVERY_REASON_THERMAL           = 5u,
+  EXN_RECOVERY_REASON_POWER_FAULT       = 6u,
+  EXN_RECOVERY_REASON_MANUAL            = 7u
+} exn_recovery_reason_t;
+
+typedef enum {
+  EXN_RECOVERY_ACTION_NONE            = 0u,
+  EXN_RECOVERY_ACTION_REINITIALIZE    = 1u,
+  EXN_RECOVERY_ACTION_RESTART_SERVICE = 2u,
+  EXN_RECOVERY_ACTION_SOFT_REBOOT     = 3u,
+  EXN_RECOVERY_ACTION_HARD_RESET      = 4u,
+  EXN_RECOVERY_ACTION_POWER_CYCLE     = 5u
+} exn_recovery_action_t;
+
+#define EXN_RECOVERY_FLAG_AUTO_ENABLED         (1u << 0)
+#define EXN_RECOVERY_FLAG_COOLDOWN_ACTIVE      (1u << 1)
+#define EXN_RECOVERY_FLAG_RETRY_LIMIT_REACHED  (1u << 2)
+#define EXN_RECOVERY_FLAG_HARD_RESET_AVAILABLE (1u << 3)
+#define EXN_RECOVERY_FLAG_POWER_CYCLE_AVAILABLE (1u << 4)
+
+typedef enum {
   EXN_SYSTEM_HK_OK       = 0u,
   EXN_SYSTEM_HK_DEGRADED = 1u,
   EXN_SYSTEM_HK_ERROR    = 2u
@@ -255,6 +306,7 @@ typedef enum {
   EXN_OBJECT_RESULT_BLOB     = 0x0004u,
   EXN_OBJECT_THUMBNAIL       = 0x0005u,
   EXN_OBJECT_UPDATE_PACKAGE  = 0x0010u,
+  EXN_OBJECT_DIAGNOSTIC_LOG  = 0x0020u,
   EXN_OBJECT_OPAQUE          = 0x7FFFu
 } exn_object_type_t;
 
@@ -328,6 +380,14 @@ typedef struct EXN_PACKED {
   uint8_t producer_apid_be[2];
   uint8_t supervision_state;
   uint8_t endpoint_state;
+  uint8_t recovery_state;
+  uint8_t recovery_reason;
+  uint8_t recovery_action;
+  uint8_t recovery_flags;
+  uint8_t recovery_attempts_be[2];
+  uint8_t heartbeat_age_ms_be[4];
+  uint8_t health_age_ms_be[4];
+  uint8_t last_recovery_unix_ms_be[8];
   uint8_t structure_count;
 } exn_system_hk_endpoint_prefix_t;
 
