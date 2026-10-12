@@ -233,6 +233,17 @@ static inline uint64_t exn_be_get_u64(const uint8_t *p) {
 #endif
 
 typedef struct EXN_PACKED {
+  uint8_t packet_id_be[2];
+  uint8_t packet_sequence_control_be[2];
+} exn_request_id_t;
+
+typedef struct EXN_PACKED {
+  exn_request_id_t request_id;
+  uint8_t failure_code_be[2];
+  uint8_t failure_data_length_be[2];
+} exn_verification_failure_prefix_t;
+
+typedef struct EXN_PACKED {
   uint8_t transaction_id_be[2];
   uint8_t target;
   uint8_t options;
