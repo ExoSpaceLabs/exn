@@ -50,7 +50,7 @@
     {
       "name": "endpoints",
       "type": "BYTES",
-      "description": "Repeated producer_apid:u16, supervision_state:u8, endpoint_state:u8, recovery_state:u8, recovery_reason:u8, recovery_action:u8, recovery_flags:u8, recovery_attempts:u16, heartbeat_age_ms:u32, health_age_ms:u32, last_recovery_unix_ms:u64, structure_count:u8; then repeated structure_id:u16, age_ms:u32, block_length:u16, block[block_length]"
+      "description": "Repeated producer_apid:u16, supervision_state:u8, endpoint_state:u8, recovery_state:u8, recovery_reason:u8, recovery_action:u8, recovery_flags:u8, recovery_attempts:u16, recovery_successes:u16, last_recovery_result:u8, heartbeat_age_ms:u32, health_age_ms:u32, last_recovery_unix_ms:u64, structure_count:u8; then repeated structure_id:u16, age_ms:u32, block_length:u16, block[block_length]"
     }
   ],
   "notes": "Contains every OBC-registered endpoint, including stale/offline endpoints with last cached HK and compact OBC recovery-policy state. Detailed recovery journal is exported as a Service 220 diagnostic-log object."
