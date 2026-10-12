@@ -6,7 +6,7 @@
  *
  * Wire profile:
  *  - CCSDS Space Packet version 0
- *  - CCSDSPack v2 PUS revision A for current EXN TC/TM services
+ *  - CCSDSPack v2 PUS revision A for the transitional EXN-GS/HIL profile
  *  - TC source ID width: 1 octet
  *  - TM destination ID width: 0 octets
  *  - CRC-16/CCITT-FALSE packet error control
@@ -31,19 +31,25 @@ extern "C" {
 typedef enum {
   APID_GS   = 0x0F0u,
   APID_MCU  = 0x100u,
-  APID_PI   = 0x101u,
-  APID_FPGA = 0x102u
+  APID_PI       = 0x101u,
+  APID_FPGA     = 0x102u,
+  APID_PI_COMMS = 0x103u
 } exn_apid_t;
 
 /* PUS-A TC Source IDs. */
 typedef enum {
   SRCID_MCU  = 0x01u,
   SRCID_PI   = 0x02u,
-  SRCID_FPGA = 0x03u,
-  SRCID_GS   = 0x10u
+  SRCID_FPGA     = 0x03u,
+  SRCID_PI_COMMS = 0x04u,
+  SRCID_GS       = 0x10u
 } exn_srcid_t;
 
-/* EXN service identifiers. All currently use the PUS revision-A header profile. */
+/*
+ * Transitional EXN service identifiers used by current GS/HIL traffic.
+ * Do not extend this legacy numbering for new endpoint implementations.
+ * Target PUS-C allocation is defined in docs/services.md.
+ */
 typedef enum {
   SVC_HK      = 3u,
   SVC_EVENTS  = 5u,
@@ -149,7 +155,7 @@ static inline uint32_t be_get_u32(const uint8_t *p) {
 /* GS -> MCU downstream-device proxy preamble. Not used for MCU-local 3/10 System HK. */
 typedef struct EXN_PACKED {
   uint16_t transactionId;
-  uint8_t target;  /* 1=PI, 2=FPGA */
+  uint8_t target;  /* 1=PI-CAM, 2=FPGA, 3=PI-COMMS */
   uint8_t options; /* bit0=mirror to GS, bit1=mirror to peer */
 } exn_proxy_preamble_t;
 
@@ -163,7 +169,7 @@ typedef struct EXN_PACKED {
 
 typedef struct EXN_PACKED {
   uint16_t transactionId;
-  uint8_t include_mask; /* bit0=MCU, bit1=PI, bit2=FPGA */
+  uint8_t include_mask; /* bit0=MCU, bit1=PI-CAM, bit2=FPGA, bit3=PI-COMMS */
   uint16_t detailMask;
 } exn_sys_hk_req_t;
 
