@@ -26,31 +26,32 @@
   },
   "appData": [
     {
-      "name": "transaction_id",
-      "type": "U16",
-      "bits": 16
+      "name": "request_id",
+      "type": "BYTES",
+      "length": 4,
+      "description": "Original System-HK TC Packet ID + Packet Sequence Control"
     },
     {
-      "name": "present_mask",
+      "name": "snapshot_unix_ms",
+      "type": "U64",
+      "bits": 64
+    },
+    {
+      "name": "system_status",
       "type": "U8",
       "bits": 8,
-      "description": "bit0 OBC, bit1 PI-CAM, bit2 FPGA, bit3 Antenna, bit4 PI-MGMT"
+      "description": "0 OK, 1 DEGRADED, 2 ERROR"
     },
     {
-      "name": "status",
-      "type": "U8",
-      "bits": 8,
-      "description": "0 OK, 1 PARTIAL, 2 TIMEOUT, 3 ERROR"
-    },
-    {
-      "name": "block_count",
+      "name": "endpoint_count",
       "type": "U8",
       "bits": 8
     },
     {
-      "name": "blocks",
+      "name": "endpoints",
       "type": "BYTES",
-      "description": "Repeated producer_apid:u16, block_length:u16, block[block_length]"
+      "description": "Repeated producer_apid:u16, supervision_state:u8, endpoint_state:u8, structure_count:u8; then repeated structure_id:u16, age_ms:u32, block_length:u16, block[block_length]"
     }
-  ]
+  ],
+  "notes": "Contains every OBC-registered endpoint, including stale/offline endpoints with any last valid cached HK."
 }
