@@ -280,6 +280,13 @@ typedef enum {
   EXN_RECOVERY_ACTION_POWER_CYCLE     = 5u
 } exn_recovery_action_t;
 
+typedef enum {
+  EXN_RECOVERY_RESULT_NONE       = 0u,
+  EXN_RECOVERY_RESULT_SUCCESS    = 1u,
+  EXN_RECOVERY_RESULT_FAILED     = 2u,
+  EXN_RECOVERY_RESULT_SUPPRESSED = 3u
+} exn_recovery_result_t;
+
 #define EXN_RECOVERY_FLAG_AUTO_ENABLED         (1u << 0)
 #define EXN_RECOVERY_FLAG_COOLDOWN_ACTIVE      (1u << 1)
 #define EXN_RECOVERY_FLAG_RETRY_LIMIT_REACHED  (1u << 2)
@@ -385,6 +392,8 @@ typedef struct EXN_PACKED {
   uint8_t recovery_action;
   uint8_t recovery_flags;
   uint8_t recovery_attempts_be[2];
+  uint8_t recovery_successes_be[2];
+  uint8_t last_recovery_result;
   uint8_t heartbeat_age_ms_be[4];
   uint8_t health_age_ms_be[4];
   uint8_t last_recovery_unix_ms_be[8];
