@@ -127,6 +127,14 @@ repeat endpoint_count:
     producer_apid:u16
     supervision_state:u8   # UNKNOWN/OK/STALE/OFFLINE/ERROR
     endpoint_state:u8      # last self-reported common endpoint state
+    recovery_state:u8      # NONE/PENDING/ACTION_SENT/WAITING/RECOVERED/FAILED/SUPPRESSED
+    recovery_reason:u8
+    recovery_action:u8
+    recovery_flags:u8
+    recovery_attempts:u16
+    heartbeat_age_ms:u32   # UINT32_MAX if never received
+    health_age_ms:u32      # UINT32_MAX if never received
+    last_recovery_unix_ms:u64
     structure_count:u8
 
     repeat structure_count:
@@ -146,7 +154,16 @@ Every registered spacecraft endpoint appears in the report, including the OBC it
 | 1 | `DEGRADED` — at least one endpoint is stale/offline/error, but the OBC can provide a coherent snapshot |
 | 2 | `ERROR` — the OBC could not construct a coherent spacecraft snapshot |
 
-A stale/offline endpoint is **not omitted**. Its entry remains present with the OBC supervision state and any last valid cached HK blocks. Ground can therefore distinguish "device is offline" from "the report forgot that device exists."
+A stale/offline endpoint is **not omitted**. Its entry remains present with the OBC supervision state, last cached HK blocks and recovery summary. Ground can therefore distinguish:
+
+- the endpoint's last self-reported state;
+- how long heartbeat/health data have been missing;
+- whether OBC recovery policy has triggered;
+- which recovery action was attempted;
+- whether recovery succeeded, failed, or was suppressed;
+- how many recovery attempts have occurred.
+
+The cached HEARTBEAT block contains the endpoint's last reported `uptime_ms` and `restart_or_reset_count`. After a successful reboot those values reset/change naturally and the OBC recovery summary explains why.
 
 The System-HK report is built from the OBC cache and does not normally trigger downstream TCs. Supervision cadence, stale/offline thresholds, and which structures are maintained in the cache are configured separately through OBC Service 20.
 
@@ -196,3 +213,10 @@ GS telecommands use:
 GS decodes telemetry using `PUS:revC:TM` with the EXN six-octet CUC timestamp profile.
 
 There is no GS Service 250 packet. Local daemon acknowledgements/status remain local IPC, while spacecraft request verification uses PUS Service 1.
+
+
+### 6.3 Recovery diagnostics
+
+System HK provides the compact recovery summary required for routine operations. For deeper diagnosis, Ground may command the OBC to create a diagnostic-log object using Service 8 function `CREATE_DIAGNOSTIC_LOG`, then retrieve that immutable object through Service 220.
+
+The OBC diagnostic log includes its own supervision/recovery history even if the failed endpoint never becomes responsive again.
