@@ -1,164 +1,249 @@
-# FPGA-AI Device/Service ICD
+# FPGA Processing Node Device/Service ICD
 
-This document specializes the EXN ICD for the FPGA Processing node (APID 0x102). It defines Housekeeping (HK) telemetry, mission-specific processing Service 210, execution control, and result-transfer behavior.
+This document defines the target software-facing contract for the EXN FPGA Processing endpoint.
 
-Refer to `../ICD.md` for the current CCSDS/PUS wire contract, `../services.md` for the target PUS service profile, and `../architecture.md` for the system routing model.
+- APID: `0x102`
+- Target source identity: `0x03`
+- Mission role: generic image/AI processing endpoint
+- Concrete processing algorithms/models: intentionally not frozen yet
 
----
+Refer to:
 
-## 1. Role and Interfaces
+- `../component-services.md` for the common component contract;
+- `../services.md` for target PUS mapping;
+- `../ICD.md` for packet/routing rules;
+- `../architecture.md` for result-routing ownership.
 
-- Performs preprocessing (resize/normalize), hardware-accelerated inference, and postprocessing.
-- Receives control and settings from MCU-RTOS and publishes results/telemetry.
-- May receive image data directly from PI-CAM or from MCU-RTOS depending on system configuration.
-- Routes processing results to one or more configured logical endpoints rather than imposing one fixed return path.
+Private/commercial FPGA SpaceWire repositories are outside EXN scope. The EXN FPGA exists to process payload data.
 
-The FPGA node is an EXN **payload-processing endpoint**. Separate/private FPGA SpaceWire product implementations are outside the EXN architecture.
+## 1. Service set
 
-Transport binding is deployment-specific. Application data fields are big-endian. Timestamps use 6-byte CUC where present.
+The FPGA endpoint provides/consumes:
 
----
+- Service 1 Request Verification;
+- Service 3 Housekeeping;
+- Service 5 Event Reporting;
+- Service 8 Function Management;
+- Service 9 Time Management;
+- Service 12 On-board Monitoring;
+- Service 20 Parameter Management;
+- Service 210 Processing;
+- Service 220 Payload Object Transfer;
+- Service 230 Software Management where the selected FPGA platform supports managed software/bitstream activation.
 
-## 2. Housekeeping (Service 3)
+## 2. Endpoint state
 
-The current compatibility profile uses TC 3/1 and TM 3/2, with optional aggregation into legacy System HK 3/100. The target PUS-C profile uses TC[3,27] / TM[3,25], with EXN System HK on mission-specific 3/128 / 3/129.
+Detailed state:
 
-- TM 3/2 Report HK — Application Data (transitional)
+| State | Meaning |
+|---|---|
+| `STARTING` | processing endpoint is initializing |
+| `READY` | able to accept jobs |
+| `BUSY` | one or more jobs active |
+| `DEGRADED` | reduced capability available |
+| `ERROR` | processing unavailable |
+| `IDLE` | deliberately quiesced |
+| `UPDATING` | managed software/bitstream update underway |
 
-| Name                  | Type   | Bits | Description |
-|-----------------------|--------|------|-------------|
-| uptime_ms             | uint64 | 64   | Node uptime in ms |
-| fpga_temp_cC          | int16  | 16   | FPGA die temperature (centi-°C) |
-| vccint_mV             | uint16 | 16   | Core voltage in millivolts |
-| vccaux_mV             | uint16 | 16   | Aux voltage in millivolts |
-| vccbram_mV            | uint16 | 16   | BRAM voltage in millivolts |
-| fabric_clock_khz      | uint32 | 32   | Main fabric clock frequency (kHz) |
-| dma_tx_pkts           | uint32 | 32   | DMA packets transmitted |
-| dma_rx_pkts           | uint32 | 32   | DMA packets received |
-| dma_rx_dropped        | uint32 | 32   | DMA dropped packets |
-| last_infer_ms         | uint32 | 32   | Duration of last full pipeline (ms) |
-| bram_used_bytes       | uint32 | 32   | BRAM usage bytes (estimate) |
-| dsp_util_permille     | uint16 | 16   | DSP slice utilization (0..1000) |
-| status_flags          | uint16 | 16   | Bitmask: [0]idle, [1]busy, [2]error, [3]overtemp, [4]throttle |
-| last_error            | uint16 | 16   | Last error code |
-| ts_cuc                | bytes  | 48   | 6-byte CUC timestamp |
+The capability report declares concurrency/queue limits rather than assuming one job or unlimited jobs.
 
----
+## 3. Service 210 message catalogue
 
-## 3. Processing Control (Service 210)
+| Message | Name |
+|---|---|
+| `TC[210,1]` | Submit Processing Job |
+| `TC[210,2]` | Cancel Processing Job |
+| `TC[210,3]` | Get Job Status |
+| `TM[210,4]` | Job Status Report |
+| `TC[210,5]` | Get Processing Capabilities |
+| `TM[210,6]` | Processing Capabilities Report |
+| `TM[210,7]` | Small Processing Result |
 
-### 3.1 Execute (TC 210/1)
+Service 1 provides command acceptance/completion verification.
 
-Controls pipeline execution. If `flags.auto_start` is set, execution may start automatically when input is available.
+## 4. Processing capabilities
 
-- Application Data
+Because EXN has not selected the final processing workload, the FPGA shall advertise capabilities dynamically.
 
-| Field    | Type   | Bits | Description |
-|----------|--------|------|-------------|
-| pipeline | uint8  | 8    | 0=pre,1=infer,2=post,3=full |
-| modelId  | uint16 | 16   | Model selection ID |
-| flags    | uint16 | 16   | Bitfield: [0]auto_start, [1]async, [2]save_intermediate |
+Each capability contains:
 
-Result routing for the current wire profile is selected through the processing settings below. In the target profile, each submitted job carries or references its own result-route/delivery policy and a job identifier.
+- `operationId:uint16`;
+- stable operation name/version;
+- accepted input object types/formats;
+- generated output type(s);
+- minimum/maximum dimensions or object size;
+- supported parameter schema/version;
+- expected concurrency/queue limits;
+- whether the result can be returned inline or only as an object.
 
-- TM 210/5 ACK/NACK — transitional compatibility message. The target profile uses PUS Service 1 request verification.
+Examples of possible future operation classes include preprocessing, classification, segmentation, detection or compression, but none is mandatory merely because this ICD names the category.
 
-### 3.2 Processing Settings (TC 210/2 Set, TC 210/3 Get, TM 210/4 Report)
+## 5. Submit Processing Job
 
-Use TLV per `../ICD.md`. TLV Types: 1=U8,2=U16,3=U32,4=I32,5=F32,6=STR,7=BYTES,8=U64,9=BOOL.
+`TC[210,1]` contains or references:
 
-#### 3.2.1 Settings Catalog
+| Field | Type | Meaning |
+|---|---|---|
+| `jobId` | uint32 | OBC-assigned job identity |
+| `operationId` | uint16 | advertised processing capability |
+| `inputObjectId` | uint64 | input object already available to FPGA or transferred separately |
+| `parameterSetId` | uint16 | optional stored parameter set; zero for command-supplied/default |
+| `destinationCount` | uint8 | number of result consumers |
+| `destinationApid[]` | uint16[] | OBC, Camera, Antenna, requester, etc. |
+| `flags` | uint16 | execution/output policy |
 
-| Key | Name                 | TLV | Units | Range/Enum | Default | Description |
-|-----|----------------------|-----|-------|------------|---------|-------------|
-| 1   | input.width          | U16 | px    | 16..8192   | 224     | Inference input width |
-| 2   | input.height         | U16 | px    | 16..8192   | 224     | Inference input height |
-| 3   | input.channels       | U8  | ch    | 1..4       | 3       | Number of channels |
-| 4   | input.format         | U8  | enum  | 1=RGB888,2=GRAY8,3=GRAY16,4=YUV420 | 1 | Expected input format |
-| 5   | resize.enable        | BOOL| bool  | 0/1        | 1       | Enable hardware resize |
-| 6   | resize.algorithm     | U8  | enum  | 0=nearest,1=bilinear,2=bicubic | 1 | Resize method |
-| 7   | norm.mean0           | F32 |       | -1..+1     | 0.485   | Channel 0 mean (RGB order) |
-| 8   | norm.mean1           | F32 |       | -1..+1     | 0.456   | Channel 1 mean |
-| 9   | norm.mean2           | F32 |       | -1..+1     | 0.406   | Channel 2 mean |
-| 10  | norm.std0            | F32 |       | >0         | 0.229   | Channel 0 std |
-| 11  | norm.std1            | F32 |       | >0         | 0.224   | Channel 1 std |
-| 12  | norm.std2            | F32 |       | >0         | 0.225   | Channel 2 std |
-| 13  | quant.enable         | BOOL| bool  | 0/1        | 0       | Enable quantization |
-| 14  | quant.scale          | F32 |       | >0         | 1.0     | Quantization scale |
-| 15  | quant.zero_point     | I32 |       | -128..127  | 0       | Zero point for INT8 |
-| 16  | model.id             | U16 | id    | 0..65535   | 1       | Model selection |
-| 17  | model.name           | STR |       |            | ""      | Optional model string name |
-| 18  | pipeline.mode        | U8  | enum  | 0=pre,1=infer,2=post,3=full | 3 | Default pipeline mode |
-| 19  | dma.burst_len        | U16 | beats | 1..256     | 64      | DMA burst length |
-| 20  | dma.timeout_ms       | U16 | ms    | 0..60000   | 2000    | DMA transfer timeout |
-| 21  | tile.width           | U16 | px    | 8..1024    | 224     | Tiling width for large images |
-| 22  | tile.height          | U16 | px    | 8..1024    | 224     | Tiling height |
-| 23  | output.format        | U8  | enum  | 0=raw,1=logits_f32,2=logits_i8,3=classes | 3 | Output result format |
-| 24  | post.topk            | U8  | K     | 1..100     | 5       | Top-K classes reported |
-| 25  | post.threshold       | F32 |       | 0..1       | 0.5     | Score threshold |
-| 26  | result.route_mask    | U8  | mask  | bit0=requester, bit1=MCU, bit2=PI-CAM, bit3=PI-COMMS | 0x01 | One or more result destinations |
+The command never hard-codes one pipeline or result destination.
 
-Notes:
-- If `quant.enable=1` and `output.format=2`, logits are emitted as INT8 with `quant.scale` and `quant.zero_point` metadata.
-- `result.route_mask` is a logical routing policy. The transport implementation resolves each selected endpoint through the active deployment topology.
-- `PI-COMMS` is the Pi Antenna service. Routing a result there requests Ground downlink through the Antenna link; the FPGA does not communicate with Ground independently.
-- A classification result may be routed to MCU so the OBC can make an autonomous mission decision without carrying the original bulk image through the MCU.
+## 6. Input data
 
----
+Large input imagery/products use Service 220.
 
-## 4. Data/result transfer
-
-The current compatibility profile uses legacy Service 23 for packetized payload/result chunks. PUS-C reserves Service 23 for File Management, so new FPGA implementation work shall use **Service 220 Payload Object Transfer**.
-
-- Input images may be received via legacy TM 23/11 Data Chunk from PI-CAM (APID 0x101) if the compatibility path uses packetized transfer.
-- Processing results are delivered to the endpoint(s) selected by `result.route_mask`.
-- Result delivery may therefore target MCU, PI-CAM, PI-COMMS, the requester, or more than one endpoint.
-
-Typical flows include:
+Typical flow:
 
 ```text
-FPGA -> MCU                    classification/decision metadata
-FPGA -> PI-CAM                 processed image/product association
-FPGA -> PI-COMMS/Antenna -> Ground   direct payload downlink, bypassing OBC bulk routing
-FPGA -> PI-CAM + MCU           payload product plus control decision input
+OBC -> PI-CAM: transfer object X to FPGA
+PI-CAM -> FPGA: Service 220 object X
+OBC -> FPGA: Submit Job(inputObjectId=X)
 ```
 
-### 4.1 Result Packets
+The implementation may support streaming input later, but the first baseline is object-oriented and bounded.
 
-When `output.format` is not `raw`, the compatibility profile uses the following Service 23 result convention:
+## 7. Result handling
 
-- TM 23/11 Data Chunk (Results)
+### 7.1 Small result
 
-| Name     | Type   | Bits | Description |
-|----------|--------|------|-------------|
-| jobId    | uint16 | 16   | Inference job identifier |
-| offset   | uint32 | 32   | Byte offset in result buffer |
-| data     | bytes  | var  | Encoded result bytes per `output.format` |
+Small decision data such as:
 
-- TM 23/12 Transfer Complete (Results)
+- class ID and confidence;
+- scalar quality metrics;
+- bounding metadata;
+- compact status/decision vectors;
 
-| Name        | Type   | Bits | Description |
-|-------------|--------|------|-------------|
-| jobId       | uint16 | 16   | Job identifier |
-| resultCode  | uint8  | 8    | 0=OK, >0 error |
+may be delivered through `TM[210,7]` directly to the requested endpoint.
 
-If `output.format=3 (classes)`, the first chunk SHOULD begin with a header: `numClasses(U16)`, followed by repeated entries `{classId(U16), score(F32)}`.
+Example:
 
-The FPGA does not assume that the final consumer is ground, camera, or OBC. Routing remains an execution/configuration policy above the computation itself.
+```text
+FPGA -> OBC: classification result
+OBC: make mission decision
+```
 
-In the target profile, `jobId` identifies the Service 210 processing job while Service 220 uses a generic `objectId`/`transferId` for any large result object. Small classification/decision results may be reported directly through Service 210 without creating a bulk-transfer object.
+### 7.2 Large result
 
----
+A large output becomes a Service 220 object with its own `objectId`.
 
-## 5. Parameter Management (Service 20)
+Examples:
 
-Generic parameters not owned by Service 210 use Service 20. The existing TLV/key representation is transitional; target message meanings follow PUS-C TC[20,1] report-values request, TM[20,2] value report, and TC[20,3] set-values request.
+```text
+OBC -> FPGA: downlink result Y
+FPGA -> Antenna -> Ground
 
----
+OBC -> FPGA: return result Y to Camera
+FPGA -> PI-CAM
+```
 
-## 6. CCSDSPack Interfaces
+The FPGA does not own the Ground link. "Route to Ground" resolves to the Antenna endpoint.
 
-- `pkt_fpga_exec_tc`
-- `pkt_xfer_chunk_tm` (results), `pkt_xfer_done_tm` (results)
+## 8. Job status
 
-Current interface artifacts set APID=0x102 and use the transitional PUS-A profile. The target FPGA software-facing boundary migrates to PUS-C, Service 1 verification, standard Services 3/5/9/20, mission-specific Service 210 processing, and Service 220 payload-object transfer.
+`TM[210,4]` reports:
+
+- job ID;
+- operation ID;
+- state: QUEUED/RUNNING/COMPLETE/CANCELLED/FAILED;
+- progress permille when meaningful;
+- start/end mission time;
+- result code;
+- output object IDs, if any;
+- small-result availability;
+- error/detail code.
+
+The OBC uses this report to manage expected jobs and downstream transfers.
+
+## 9. Housekeeping
+
+### HEARTBEAT
+
+- endpoint state;
+- software/bitstream version;
+- capability-set version/hash;
+- active/queued job count;
+- mission time-sync state;
+- uptime;
+- last error;
+- reset count.
+
+### HEALTH
+
+- processing queue depth;
+- completed/failed/cancelled job counters;
+- input/output byte counters;
+- buffer/DMA error counters where applicable;
+- last/mean processing duration by available metric;
+- resource utilization metrics exposed by the selected platform.
+
+### SENSORS
+
+Report every actual hardware monitor exposed by the selected FPGA platform, such as:
+
+- die temperature;
+- rail voltages/currents;
+- fan/thermal state;
+
+**only after the board is selected and those monitors are confirmed available**.
+
+The previous speculative fixed VCCINT/VCCAUX/VCCBRAM table is not a cross-platform requirement.
+
+## 10. Monitoring and alarms
+
+Predeclared Service 12 definitions shall cover available FPGA health parameters, including where supported:
+
+- die-temperature warning/critical;
+- rail out-of-range;
+- repeated DMA/buffer failure;
+- processing timeout/error-rate threshold;
+- queue/resource saturation.
+
+Limit transitions produce Service 5 events and are included in OBC/System HK state.
+
+## 11. Function management
+
+Service 8 functions include:
+
+| Function | Meaning |
+|---|---|
+| clear faults | clear recoverable processing errors |
+| reinitialize endpoint | reset software-facing processing engine |
+| enter idle | stop accepting new jobs after controlled drain/cancel policy |
+| leave idle | return to READY |
+| reboot/reload node | platform-specific reset/reload where supported |
+
+A hard reset must not be used as normal job cancellation.
+
+## 12. Time
+
+The FPGA consumes OBC `TC[9,128] Set Mission Time` and uses synchronized mission time for:
+
+- job start/end timestamps;
+- result metadata;
+- Housekeeping/event timestamps.
+
+## 13. Software/bitstream updates
+
+Service 230 applies once the selected FPGA platform provides a safe update/rollback mechanism.
+
+Inventory shall distinguish:
+
+- host/software adapter version;
+- FPGA image/bitstream version;
+- processing capability-set/model version.
+
+The package arrives via Service 220, is validated, activated, and followed by heartbeat/capability/HK validation.
+
+Until the platform is selected, the exact bitstream reload mechanism remains deliberately undefined.
+
+## 14. Parameter management
+
+Service 20 holds persistent/runtime parameters that are not operation-specific.
+
+Examples may include queue policy, timeout limits and default result routing. Algorithm-specific parameters belong to the Service 210 operation parameter schema rather than a global bag of FPGA settings.
