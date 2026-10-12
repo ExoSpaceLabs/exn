@@ -1,8 +1,8 @@
 # FPGA-AI Device/Service ICD
 
-This document specializes the EXN ICD for the FPGA Processing node (APID 0x102). It defines Housekeeping (HK) telemetry, processing settings (Service 210), execution control, and data/result transfer behavior.
+This document specializes the EXN ICD for the FPGA Processing node (APID 0x102). It defines Housekeeping (HK) telemetry, mission-specific processing Service 210, execution control, and result-transfer behavior.
 
-Refer to `../ICD.md` for CCSDS/PUS conventions and the master service catalog, and `../architecture.md` for the system routing model.
+Refer to `../ICD.md` for the current CCSDS/PUS wire contract, `../services.md` for the target PUS service profile, and `../architecture.md` for the system routing model.
 
 ---
 
@@ -21,10 +21,9 @@ Transport binding is deployment-specific. Application data fields are big-endian
 
 ## 2. Housekeeping (Service 3)
 
-Notes:
-- FPGA-AI SHALL respond promptly to TC 3/1 (HK Request) issued by MCU. Its TM 3/2 payload below is included verbatim as the FPGA block inside the aggregated System HK TM 3/100 when GS requests System HK (TC 3/10).
+The current compatibility profile uses TC 3/1 and TM 3/2, with optional aggregation into legacy System HK 3/100. The target PUS-C profile uses TC[3,27] / TM[3,25], with EXN System HK on mission-specific 3/128 / 3/129.
 
-- TM 3/2 Report HK — Application Data
+- TM 3/2 Report HK — Application Data (transitional)
 
 | Name                  | Type   | Bits | Description |
 |-----------------------|--------|------|-------------|
@@ -60,9 +59,9 @@ Controls pipeline execution. If `flags.auto_start` is set, execution may start a
 | modelId  | uint16 | 16   | Model selection ID |
 | flags    | uint16 | 16   | Bitfield: [0]auto_start, [1]async, [2]save_intermediate |
 
-Result routing for the current wire profile is selected through the processing settings below. A future compatible TC 210/1 revision may add a per-execution route override so each job can carry its route policy directly.
+Result routing for the current wire profile is selected through the processing settings below. In the target profile, each submitted job carries or references its own result-route/delivery policy and a job identifier.
 
-- TM 210/5 ACK/NACK — See `../ICD.md` (Service 210) for structure.
+- TM 210/5 ACK/NACK — transitional compatibility message. The target profile uses PUS Service 1 request verification.
 
 ### 3.2 Processing Settings (TC 210/2 Set, TC 210/3 Get, TM 210/4 Report)
 
@@ -107,9 +106,11 @@ Notes:
 
 ---
 
-## 4. Data/Result Transfer (Service 23)
+## 4. Data/result transfer
 
-- Input images may be received via TM 23/11 Data Chunk from PI-CAM (APID 0x101) if the configured path uses packetized transfer.
+The current compatibility profile uses legacy Service 23 for packetized payload/result chunks. PUS-C reserves Service 23 for File Management, so new FPGA implementation work shall use **Service 220 Payload Object Transfer**.
+
+- Input images may be received via legacy TM 23/11 Data Chunk from PI-CAM (APID 0x101) if the compatibility path uses packetized transfer.
 - Processing results are delivered to the endpoint(s) selected by `result.route_mask`.
 - Result delivery may therefore target MCU, PI-CAM, PI-COMMS, the requester, or more than one endpoint.
 
@@ -124,7 +125,7 @@ FPGA -> PI-CAM + MCU           payload product plus control decision input
 
 ### 4.1 Result Packets
 
-When `output.format` is not `raw`, use the following application data conventions for result TMs (Service 23):
+When `output.format` is not `raw`, the compatibility profile uses the following Service 23 result convention:
 
 - TM 23/11 Data Chunk (Results)
 
@@ -145,11 +146,13 @@ If `output.format=3 (classes)`, the first chunk SHOULD begin with a header: `num
 
 The FPGA does not assume that the final consumer is ground, camera, or OBC. Routing remains an execution/configuration policy above the computation itself.
 
+In the target profile, `jobId` identifies the Service 210 processing job while Service 220 uses a generic `objectId`/`transferId` for any large result object. Small classification/decision results may be reported directly through Service 210 without creating a bulk-transfer object.
+
 ---
 
 ## 5. Parameter Management (Service 20)
 
-Generic TLV parameters are supported for experimental configuration (keys 100..199 reserved for FPGA-specific extras not covered by Service 210).
+Generic parameters not owned by Service 210 use Service 20. The existing TLV/key representation is transitional; target message meanings follow PUS-C TC[20,1] report-values request, TM[20,2] value report, and TC[20,3] set-values request.
 
 ---
 
@@ -158,4 +161,4 @@ Generic TLV parameters are supported for experimental configuration (keys 100..1
 - `pkt_fpga_exec_tc`
 - `pkt_xfer_chunk_tm` (results), `pkt_xfer_done_tm` (results)
 
-Interfaces set APID=0x102 and appropriate PUS-A fields per service/subservice.
+Current interface artifacts set APID=0x102 and use the transitional PUS-A profile. The target FPGA software-facing boundary migrates to PUS-C, Service 1 verification, standard Services 3/5/9/20, mission-specific Service 210 processing, and Service 220 payload-object transfer.
