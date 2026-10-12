@@ -75,15 +75,17 @@ The OBC tracks:
 - Antenna;
 - PI-MGMT.
 
-Per endpoint:
+Per endpoint the OBC tracks:
 
-- last heartbeat time;
-- common state;
+- OBC supervision state `UNKNOWN/OK/STALE/OFFLINE/ERROR`;
+- last heartbeat/reply time;
+- last self-reported common endpoint state;
 - software version;
 - time-sync state;
 - active alarms;
 - last error;
-- restart/reset count.
+- restart/reset count;
+- cached HEARTBEAT/HEALTH/SENSORS/LINKS structures and their sample ages.
 
 Normative default supervision parameters are defined in `../component-services.md` and exposed through Service 20.
 
@@ -101,12 +103,22 @@ OBC SENSORS shall include only values actually measurable through the selected S
 
 System HK is OBC-owned:
 
-- `TC[3,128]` Request System HK;
-- `TM[3,129]` System HK Report.
+- `TC[3,128]` Request System HK — **empty Application Data**;
+- `TM[3,129]` System HK Report — complete current spacecraft snapshot.
 
-On request, the OBC obtains or uses sufficiently fresh `TM[3,25]` data for each requested endpoint and builds the aggregate report defined in `gs.md`.
+The OBC continuously maintains the latest required HK structures for every registered endpoint as part of normal supervision. A Ground System-HK request serializes that cache; it does not normally initiate a fresh request fan-out.
 
-The OBC reports missing endpoints as PARTIAL/TIMEOUT rather than blocking indefinitely.
+The OBC includes itself plus every registered subordinate endpoint, even when an endpoint is stale or offline. For each endpoint it reports:
+
+- OBC supervision state;
+- last self-reported endpoint state;
+- cached structure IDs;
+- age of each cached structure;
+- cached structure data when available.
+
+This makes non-response an explicit spacecraft state rather than a reason to omit the component or delay the Ground response.
+
+The complete wire layout is defined in `gs.md`.
 
 ## 6. Service 5 events
 
