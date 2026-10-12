@@ -774,7 +774,9 @@ This gives the OBC control/observability without making it the bulk-data path.
 
 ## 13. OBC orchestration service behavior
 
-The OBC is primarily a **consumer/controller** of component services rather than another custom mission-service provider.
+The OBC is the **spacecraft platform authority** and primarily a consumer/controller of subsystem services rather than another custom payload-service provider.
+
+This contract currently enumerates the payload/data-handling components that exist in EXN. It does not limit future OBC authority. AOCS/ADCS, EPS, thermal, mechanisms and other platform controllers may later be added as subordinate services while keeping the same authority model: OBC owns spacecraft state/safety/mission decisions; distributed controllers own local execution.
 
 It shall:
 
