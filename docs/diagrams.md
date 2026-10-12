@@ -5,7 +5,7 @@ This page collects representative EXN interactions among Ground Station (GS), ST
 The diagrams show **valid flows**, not one mandatory pipeline. EXN separates control authority from payload-data routing, and FPGA processing results may be routed differently depending on the request and mission policy.
 
 > [!NOTE]
-> Packet identifiers shown for the existing HK/HIL flow describe the **transitional PUS-A compatibility profile**. The target PUS-C service allocation is defined in [`services.md`](services.md). In that target, one-shot node HK moves to TC[3,27] / TM[3,25] and EXN System HK moves to mission-specific subtypes 3/128 and 3/129.
+> All packet identifiers in these diagrams use the normative **PUS Revision C** EXN service profile. One-shot endpoint HK uses TC[3,27] / TM[3,25]; EXN System HK uses TC[3,128] / TM[3,129].
 
 ---
 
@@ -21,7 +21,7 @@ sequenceDiagram
   participant CAM as Camera Service
   participant FPGA as FPGA Processing
 
-  GS->>MCU: TC 3/10 Request System HK
+  GS->>MCU: TC 3/128 Request System HK
   par Fan-out HK requests
     MCU->>CAM: TC 3/1 Request HK
     MCU->>FPGA: TC 3/1 Request HK
@@ -29,7 +29,7 @@ sequenceDiagram
   end
   CAM-->>MCU: TM 3/2 HK Report
   FPGA-->>MCU: TM 3/2 HK Report
-  MCU-->>GS: TM 3/100 System HK Report
+  MCU-->>GS: TM 3/129 System HK Report
 ```
 
 A flight-like deployment may place the Antenna service between GS and MCU without changing MCU control ownership.
