@@ -4,6 +4,9 @@ This document records system, structural, interface-definition, and architecture
 
 ## 2026-10-12
 
+- Add a normative reference-hardware HK/sensor catalogue for STM32H755, Raspberry Pi 5 and AMD Kria K26/KV260, including stable sensor IDs, units, ownership and Service 12 monitoring expectations.
+- Separate physical SENSORS from software/resource HEALTH metrics and bind the SENSORS report to an explicit hardware-profile ID.
+
 - Define the STM32 OBC as the **spacecraft platform authority**: centralized mission/safety authority with distributed subsystem execution; future AOCS/ADCS, EPS, thermal and mechanism controllers remain subordinate even when they close local real-time loops.
 - Clarify that STM32H755 is the architectural OBC demonstrator baseline, not a claim of flight-qualified radiation-tolerant hardware.
 
