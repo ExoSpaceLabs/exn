@@ -201,7 +201,21 @@ Each endpoint exposes predeclared HK structure IDs.
 
 The OBC may poll or enable periodic heartbeat reports. Recommended integration defaults are **1 s heartbeat** and **10 s full health**, but these are runtime policy rather than wire constants.
 
-Three consecutive missing heartbeat intervals should mark an endpoint `OFFLINE` and emit an OBC event. Automatic restart policy is configurable and disabled by default until the recovery behavior is verified.
+The OBC maintains its own **supervision state** for every registered endpoint. This state is authoritative from the spacecraft point of view and is deliberately separate from the endpoint's last self-reported operational state.
+
+| Value | Supervision state | Meaning |
+|---:|---|---|
+| 0 | `UNKNOWN` | no valid report has ever been received |
+| 1 | `OK` | latest required HK is within configured freshness limits |
+| 2 | `STALE` | cached HK exists but is older than the configured freshness limit |
+| 3 | `OFFLINE` | endpoint exceeded the configured missed-heartbeat/offline threshold |
+| 4 | `ERROR` | communication/protocol error prevents reliable supervision |
+
+An endpoint may therefore have last reported `endpoint_state=READY` while the OBC currently marks it `STALE` or `OFFLINE`. Ground shall trust the OBC supervision state for current spacecraft availability.
+
+The OBC continuously refreshes its HK cache according to Service 20 supervision policy. Ground System-HK requests do not normally trigger a new cascade of endpoint requests.
+
+Three consecutive missing heartbeat intervals are the integration default for transition to `OFFLINE`; the threshold is configurable. The OBC emits a Service 5 event on supervision-state transitions. Automatic restart policy is configurable and disabled by default until recovery behavior is verified.
 
 ### 5.3 Common HEARTBEAT / HEALTH wire prefix
 
@@ -803,11 +817,31 @@ OBC Service 20 parameters include:
 | `0x0002` | `supervision.health_period_ms` | U32 | 10000 |
 | `0x0003` | `supervision.missed_heartbeat_limit` | U8 | 3 |
 | `0x0004` | `supervision.auto_restart_enable` | BOOL | false |
+| `0x0005` | `supervision.stale_after_ms` | U32 | 15000 |
+| `0x0006` | `supervision.offline_after_ms` | U32 | 30000 |
 | `0x0010` | `time.resync_period_ms` | U32 | 60000 |
 | `0x0011` | `time.max_sync_age_ms` | U32 | deployment-defined |
 | `0x0020` | `transfer.default_chunk_size` | U16 | deployment-defined |
 
 Defaults are integration defaults and may be changed after measurement.
+
+### 13.2 OBC HK cache and spacecraft snapshot
+
+The OBC maintains the latest valid HEARTBEAT, HEALTH, SENSORS and LINKS structures received from every registered endpoint.
+
+This cache is populated by normal spacecraft supervision, independently of Ground requests:
+
+```text
+OBC -> endpoint: TC[3,27]
+endpoint -> OBC: TM[3,25]
+OBC -> cache: update sample + supervision state
+```
+
+The OBC may use periodic endpoint-generated HK instead where configured, but the ownership rule is unchanged: the OBC decides the supervision cadence and owns the authoritative cache.
+
+A Ground `TC[3,128]` does **not** select components and does not normally cause immediate downstream polling. It asks the OBC to serialize its current spacecraft snapshot into `TM[3,129]`.
+
+If a subordinate endpoint is stale or offline, its entry remains in the snapshot with the corresponding OBC supervision state and its last valid sample time. Missing data is therefore itself telemetry rather than a reason for the complete System-HK response to fail.
 
 Typical flow:
 
