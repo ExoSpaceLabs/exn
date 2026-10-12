@@ -34,6 +34,7 @@ Templates whose endpoint can vary document a default APID/ID and are overridden 
 - parameters: TC 20/1 -> TM 20/2, TC 20/3 set;
 - mission time set: TC 9/128;
 - Camera acquisition: TC 200/1;
+- Camera configuration: TC 200/3 set batch, TC 200/4 get scope, TM 200/5 report;
 - processing job: TC 210/1;
 - object transfer: Service 220;
 - request verification: Service 1.
