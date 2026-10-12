@@ -27,6 +27,52 @@ EXN separates responsibilities across independently testable logical components:
 
 In the initial EXN deployment, **Camera and Antenna execute on the same Raspberry Pi 5**. They remain separate logical endpoints and services because they have different mission responsibilities, even though one physical Pi performs both roles. A later deployment may split them across computers without changing the interfaces.
 
+## High-Level Service Map
+
+The diagram below shows **where each EXN service lives and what it is responsible for**. Service numbers refer to the target PUS-C mission profile.
+
+```mermaid
+flowchart LR
+  subgraph GROUND["Ground Segment"]
+    GS["GS / HIL<br/>operator commands<br/>TM inspection<br/>payload reception<br/>software/update control"]
+  end
+
+  subgraph PI["Raspberry Pi 5 Payload Node"]
+    CAM["PI-CAM · APID 0x101<br/><b>Camera service</b><br/>S200 acquisition / controls / products<br/>S220 payload-object transfer<br/>S3 HK · S5 events · S9 time<br/>S12 monitoring · S20 parameters"]
+    ANT["PI-COMMS · APID 0x103<br/><b>Antenna service</b><br/>Ground uplink/downlink gateway<br/>OBC TC/TM routing<br/>S220 payload downlink<br/>S3 HK · S5 events · S9 time<br/>S12 monitoring · S20 parameters"]
+    PM["PI-MGMT · APID 0x104<br/><b>Platform supervisor</b><br/>S8 restart / reboot / recovery<br/>S230 software lifecycle<br/>platform HK / alarms / watchdog<br/>S3 · S5 · S9 · S12 · S20"]
+  end
+
+  subgraph STM["STM32 Control Node"]
+    OBC["OBC · APID 0x100<br/><b>spacecraft command authority</b><br/>component orchestration / supervision<br/>S3 System HK · S8 management<br/>S9 time authority · S12 monitoring<br/>S20 parameters · S220 transfer control<br/>S230 update orchestration"]
+  end
+
+  subgraph PROC["FPGA Processing Node"]
+    FPGA["FPGA · APID 0x102<br/><b>payload processing service</b><br/>S210 capabilities / jobs / results<br/>S220 input / output objects<br/>S3 HK · S5 events · S8 recovery<br/>S9 time · S12 monitoring · S20 parameters<br/>S230 update where supported"]
+  end
+
+  GS -->|"Ground TC"| ANT
+  ANT -->|"TC to OBC"| OBC
+  OBC -->|"control"| CAM
+  OBC -->|"control"| FPGA
+  OBC -->|"manage"| PM
+
+  CAM -->|"payload object"| FPGA
+  FPGA -->|"result / product"| CAM
+
+  CAM -->|"direct payload"| ANT
+  FPGA -->|"direct payload"| ANT
+  OBC -->|"TM"| ANT
+  ANT -->|"TM + payload"| GS
+
+  PM -.->|"restart / supervise"| CAM
+  PM -.->|"restart / supervise"| ANT
+```
+
+**Common service meaning:** Service 1 provides request verification; Service 3 housekeeping/heartbeat; Service 5 events; Service 8 function/recovery management; Service 9 time; Service 12 monitoring/alarms; Service 20 parameters; Service 200 Camera control; Service 210 FPGA processing; Service 220 payload-object transfer; Service 230 software management.
+
+The key ownership rule is deliberately simple: **OBC decides, Camera acquires, FPGA processes, Antenna talks to Ground, and PI-MGMT keeps the Pi services alive and updateable.** Bulk payload bytes may flow directly from Camera or FPGA to Antenna without passing through the OBC.
+
 ## Routing Model
 
 EXN distinguishes the **control plane** from the **bulk data plane**.
@@ -120,44 +166,6 @@ FPGA <-> Antenna
 This allows the demonstrator to simulate more than one spacecraft link without requiring one physical cable for every logical endpoint pair.
 
 Mission packet/service semantics remain above that transport choice.
-
-## System Graph
-
-```mermaid
-graph LR
-  subgraph "Ground Segment"
-    GS[Ground Station / HIL]
-  end
-
-  subgraph "Linux Payload Node - Raspberry Pi"
-    CAM[Camera Service]
-    ANT[Antenna Service]
-    PM[PI-MGMT / Platform Management<br/>restart / watchdog / health / update]
-  end
-
-  subgraph "STM32 Control Node"
-    OBC[OBC / MCU-RTOS]
-  end
-
-  subgraph "FPGA Processing Node"
-    FPGA[Image / AI Processing]
-  end
-
-  GS <--> ANT
-  ANT <--> OBC
-  OBC <--> CAM
-  OBC <--> FPGA
-  CAM <--> FPGA
-  CAM <--> ANT
-  FPGA <--> ANT
-  OBC <--> PM
-  PM --- CAM
-  PM --- ANT
-```
-
-The graph shows **allowed logical paths**, not mandatory routing for every operation. The OBC remains the supervisory control point while payload-data routing may bypass it when appropriate.
-
-Additional sequence diagrams are maintained in [docs/diagrams.md](docs/diagrams.md).
 
 ## Interfaces and ICDs
 
