@@ -219,7 +219,7 @@ The architecture is ahead of the component implementations, deliberately:
 |---|---|
 | System architecture / ICD | defined on PUS Revision C; implementation alignment in progress |
 | CCSDSPack | released and qualified; v2.0.0 is the current released EXN baseline |
-| EXN-GS / HIL | implementation is being migrated from its old PUS-A code path to the normative PUS-C profile |
+| EXN-GS / HIL | PUS-C migration implemented in the companion change set; packet/HIL CI passes on the migration branch |
 | STM32 OBC | repository still requires implementation against HardRT + DAS |
 | Raspberry Pi dual-role payload node | existing repository is legacy/experimental; target implementation must provide both PI-CAM and PI-COMMS on the same Pi 5 |
 | FPGA processing | architecture defined; implementation repository remains a placeholder |
