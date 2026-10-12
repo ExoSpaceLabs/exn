@@ -241,7 +241,7 @@ The extension is endpoint-defined and bounded by that endpoint ICD.
 
 ### 5.4 Sensor registry
 
-Every endpoint shall expose every sensor/value source that is **actually available** on its selected hardware. The ICD shall not invent sensors that the board cannot measure.
+Every endpoint shall expose the physical sensors defined for its active reference-hardware profile in `icd/hardware-sensors.md`. The ICD shall not invent sensors that the board cannot measure, but once a reference profile marks a sensor **required**, failure to expose it is a platform/driver degradation rather than an excuse to omit the field.
 
 A sensor descriptor contains:
 
@@ -264,9 +264,10 @@ Examples:
 
 ### 5.5 Sensor report wire model
 
-The SENSORS HK block contains bounded entries:
+The SENSORS HK block contains the active hardware profile followed by bounded entries:
 
 ```text
+hardware_profile_id:u16
 count:u16
 repeat count:
     sensor_id:u16
@@ -277,7 +278,7 @@ repeat count:
     value[value_length]
 ```
 
-Sensor IDs are endpoint-local and published by the endpoint capability/ICD. Unsupported sensors are not fabricated with zero values; they are omitted or explicitly marked UNAVAILABLE.
+Sensor IDs and engineering units are frozen in the reference-hardware sensor ICD. Unsupported optional sensors are omitted or explicitly marked UNAVAILABLE. A required profile sensor that becomes unavailable shall be marked UNAVAILABLE and reflected as degraded platform health; zero remains a valid measurement and never means "unsupported".
 
 ## 5.6 Event report payload
 
