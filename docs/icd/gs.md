@@ -167,6 +167,12 @@ The cached HEARTBEAT block contains the endpoint's last reported `uptime_ms` and
 
 The System-HK report is built from the OBC cache and does not normally trigger downstream TCs. Supervision cadence, stale/offline thresholds, and which structures are maintained in the cache are configured separately through OBC Service 20.
 
+### 6.3 Recovery diagnostics
+
+System HK provides the compact recovery summary required for routine operations. For deeper diagnosis, Ground may command the OBC to create a diagnostic-log object using Service 8 function `CREATE_DIAGNOSTIC_LOG`, then retrieve that immutable object through Service 220.
+
+The OBC diagnostic log includes its own supervision/recovery history even if the failed endpoint never becomes responsive again.
+
 ## 7. Parameter management from Ground
 
 Service 20 is **runtime configuration**, not a generic command service.
@@ -214,9 +220,3 @@ GS decodes telemetry using `PUS:revC:TM` with the EXN six-octet CUC timestamp pr
 
 There is no GS Service 250 packet. Local daemon acknowledgements/status remain local IPC, while spacecraft request verification uses PUS Service 1.
 
-
-### 6.3 Recovery diagnostics
-
-System HK provides the compact recovery summary required for routine operations. For deeper diagnosis, Ground may command the OBC to create a diagnostic-log object using Service 8 function `CREATE_DIAGNOSTIC_LOG`, then retrieve that immutable object through Service 220.
-
-The OBC diagnostic log includes its own supervision/recovery history even if the failed endpoint never becomes responsive again.
