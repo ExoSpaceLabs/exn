@@ -1,298 +1,230 @@
-# MCU-RTOS Device/Service ICD
+# STM32 OBC Device/Service ICD
 
-This document specializes the EXN master ICD for the STM32 MCU-RTOS/OBC control node. The wire-level packet profile, APID policy, CRC policy, proxy preamble and current compatibility payloads are authoritative in `../ICD.md`; the target PUS service tailoring is authoritative in `../services.md`.
+This document is the normative EXN ICD for the STM32 OBC endpoint.
 
-## 1. Role and identifiers
+Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../services.md`, and shared component behavior in `../component-services.md`.
 
-- Node APID: `0x100`.
-- PUS-A TC Source ID: `0x01`.
-- Acts as the northbound logical Ground endpoint, system controller, downstream command router, System HK aggregator, and time master.
-- Issues device TCs to PI-CAM (`0x101`), FPGA-AI (`0x102`), PI-COMMS/Antenna (`0x103`) and PI-MGMT (`0x104`).
-- Receives and forwards device TMs while retaining the producing device APID.
-- Intended implementation baseline: **HardRT 0.5.1** for runtime/scheduling and **DAS v0.1.0** for STM32H755 device/board access.
+## 1. Identity and role
 
-All currently executable MCU/HIL packet definitions use the EXN **transitional PUS revision-A** profile. The target OBC implementation shall migrate to the PUS-C service profile in `../services.md` before its public packet API is frozen.
+| Item | Value |
+|---|---|
+| APID | `0x100` |
+| PUS-C source/destination ID | `0x0001` |
+| PUS revision | C |
 
-## 2. Packet/APID behavior
+The OBC is the spacecraft command authority, component orchestrator, System-HK aggregator, time authority and health/fault supervisor.
 
-EXN APID semantics are direction-specific:
+The intended implementation baseline is HardRT 0.5.1 + DAS v0.1.0 on STM32H755 / NUCLEO-H755ZI-Q.
 
-- TCs emitted by MCU use the **destination APID**: PI-CAM `0x101`, FPGA `0x102`, PI-COMMS/Antenna `0x103`, or PI-MGMT `0x104`.
-- TMs produced by MCU use APID `0x100`.
-- GS-originated TCs received by MCU use destination APID `0x100` and PUS-A TC Source ID `0x10`.
+## 2. Packet behavior
 
-The MCU maintains sequence state for each Packet Identification stream it originates.
+The OBC:
 
-## 3. GS northbound proxying
+- receives Ground-directed TCs at APID `0x100`;
+- produces OBC TMs with APID `0x100`;
+- emits downstream TCs with the target endpoint APID and PUS-C Source ID `0x0001`;
+- consumes target TMs while preserving their producer APID;
+- maintains CCSDS sequence counters and PUS-C TM message-type counters per required stream.
 
-Ground traffic logically terminates at MCU for supervised control. The HIL profile connects GS directly to MCU; the flight-like profile carries the same OBC-destined packets through PI-COMMS. Device-directed GS operations therefore use an MCU routing hop.
+All OBC packet handling uses PUS Revision C.
 
-### 3.1 Device-directed operation
+## 3. Ground-routed command handling
 
-1. GS sends a TC to APID `0x100`, Source ID `0x10`.
-2. Application Data begins with the four-octet proxy preamble from `../ICD.md`:
-   `{transactionId:u16,target:u8,options:u8}`.
-3. MCU consumes the preamble.
-4. MCU constructs a new TC addressed to the target APID with Source ID `0x01` and only the service-specific payload.
-5. MCU correlates downstream responses to `transactionId` and forwards them to GS.
+For a routed Ground request, the OBC consumes the routing envelope defined in `gs.md`:
 
-Valid proxy targets are `1=PI-CAM`, `2=FPGA-AI`, `3=PI-COMMS/Antenna`, and `4=PI-MGMT`. MCU-local operations do not use this preamble.
+```text
+transaction_id:u16
+target:u8
+options:u8
+target_payload[...]
+```
 
-### 3.2 Direct MCU services
+The OBC shall:
 
-System HK TC `3/10` is a direct GS -> MCU command and **must not** carry the proxy preamble. Its Application Data is exactly:
+1. validate the Ground TC and Service 1 acceptance semantics;
+2. authorize/validate the target operation;
+3. remove the routing envelope;
+4. construct a new PUS-C TC for the target endpoint;
+5. track downstream verification/results against `transaction_id`;
+6. forward/report the result to Ground according to the operation and options.
 
-`{transactionId:u16, include_mask:u8, detailMask:u16}`
+The OBC shall not forward malformed or unauthorized requests merely because the APID exists.
 
-A GS request for MCU-local TC `3/1` HK is likewise direct.
+## 4. Endpoint registry and supervision
 
-## 4. System HK aggregation
-
-For TC `3/10`, MCU:
-
-1. records `transactionId`, `include_mask`, and `detailMask`;
-2. collects MCU self-HK when bit0 is set;
-3. issues TC `3/1` to PI-CAM, FPGA, PI-COMMS and/or PI-MGMT when bits1/2/3/4 are set;
-4. waits for the selected TM `3/2` reports up to the configured aggregation timeout;
-5. produces TM `3/100` using APID `0x100` and echoes `transactionId`;
-6. reports `present_mask` and `status=OK/PARTIAL/TIMEOUT/ERROR` according to collected data.
-
-Recommended integration defaults remain approximately 200 ms per device and no more than 600 ms overall. These values are policy defaults, not packet-format requirements.
-
-## 5. MCU packet scope
-
-The packet numbers in this section describe the **transitional compatibility profile**. Target service numbers and verification behavior are defined in `../services.md`.
-
-### Emits TCs
-
-- `3/1` HK Request to PI-CAM/FPGA/PI-COMMS/PI-MGMT.
-- `17/1` Set Time to each target node.
-- `20/1` Set Parameter and `20/2` Get Parameter.
-- `23/1` Start Transfer and `23/2` Stop Transfer.
-- `200/1..3` Camera control to PI.
-- `210/1..3` processing control to FPGA.
-
-### Produces TMs/reports
-
-- `3/2` MCU HK Report.
-- `3/100` System HK Report.
-- `5/1..3` MCU event reports.
-- `17/2` MCU Time Report when requested/used.
-
-### Receives device TMs
-
-- `3/2` HK Report.
-- `5/1..3` Event reports.
-- `17/2` Time Report.
-- `20/3` Parameter Value.
-- `23/10..12` transfer packets.
-- `200/4..5` camera reports/ACKs.
-- `210/4..5` FPGA reports/ACKs.
-
-## 6. MCU housekeeping payload
-
-When MCU produces TM `3/2`, Application Data uses big-endian encoding:
-
-| Name | Type | Bits | Description |
-|---|---|---:|---|
-| `uptime_ms` | uint64 | 64 | System uptime in milliseconds |
-| `reset_cause` | uint8 | 8 | `0=POR,1=PIN,2=IWDG,3=WWDG,4=SW,5=LPWR,6=BOR` |
-| `fw_version` | uint32 | 32 | `major<<24 | minor<<16 | patch<<8 | build` |
-| `static_ram_used_bytes` | uint32 | 32 | Static RAM committed by the firmware/runtime configuration |
-| `static_ram_free_bytes` | uint32 | 32 | Remaining RAM budget not committed to static regions/stacks |
-| `task_count` | uint16 | 16 | Number of HardRT application tasks |
-| `stack_low_water_min` | uint16 | 16 | Lowest remaining stack margin |
-| `link_status` | uint16 | 16 | Platform-defined active-link bitmask |
-| `tc_sent` | uint32 | 32 | TCs emitted |
-| `tm_rcvd` | uint32 | 32 | TMs received |
-| `err_count` | uint32 | 32 | Error counter |
-| `ts_cuc` | bytes[6] | 48 | Mission CUC timestamp in Application Data |
-
-An optional diagnostic TLV extension may follow when requested by `detailMask`.
-
-## 7. Legacy time assignment, Service 17
-
-The current compatibility profile uses Service 17 for time messages. PUS-C standardizes **Service 9** for Time Management and **Service 17** for Test; new OBC implementation work shall therefore use the Service 9 target profile from `../services.md`.
-
-- TC `17/1`: Application Data contains `time_cuc[6]`.
-- TM `17/2`: Application Data contains `time_cuc[6]` and optional quality/status fields.
-
-The six-octet CUC value is mission Application Data. It is not a PUS-C secondary header.
-
-## 8. Event reporting, Service 5
-
-Service 5 also uses PUS revision A. Event ID is Application Data, not a separate PUS-B field.
-
-Target MCU event severity follows PUS-C Service 5:
-
-| Event ID | Severity/subservice | Description |
-|---:|---|---|
-| `0x0001` | `5/1` informative | Boot completed |
-| `0x0002` | `5/2` low severity | Link degraded |
-| `0x0003` | `5/4` high severity | Watchdog reset detected after reboot |
-
-Subtype `5/3` is reserved for medium-severity anomalies in the target profile.
-
-Application Data starts with `eventId:uint16`, followed by event-specific bytes.
-
-## 9. Parameter management
-
-The previous design listed transport-selection keys such as `SPI/UART/CAN/UDP` and a runtime `crc.enable` switch. Those are **not frozen mission parameters**:
-
-- physical/link transport selection belongs to deployment/integration policy unless a real runtime-switching requirement is demonstrated;
-- SpWKit is a logical transport option, not another MCU peripheral enum;
-- CRC16 is part of the selected packet profile and shall not be casually disabled through a mission parameter;
-- Service 20 message meanings shall follow the normalized PUS-C profile before parameter IDs are frozen.
-
-MCU parameter identifiers will be allocated with the OBC implementation and recorded in this ICD once the associated runtime behavior exists. This avoids publishing configuration knobs for software that does not yet exist.
-## 10. CCSDSPack v2 mapping
-
-The `.cfg` templates and `interfaces/mcu-rtos/exn_interfaces.h` currently mirror the transitional PUS-A profile for EXN-GS/HIL compatibility. They are not the final OBC service API.
-
-Key rules:
-
-- downstream TC template APID is the destination (`0x101`, `0x102`, `0x103`, or target PI-MGMT `0x104`);
-- MCU-produced TM APID is `0x100`;
-- TC selector is `PUS:revA:TC`, source-ID width one octet, Source ID `0x01`;
-- TM selector is `PUS:revA:TM`, destination-ID width zero octets;
-- packet error control is CRC16;
-- service-specific timestamps remain Application Data.
-
-
-The target OBC interface migrates to CCSDSPack PUS-C TC/TM headers, standard Service 1 verification, normalized Services 3/5/9/20, and mission-specific Services 200/210/220. That migration shall be performed together with EXN-GS and the shared interface artifacts rather than piecemeal.
-
-
-## 11. Target OBC component-management contract
-
-The OBC is the **system command authority and component orchestrator**.
-
-It maintains an endpoint registry for:
+The OBC tracks:
 
 - PI-CAM;
 - FPGA;
-- PI-COMMS/Antenna;
+- Antenna;
 - PI-MGMT.
 
-For each endpoint it tracks:
+Per endpoint:
 
 - last heartbeat time;
-- logical state `UNKNOWN/STARTING/READY/BUSY/DEGRADED/ERROR/UPDATING/OFFLINE`;
+- common state;
 - software version;
 - time-sync state;
 - active alarms;
 - last error;
 - restart/reset count.
 
-Recommended integration policy is a 1 s HEARTBEAT and 10 s HEALTH cycle. Three missed heartbeat intervals mark an endpoint OFFLINE and generate an OBC Service 5 event. Automatic recovery is policy-controlled rather than implicit.
+Normative default supervision parameters are defined in `../component-services.md` and exposed through Service 20.
 
-## 12. OBC management operations
+Three missed heartbeat periods mark an endpoint OFFLINE and produce an OBC Service 5 event unless configured otherwise.
 
-The target OBC consumes standard Service 8 Function Management.
+## 5. Housekeeping
 
-Typical operations include:
+### 5.1 OBC one-shot HK
 
-```text
-OBC -> PI-MGMT: restart Camera service
-OBC -> PI-MGMT: restart Antenna service
-OBC -> PI-MGMT: reboot Pi
-OBC -> FPGA: reinitialize/reset processing endpoint
-GS -> OBC: reboot OBC
-```
+Ground or another authorized endpoint requests OBC HK with `TC[3,27]`. OBC returns `TM[3,25]` using the common HEARTBEAT/HEALTH/SENSORS/LINKS structures from `../component-services.md`.
 
-Pi mission-service restart is always addressed to PI-MGMT so recovery does not depend on the failed process receiving its own restart command.
+OBC SENSORS shall include only values actually measurable through the selected STM32/DAS implementation, for example MCU internal temperature/reference channels once implemented.
 
-## 13. OBC time authority
+### 5.2 System HK
 
-The OBC owns the on-board mission clock.
+System HK is OBC-owned:
 
-Runtime clocks:
+- `TC[3,128]` Request System HK;
+- `TM[3,129]` System HK Report.
 
-| Clock | Type | Meaning |
-|---|---|---|
-| `monotonic_ms` | uint64 | milliseconds since OBC boot; never steps backwards |
-| `unix_ms` | uint64 | UTC milliseconds since 1970-01-01; valid after synchronization |
+On request, the OBC obtains or uses sufficiently fresh `TM[3,25]` data for each requested endpoint and builds the aggregate report defined in `gs.md`.
 
-The OBC receives authoritative time from Ground or a future external source, then distributes `TC[9,128] Set Mission Time` to PI-CAM, PI-COMMS, PI-MGMT and FPGA.
+The OBC reports missing endpoints as PARTIAL/TIMEOUT rather than blocking indefinitely.
 
-A target endpoint shall maintain mission time as a synchronized offset from its monotonic clock. Repeated synchronization shall not make application timers depend on wall-clock steps.
+## 6. Service 5 events
 
-The target telemetry timestamp is six-octet CUC using Unix epoch, with four coarse-second octets and two fine-fraction octets.
-
-## 14. Housekeeping and monitoring
-
-The target OBC consumes predeclared Service 3 structures:
-
-- HEARTBEAT;
-- HEALTH;
-- SENSORS;
-- LINKS;
-- endpoint-specific detail.
-
-System HK `3/128 -> 3/129` aggregates the latest valid reports and endpoint state.
-
-The OBC also consumes Service 12 monitor state and Service 5 alarm events. The OBC itself shall report all sensor/value sources actually measurable through the STM32/DAS target, including MCU internal temperature and internal voltage/reference channels when those measurements are implemented.
-
-No board sensor shall be documented as available until the selected hardware path can measure it.
-
-## 15. OBC payload-transfer control
-
-The OBC controls transfers without becoming the bulk-data router.
-
-For every requested Service 220 transfer it records:
-
-- transfer ID;
-- source endpoint;
-- object ID;
-- destination;
-- expected size when known;
-- start time;
-- transfer state/result.
+OBC event IDs occupy `0x1000..0x1FFF`.
 
 Examples:
 
+| Event | Severity |
+|---|---|
+| boot completed | 5/1 informative |
+| endpoint heartbeat lost | 5/2 low or 5/3 medium according to policy |
+| watchdog reset detected | 5/4 high |
+| time synchronization lost | 5/2 or 5/3 according to duration |
+| component recovery failed | 5/3 or 5/4 |
+
+Event payload format is the common Service 5 model in `../component-services.md`.
+
+## 7. Service 8 component management
+
+The OBC may perform/route Service 8 functions including:
+
 ```text
-OBC -> PI-CAM: transfer object X to Ground
-PI-CAM -> Antenna -> Ground
-
-OBC -> FPGA: transfer result object Y to Ground
-FPGA -> Antenna -> Ground
-
-OBC -> PI-CAM: transfer object Z to OBC
-PI-CAM -> OBC
+OBC -> PI-MGMT: restart Camera
+OBC -> PI-MGMT: restart Antenna
+OBC -> PI-MGMT: reboot Pi
+OBC -> FPGA: reinitialize processing endpoint
+Ground -> OBC: reboot OBC
 ```
 
-The first two preserve OBC control while removing image/result bytes from the MCU data path.
+A Pi mission-service restart is addressed to PI-MGMT, not to the failing service itself.
 
-## 16. Camera and processing orchestration
+## 8. Service 9 time authority
+
+The OBC maintains:
+
+- `monotonic_ms:uint64`: milliseconds since OBC boot, never stepped backwards;
+- `unix_ms:uint64`: synchronized Unix-epoch milliseconds.
+
+Ground synchronizes the OBC with `TC[9,128] Set Mission Time`.
+
+OBC propagates that command to PI-CAM, FPGA, Antenna and PI-MGMT after synchronization and periodically according to Service 20 policy.
+
+PUS-C OBC telemetry uses the normative CUC timestamp defined in `../ICD.md`.
+
+## 9. Service 12 monitoring
+
+The OBC consumes endpoint monitoring/alarm state and also monitors its own declared health values.
+
+Monitoring covers actual available measurements and operational health conditions only. Threshold values are Service 20 configuration parameters.
+
+The OBC records active alarms in System HK and emits Service 5 events on relevant transitions.
+
+## 10. Service 20 runtime configuration
+
+Service 20 contains OBC **settings**, not actions.
+
+Initial OBC parameters are defined in `../component-services.md`, including:
+
+- heartbeat period;
+- health-report period;
+- missed-heartbeat limit;
+- automatic-restart enable;
+- time resynchronization period;
+- maximum accepted synchronization age;
+- default transfer chunk size.
+
+Restarting a component, synchronizing time, starting Camera acquisition, or submitting an FPGA job is not Service 20.
+
+## 11. Camera orchestration
 
 The OBC shall be able to:
 
 - query Camera capabilities;
-- set/get Camera controls;
+- set/get Service 200 Camera controls;
 - start/stop acquisition;
-- query acquisition status;
+- inspect acquisition status;
 - list Camera products;
-- command a selected product to OBC, FPGA or Ground;
-- query FPGA processing capabilities;
-- submit/cancel processing jobs;
+- command a Camera object to OBC, FPGA or Ground.
+
+Bulk Camera data does not pass through OBC unless OBC itself is the selected destination.
+
+## 12. FPGA orchestration
+
+The OBC shall be able to:
+
+- query Service 210 processing capabilities;
+- submit/cancel jobs;
 - query job status;
 - consume small decision results;
-- command large FPGA result objects to Camera, OBC or Ground.
+- command large result objects to OBC, Camera or Ground.
 
-The OBC does not need to know which processing algorithms exist at compile time; it uses FPGA capability/operation IDs from Service 210.
+The OBC does not compile in assumptions about the final FPGA algorithms; it uses advertised operation IDs.
 
-## 17. Software inventory and update control
+## 13. Payload-transfer registry
 
-The OBC coordinates Service 230 software management.
+For every OBC-commanded Service 220 transfer the OBC tracks:
 
-It shall be able to query:
+```text
+transfer_id
+source_endpoint
+object_id
+destination
+expected_size
+started_unix_ms
+state
+result
+```
 
-- OBC firmware version;
-- PI-CAM service version;
-- Antenna service version;
-- PI-MGMT version;
-- FPGA software/bitstream version as applicable.
+Ground downlink is OBC-controlled but source-to-Antenna:
 
-Pi update activation is commanded through PI-MGMT. The update package is staged as a Service 220 object, validated, activated, and followed by heartbeat/HK health verification.
+```text
+OBC -> Camera/FPGA: transfer object to Ground
+Camera/FPGA -> Antenna -> Ground
+```
 
-An update is not recorded successful merely because an executable was copied; the updated endpoint must return healthy after activation.
+## 14. Software management
+
+The OBC coordinates Service 230 inventory/update operations.
+
+It may manage:
+
+- OBC firmware;
+- PI-CAM;
+- Antenna;
+- PI-MGMT;
+- FPGA node software;
+- FPGA bitstream/model bundle where supported.
+
+Package bytes use Service 220. Activation/rollback state uses Service 230. An update is successful only after post-activation heartbeat/HK validation.
+
+## 15. PUS-C construction
+
+OBC TCs use `PUS:revC:TC`, Source ID `0x0001`, CRC16 and command-specific verification flags.
+
+OBC TMs use `PUS:revC:TM`, the appropriate destination ID, message-type counter and the normative CUC timestamp.
+
+The OBC shall not implement PUS-A packet paths or legacy Service 17/23/250 semantics.
