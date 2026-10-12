@@ -27,12 +27,16 @@ graph LR
   OBC[STM32 OBC / Control Node]
   CAM[Camera Payload Service]
   ANT[Antenna Service]
+  PM[PI-MGMT / Platform Supervisor]
   FPGA[FPGA AI / Processing Node]
 
   GS <--> ANT
   ANT <--> OBC
   OBC <--> CAM
+  OBC <--> PM
   OBC <--> FPGA
+  PM --- CAM
+  PM --- ANT
   CAM <--> FPGA
   CAM <--> ANT
   FPGA <--> ANT
@@ -54,10 +58,10 @@ Ground Station
 +------------------------------------------------+
 | Raspberry Pi 5 - Embedded Linux Payload Node   |
 |                                                |
-|  Camera Service       Antenna Service    |
+|  Camera Service       Antenna Service          |
 |        |                        |               |
-|        +------ platform services -------------+|
-|               watchdog / health / logging      |
+|        +-------- PI-MGMT -------+               |
+|          watchdog / restart / health / update  |
 +----------------------+-------------------------+
                        |
                  Ethernet / other carrier
