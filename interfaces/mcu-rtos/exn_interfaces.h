@@ -2,19 +2,16 @@
 #define EXN_INTERFACES_H
 
 /*
- * EXN packet/application interface constants.
+ * EXN mission interface constants.
+ * Normative source: ExoSpaceLabs/exn docs/ICD.md, docs/services.md,
+ * docs/component-services.md, and docs/icd/.
  *
- * Wire profile:
+ * Active profile:
  *  - CCSDS Space Packet version 0
- *  - CCSDSPack v2 PUS revision A for the transitional EXN-GS/HIL profile
- *  - TC source ID width: 1 octet
- *  - TM destination ID width: 0 octets
- *  - CRC-16/CCITT-FALSE packet error control
- *  - Application-data multi-byte integers: big-endian
- *
- * APID policy:
- *  - TC APID identifies the destination EXN endpoint.
- *  - TM APID identifies the producing EXN endpoint.
+ *  - ECSS PUS Revision C
+ *  - PUS-C source/destination identifiers: 16 bits
+ *  - CRC-16/CCITT-FALSE
+ *  - big-endian mission Application Data
  */
 
 #include <stdint.h>
@@ -23,206 +20,271 @@
 extern "C" {
 #endif
 
-#define EXN_PUS_TC_SOURCE_ID_OCTETS 1u
-#define EXN_PUS_TM_DESTINATION_ID_OCTETS 0u
-#define EXN_PUS_TC_ACK_FLAGS_DEFAULT 0u
+#define EXN_PUS_TC_ACK_ACCEPTANCE        0x8u
+#define EXN_PUS_TC_ACK_COMPLETION        0x1u
+#define EXN_PUS_TC_ACK_START             0x4u
+#define EXN_PUS_TC_ACK_PROGRESS          0x2u
+#define EXN_PUS_TC_ACK_READ_DEFAULT      0x8u
+#define EXN_PUS_TC_ACK_CHANGE_DEFAULT    0x9u
+#define EXN_PUS_TC_ACK_LONG_DEFAULT      0xDu
 
-/* Application Process Identifiers. */
 typedef enum {
-  APID_GS   = 0x0F0u,
-  APID_MCU  = 0x100u,
-  APID_PI       = 0x101u,
+  APID_GS       = 0x0F0u,
+  APID_OBC      = 0x100u,
+  APID_PI_CAM   = 0x101u,
   APID_FPGA     = 0x102u,
-  APID_PI_COMMS = 0x103u,
+  APID_ANTENNA  = 0x103u,
   APID_PI_MGMT  = 0x104u
 } exn_apid_t;
 
-/* PUS-A TC Source IDs. */
 typedef enum {
-  SRCID_MCU  = 0x01u,
-  SRCID_PI   = 0x02u,
-  SRCID_FPGA     = 0x03u,
-  SRCID_PI_COMMS = 0x04u,
-  SRCID_PI_MGMT  = 0x05u,
-  SRCID_GS       = 0x10u
-} exn_srcid_t;
+  PUSID_OBC      = 0x0001u,
+  PUSID_PI_CAM   = 0x0002u,
+  PUSID_FPGA     = 0x0003u,
+  PUSID_ANTENNA  = 0x0004u,
+  PUSID_PI_MGMT  = 0x0005u,
+  PUSID_GS       = 0x0010u
+} exn_pus_id_t;
 
-/*
- * Transitional EXN service identifiers used by current GS/HIL traffic.
- * Do not extend this legacy numbering for new endpoint implementations.
- * Target PUS-C allocation is defined in docs/services.md.
- */
 typedef enum {
-  SVC_HK      = 3u,
-  SVC_EVENTS  = 5u,
-  SVC_TIME    = 17u,
-  SVC_PARAM   = 20u,
-  SVC_XFER    = 23u,
-  SVC_CAM     = 200u,
-  SVC_FPGA    = 210u,
-  SVC_GS_LINK = 250u
+  SVC_VERIFY   = 1u,
+  SVC_HK       = 3u,
+  SVC_EVENTS   = 5u,
+  SVC_FUNCTION = 8u,
+  SVC_TIME     = 9u,
+  SVC_MONITOR  = 12u,
+  SVC_PARAM    = 20u,
+  SVC_CAMERA   = 200u,
+  SVC_PROCESS  = 210u,
+  SVC_OBJECT   = 220u,
+  SVC_SOFTWARE = 230u
 } exn_service_t;
 
 typedef enum {
-  SUB_HK_REQ        = 1u,
-  SUB_HK_REPORT     = 2u,
-  SUB_SYS_HK_REQ    = 10u,
-  SUB_SYS_HK_REPORT = 100u,
+  SUB_VERIFY_ACCEPT_OK       = 1u,
+  SUB_VERIFY_ACCEPT_FAIL     = 2u,
+  SUB_VERIFY_START_OK        = 3u,
+  SUB_VERIFY_START_FAIL      = 4u,
+  SUB_VERIFY_PROGRESS_OK     = 5u,
+  SUB_VERIFY_PROGRESS_FAIL   = 6u,
+  SUB_VERIFY_COMPLETE_OK     = 7u,
+  SUB_VERIFY_COMPLETE_FAIL   = 8u,
 
-  SUB_EVENT_INFO  = 1u,
-  SUB_EVENT_WARN  = 2u,
-  SUB_EVENT_ERROR = 3u,
+  SUB_HK_ENABLE_PERIODIC     = 5u,
+  SUB_HK_DISABLE_PERIODIC    = 6u,
+  SUB_HK_REPORT              = 25u,
+  SUB_HK_REQUEST             = 27u,
+  SUB_SYS_HK_REQUEST         = 128u,
+  SUB_SYS_HK_REPORT          = 129u,
 
-  SUB_TIME_SET    = 1u,
-  SUB_TIME_REPORT = 2u,
+  SUB_EVENT_INFO             = 1u,
+  SUB_EVENT_LOW              = 2u,
+  SUB_EVENT_MEDIUM           = 3u,
+  SUB_EVENT_HIGH             = 4u,
 
-  SUB_PARAM_SET = 1u,
-  SUB_PARAM_GET = 2u,
-  SUB_PARAM_VAL = 3u,
+  SUB_FUNCTION_PERFORM       = 1u,
 
-  SUB_XFER_START = 1u,
-  SUB_XFER_STOP  = 2u,
-  SUB_XFER_META  = 10u,
-  SUB_XFER_CHUNK = 11u,
-  SUB_XFER_DONE  = 12u,
+  SUB_TIME_SET_MISSION       = 128u,
 
-  SUB_CAM_CAPTURE = 1u,
-  SUB_CAM_SET     = 2u,
-  SUB_CAM_GET     = 3u,
-  SUB_CAM_REPORT  = 4u,
-  SUB_CAM_ACK     = 5u,
+  SUB_MONITOR_ENABLE_DEF     = 1u,
+  SUB_MONITOR_DISABLE_DEF    = 2u,
+  SUB_MONITOR_GET_OOL        = 10u,
+  SUB_MONITOR_OOL_REPORT     = 11u,
+  SUB_MONITOR_GET_STATUS     = 13u,
+  SUB_MONITOR_STATUS_REPORT  = 14u,
+  SUB_MONITOR_ENABLE         = 15u,
+  SUB_MONITOR_DISABLE        = 16u,
 
-  SUB_FPGA_EXEC   = 1u,
-  SUB_FPGA_SET    = 2u,
-  SUB_FPGA_GET    = 3u,
-  SUB_FPGA_REPORT = 4u,
-  SUB_FPGA_ACK    = 5u,
+  SUB_PARAM_REPORT_REQUEST   = 1u,
+  SUB_PARAM_REPORT           = 2u,
+  SUB_PARAM_SET              = 3u,
 
-  SUB_GS_LINK_ACK = 1u
+  SUB_CAM_START              = 1u,
+  SUB_CAM_STOP               = 2u,
+  SUB_CAM_SET_CONTROLS       = 3u,
+  SUB_CAM_GET_CONTROLS       = 4u,
+  SUB_CAM_CONTROLS_REPORT    = 5u,
+  SUB_CAM_GET_CAPABILITIES   = 6u,
+  SUB_CAM_CAPABILITIES       = 7u,
+  SUB_CAM_LIST_PRODUCTS      = 8u,
+  SUB_CAM_PRODUCT_CATALOG    = 9u,
+  SUB_CAM_DELETE_PRODUCT     = 10u,
+  SUB_CAM_GET_ACQ_STATUS     = 11u,
+  SUB_CAM_ACQ_STATUS         = 12u,
+
+  SUB_PROCESS_SUBMIT         = 1u,
+  SUB_PROCESS_CANCEL         = 2u,
+  SUB_PROCESS_GET_STATUS     = 3u,
+  SUB_PROCESS_STATUS         = 4u,
+  SUB_PROCESS_GET_CAPS       = 5u,
+  SUB_PROCESS_CAPS           = 6u,
+  SUB_PROCESS_SMALL_RESULT   = 7u,
+
+  SUB_OBJECT_START           = 1u,
+  SUB_OBJECT_STOP            = 2u,
+  SUB_OBJECT_GET_STATUS      = 3u,
+  SUB_OBJECT_METADATA        = 10u,
+  SUB_OBJECT_CHUNK           = 11u,
+  SUB_OBJECT_COMPLETE        = 12u,
+  SUB_OBJECT_STATUS          = 13u,
+
+  SUB_SW_GET_INVENTORY       = 1u,
+  SUB_SW_INVENTORY           = 2u,
+  SUB_SW_STAGE               = 3u,
+  SUB_SW_ACTIVATE            = 4u,
+  SUB_SW_ROLLBACK            = 5u,
+  SUB_SW_GET_STATUS          = 6u,
+  SUB_SW_STATUS              = 7u
 } exn_subservice_t;
 
 typedef enum {
-  RESULT_OK          = 0u,
-  RESULT_INVALID     = 1u,
-  RESULT_BUSY        = 2u,
-  RESULT_UNSUPPORTED = 3u,
-  RESULT_TIMEOUT     = 4u,
-  RESULT_INTERNAL    = 5u
-} exn_result_t;
+  EXN_VALUE_BOOL   = 1u,
+  EXN_VALUE_U8     = 2u,
+  EXN_VALUE_U16    = 3u,
+  EXN_VALUE_U32    = 4u,
+  EXN_VALUE_U64    = 5u,
+  EXN_VALUE_I16    = 6u,
+  EXN_VALUE_I32    = 7u,
+  EXN_VALUE_F32    = 8u,
+  EXN_VALUE_STRING = 9u,
+  EXN_VALUE_BYTES  = 10u
+} exn_value_type_t;
 
 typedef enum {
-  TLV_U8    = 1u,
-  TLV_U16   = 2u,
-  TLV_U32   = 3u,
-  TLV_I32   = 4u,
-  TLV_F32   = 5u,
-  TLV_STR   = 6u,
-  TLV_BYTES = 7u,
-  TLV_U64   = 8u,
-  TLV_BOOL  = 9u
-} exn_tlv_type_t;
+  EXN_TARGET_PI_CAM  = 1u,
+  EXN_TARGET_FPGA    = 2u,
+  EXN_TARGET_ANTENNA = 3u,
+  EXN_TARGET_PI_MGMT = 4u
+} exn_route_target_t;
 
 typedef enum {
-  PIX_RGB888      = 1u,
-  PIX_GRAY8       = 2u,
-  PIX_GRAY16      = 3u,
-  PIX_YUV420      = 4u,
-  PIX_BAYER_RGGB8 = 5u
-} exn_pixel_t;
+  EXN_HK_HEARTBEAT = 1u,
+  EXN_HK_HEALTH    = 2u,
+  EXN_HK_SENSORS   = 3u,
+  EXN_HK_LINKS     = 4u
+} exn_hk_structure_t;
 
-static inline void be_put_u16(uint8_t *p, uint16_t v) {
-  p[0] = (uint8_t)(v >> 8);
-  p[1] = (uint8_t)v;
+typedef enum {
+  EXN_TIME_UNSYNCED = 0u,
+  EXN_TIME_SYNCED   = 1u,
+  EXN_TIME_HOLDOVER = 2u,
+  EXN_TIME_INVALID  = 3u
+} exn_time_state_t;
+
+typedef enum {
+  EXN_OBJECT_CAPTURED_IMAGE  = 0x0001u,
+  EXN_OBJECT_DERIVED_IMAGE   = 0x0002u,
+  EXN_OBJECT_PROCESSING_MASK = 0x0003u,
+  EXN_OBJECT_RESULT_BLOB     = 0x0004u,
+  EXN_OBJECT_THUMBNAIL       = 0x0005u,
+  EXN_OBJECT_UPDATE_PACKAGE  = 0x0010u,
+  EXN_OBJECT_OPAQUE          = 0x7FFFu
+} exn_object_type_t;
+
+typedef enum {
+  EXN_FORMAT_SENSOR_RAW = 0x0001u,
+  EXN_FORMAT_DNG        = 0x0002u,
+  EXN_FORMAT_TIFF       = 0x0003u,
+  EXN_FORMAT_JPEG       = 0x0004u,
+  EXN_FORMAT_PNG        = 0x0005u,
+  EXN_FORMAT_BINARY     = 0x0006u,
+  EXN_FORMAT_CBOR       = 0x0007u,
+  EXN_FORMAT_JSON       = 0x0008u
+} exn_object_format_t;
+
+static inline void exn_be_put_u16(uint8_t *p, uint16_t v) {
+  p[0] = (uint8_t)(v >> 8); p[1] = (uint8_t)v;
 }
-static inline void be_put_u32(uint8_t *p, uint32_t v) {
-  p[0] = (uint8_t)(v >> 24);
-  p[1] = (uint8_t)(v >> 16);
-  p[2] = (uint8_t)(v >> 8);
-  p[3] = (uint8_t)v;
+static inline void exn_be_put_u32(uint8_t *p, uint32_t v) {
+  p[0] = (uint8_t)(v >> 24); p[1] = (uint8_t)(v >> 16);
+  p[2] = (uint8_t)(v >> 8); p[3] = (uint8_t)v;
 }
-static inline uint16_t be_get_u16(const uint8_t *p) {
+static inline void exn_be_put_u64(uint8_t *p, uint64_t v) {
+  exn_be_put_u32(p, (uint32_t)(v >> 32));
+  exn_be_put_u32(p + 4, (uint32_t)v);
+}
+static inline uint16_t exn_be_get_u16(const uint8_t *p) {
   return (uint16_t)((((uint16_t)p[0]) << 8) | p[1]);
 }
-static inline uint32_t be_get_u32(const uint8_t *p) {
-  return (((uint32_t)p[0]) << 24) | (((uint32_t)p[1]) << 16) |
-         (((uint32_t)p[2]) << 8) | p[3];
+static inline uint32_t exn_be_get_u32(const uint8_t *p) {
+  return (((uint32_t)p[0]) << 24) | (((uint32_t)p[1]) << 16)
+       | (((uint32_t)p[2]) << 8) | p[3];
+}
+static inline uint64_t exn_be_get_u64(const uint8_t *p) {
+  return (((uint64_t)exn_be_get_u32(p)) << 32) | exn_be_get_u32(p + 4);
 }
 
+/* Fixed prefixes only. Variable-length bodies are encoded explicitly. */
 #if defined(__GNUC__)
 #define EXN_PACKED __attribute__((packed))
 #else
 #define EXN_PACKED
 #endif
 
-/* GS -> MCU downstream-device proxy preamble. Not used for MCU-local 3/10 System HK. */
 typedef struct EXN_PACKED {
-  uint16_t transactionId;
-  uint8_t target;  /* 1=PI-CAM, 2=FPGA, 3=PI-COMMS/Antenna, 4=PI-MGMT */
-  uint8_t options; /* bit0=mirror to GS, bit1=mirror to peer */
-} exn_proxy_preamble_t;
+  uint8_t transaction_id_be[2];
+  uint8_t target;
+  uint8_t options;
+} exn_route_envelope_t;
 
 typedef struct EXN_PACKED {
-  uint64_t uptime_ms;
-  int16_t temperature_cC;
-  uint16_t status_flags;
-  uint16_t last_error;
-  uint8_t ts_cuc[6];
-} exn_hk_generic_t;
+  uint8_t transaction_id_be[2];
+  uint8_t include_mask;
+  uint8_t detail_mask_be[2];
+} exn_system_hk_request_t;
 
 typedef struct EXN_PACKED {
-  uint16_t transactionId;
-  uint8_t include_mask; /* bit0=MCU, bit1=PI-CAM, bit2=FPGA, bit3=PI-COMMS, bit4=PI-MGMT */
-  uint16_t detailMask;
-} exn_sys_hk_req_t;
-
-typedef struct EXN_PACKED {
-  uint16_t transactionId;
+  uint8_t transaction_id_be[2];
   uint8_t present_mask;
-  uint8_t status;   /* 0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR */
-  uint8_t reserved; /* 0 */
-  /* followed by repeated [block_len:u16][node_hk_bytes...] */
-} exn_sys_hk_tm_hdr_t;
+  uint8_t status;
+  uint8_t block_count;
+} exn_system_hk_report_prefix_t;
 
 typedef struct EXN_PACKED {
-  uint8_t mode;        /* 0=single, 1=burst */
-  uint16_t burst_count;
-  uint32_t exposure_us; /* 0=auto */
-} exn_cam_capture_tc_t;
+  uint8_t structure_id_be[2];
+  uint8_t sample_unix_ms_be[8];
+} exn_hk_report_prefix_t;
 
 typedef struct EXN_PACKED {
-  uint8_t orig_service;
-  uint8_t orig_sub;
-  uint8_t resultCode;
-  uint16_t detail;
-} exn_ack_tm_t;
+  uint8_t unix_ms_be[8];
+  uint8_t source;
+  uint8_t uncertainty_ms_be[2];
+  uint8_t sequence_be[2];
+} exn_set_mission_time_t;
 
 typedef struct EXN_PACKED {
-  uint16_t imageId;
-  uint16_t height;
-  uint16_t width;
-  uint8_t channels;
-  uint8_t pixel_type;
-  uint32_t total_size;
-  uint16_t chunk_size;
-  uint8_t ts_cuc[6];
-} exn_xfer_meta_tm_t;
+  uint8_t acquisition_id_be[4];
+  uint8_t mode;
+  uint8_t count_be[2];
+  uint8_t interval_ms_be[4];
+  uint8_t duration_ms_be[4];
+  uint8_t product_mask_be[2];
+  uint8_t flags_be[2];
+} exn_camera_start_t;
 
 typedef struct EXN_PACKED {
-  uint16_t imageId;
-  uint32_t offset;
-  /* followed by chunk bytes */
-} exn_xfer_chunk_tm_hdr_t;
+  uint8_t transfer_id_be[4];
+  uint8_t object_id_be[8];
+  uint8_t destination_apid_be[2];
+  uint8_t chunk_size_be[2];
+  uint8_t flags_be[2];
+} exn_object_transfer_start_t;
 
 typedef struct EXN_PACKED {
-  uint16_t imageId;
-  uint16_t totalChunks;
-} exn_xfer_done_tm_t;
+  uint8_t transfer_id_be[4];
+  uint8_t object_id_be[8];
+  uint8_t offset_be[8];
+  uint8_t data_length_be[2];
+} exn_object_chunk_prefix_t;
 
 typedef struct EXN_PACKED {
-  uint16_t transactionId;
-  uint8_t ackCode; /* 0=Accepted,1=Rejected,2=Cancelled,3=Invalid,4=Timeout */
-  uint16_t detail;
-} exn_gs_link_ack_tm_t;
+  uint8_t job_id_be[4];
+  uint8_t operation_id_be[2];
+  uint8_t input_object_id_be[8];
+  uint8_t parameter_set_id_be[2];
+  uint8_t destination_count;
+  /* followed by destination_apid[destination_count]:u16 and flags:u16 */
+} exn_processing_job_prefix_t;
 
 #ifdef __cplusplus
 }
