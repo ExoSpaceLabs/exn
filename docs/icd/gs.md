@@ -1,205 +1,192 @@
-# Ground Station (GS) Device/Service ICD
+# Ground Station (GS) Endpoint ICD
 
-This document specializes the EXN master ICD for the Ground Station. The wire profile is defined in `../ICD.md`; the target service tailoring is defined in `../services.md`. This file defines GS routing, client responsibilities, and GS-originated application flows.
+This document is the normative EXN ICD for the Ground/HIL endpoint.
 
-## 1. GS identity and topology
+Common packet rules are defined in `../ICD.md`, service semantics in `../services.md`, and shared payload models in `../component-services.md`.
 
-- GS APID: `0x0F0`.
-- PUS-A TC Source ID: `0x10`.
-- EXN supports a direct HIL profile where the GS device link terminates at MCU-RTOS (`0x100`).
-- The flight-like profile inserts PI-COMMS (`0x103`) as the communications transport between Ground and the OBC, without changing the logical destination of OBC-directed commands.
-- GS-originated control requests therefore normally target MCU APID `0x100`.
-- MCU consumes device-proxy metadata and may re-issue a new TC to PI-CAM (`0x101`), FPGA-AI (`0x102`), PI-COMMS/Antenna (`0x103`), or target PI-MGMT (`0x104`) when required.
-- Forwarded node TMs retain the producing node APID where the active transport permits complete Space Packet routing.
+## 1. Identity
 
-All currently implemented GS mission packets use the **transitional PUS-A compatibility profile** defined by the master ICD. New service development targets the PUS-C profile in `../services.md`.
+| Item | Value |
+|---|---|
+| APID | `0x0F0` |
+| PUS-C source/destination ID | `0x0010` |
+| PUS revision | C |
 
----
+Ground is an operator endpoint, not spacecraft command authority. Nominal flight-like control traffic enters through the Antenna and is supervised by the OBC.
 
-## 2. Ground-segment software responsibility split
+## 2. Ground transport profiles
 
-The EXN ground segment separates transport ownership from mission/application behavior.
+### 2.1 Flight-like profile
 
-### 2.1 Daemon/router
+```text
+Ground -> Antenna -> OBC
+```
 
-The GS daemon is the common connection point for local clients and owns the physical/simulator link. Its responsibilities are limited to:
+The Ground-facing physical/network transport terminates at PI-COMMS/Antenna. Complete EXN Space Packets are forwarded toward the spacecraft-side destination.
 
-- open/close and maintain the Serial/TCP device link;
-- frame incoming CCSDS Space Packets;
-- validate packet boundaries and expose packet metadata;
-- route complete client-supplied Space Packets to the device link;
-- broadcast received/transmitted packet metadata to connected clients;
-- maintain link state and packet logging.
+### 2.2 HIL profile
 
-The daemon shall **not**:
+```text
+Ground -> OBC simulator / physical OBC
+```
 
-- generate periodic HK requests;
-- synthesize time-setting packets as liveness checks;
-- own mission command sequence/correlation counters;
-- schedule application services.
+Direct HIL connection changes only the transport topology. Packet/APID/PUS semantics remain identical to the flight-like profile.
 
-A daemon `PING` is an IPC/link-state liveness operation only and does not create a spacecraft packet.
+## 3. Ground software responsibility split
 
-### 2.2 Operator client/UI
+The transport daemon/router owns:
 
-Mission behavior belongs to the client application. The UI/client is responsible for:
+- Serial/TCP/other selected Ground-device transport;
+- CCSDS Space Packet framing;
+- structural packet validation;
+- routing complete packets between local clients and the device link;
+- transport/link state and counters.
 
-- constructing CCSDSPack v2 packets according to this ICD;
-- owning TC sequence counts for the packet streams it generates;
-- owning GS transaction/correlation IDs;
-- scheduling periodic requests such as System HK;
-- enabling/disabling those schedules as part of the operator workflow.
+It does **not** own mission-service semantics, periodic HK policy, time synchronization policy, service IDs, or packet payload construction.
 
-The current terminal UI uses a default **2 s** periodic System HK cadence when HK scheduling is enabled. This cadence is an application setting, not a daemon protocol requirement.
+The operator/application layer owns:
 
----
+- PUS-C packet construction/decoding according to this ICD;
+- operator actions;
+- TC sequence counters;
+- scheduled operator requests where configured;
+- display of HK, events, alarms, transfers and update state.
 
-## 3. GS -> MCU proxy preamble
+## 4. OBC-routed commands
 
-A GS TC that MCU must re-issue to another EXN endpoint begins its Application Data with the four-octet proxy preamble:
+Ground operations that target PI-CAM, FPGA, Antenna, or PI-MGMT are sent to the OBC for supervision.
 
-| Field | Type | Bits | Description |
-|---|---|---:|---|
-| `transactionId` | uint16 | 16 | `1..65535`; `0` reserved |
-| `target` | uint8 | 8 | current compatibility: `1=PI-CAM`, `2=FPGA-AI`, `3=PI-COMMS`; target profile additionally reserves `4=PI-MGMT` |
-| `options` | uint8 | 8 | bit0 mirror response to GS; bit1 mirror to peer; remaining bits zero |
+The GS -> OBC Application Data begins with this EXN routing envelope before the target-service payload:
 
-The GS -> MCU packet still has TC APID `0x100` and PUS-A Source ID `0x10` because MCU is the direct endpoint of that hop. PI-MGMT target value 4 belongs to the target interface and is not claimed as implemented by the current GS compatibility code.
-
-MCU removes the preamble before creating the downstream packet. The downstream TC then uses target APID `0x101`, `0x102`, or `0x103` and MCU Source ID `0x01` under the current compatibility profile.
-
-### 3.1 Services that use the preamble
-
-The preamble is required for GS-originated device-directed requests when the actual service endpoint is not MCU. The currently implemented examples use legacy Services 3, 20 and 23 plus mission-specific Services 200 and 210. The normalized target service numbers are defined in `../services.md`.
-
-It is **not** used merely because a packet originated at GS.
-
-### 3.2 Direct MCU requests
-
-MCU-local services have no proxy preamble. In particular:
-
-- TC `3/10` System HK Request is direct GS -> MCU.
-- GS MCU-local TC `3/1` HK Request is direct GS -> MCU.
-
----
-
-## 4. Housekeeping behavior
-
-### 4.1 Single-node HK, 3/1
-
-For MCU-local HK:
-
-- TC APID: `0x100`;
-- PUS-A Source ID: `0x10`;
-- App Data: optional `detailMask:uint16`;
-- no proxy preamble.
-
-For PI-CAM/FPGA/PI-COMMS HK through MCU:
-
-- GS -> MCU App Data: proxy preamble + optional `detailMask:uint16`;
-- MCU re-issues TC `3/1` to the selected target APID.
-
-Expected response is TM `3/2` with the target node as producer APID.
-
-### 4.2 System HK, 3/10 and 3/100
-
-System HK is an MCU aggregation service and is therefore direct.
-
-GS -> MCU TC `3/10`:
-
-- APID `0x100`;
-- Source ID `0x10`;
-- no proxy preamble;
-- exactly five Application Data octets:
-
-| Field | Type | Description |
+| Field | Type | Meaning |
 |---|---|---|
-| `transactionId` | uint16 | request/response correlation |
-| `include_mask` | uint8 | current compatibility: bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS; target System HK adds bit4 PI-MGMT |
-| `detailMask` | uint16 | common detail selection |
+| `transaction_id` | uint16 | Ground/OBC end-to-end correlation; 0 reserved |
+| `target` | uint8 | 1=PI-CAM, 2=FPGA, 3=Antenna, 4=PI-MGMT |
+| `options` | uint8 | bit0 mirror target response to Ground; other bits reserved |
 
-MCU -> GS TM `3/100` uses producer APID `0x100` and echoes `transactionId`.
+Wire path:
 
-The GS UI's periodic HK job sends this `3/10` packet. The daemon only routes it.
+```text
+GS TC: APID 0x100, Source ID 0x0010
+        routing envelope + target payload
+                     |
+                     v
+OBC validates / authorizes / removes envelope
+                     |
+                     v
+new TC: target APID, Source ID 0x0001
+        target-service payload only
+```
 
----
+The OBC tracks the relationship between the original Ground request and the downstream request. PUS Service 1 verifies each actual TC hop; `transaction_id` exists only for the OBC's end-to-end routed-operation bookkeeping.
 
-## 5. Other GS command flows
+OBC-local requests do not carry this envelope.
 
-The packet numbers in this section document the **current transitional profile**. They remain useful for the existing GS/HIL implementation but shall migrate according to `../services.md`.
+## 5. OBC-local Ground operations
 
-All device-directed examples below are GS -> MCU packets with APID `0x100`, PUS-A Source ID `0x10`, and the proxy preamble before the service payload.
+Examples of direct Ground -> OBC requests include:
 
-### Parameter management
+- `TC[3,27]` one-shot OBC HK;
+- `TC[3,128]` EXN System HK;
+- `TC[9,128]` Set Mission Time;
+- OBC Service 20 configuration;
+- OBC Service 8 functions;
+- OBC Service 230 software-management requests.
 
-- TC `20/1` Set Parameter: preamble + `key:uint8` + `value:TLV`.
-- TC `20/2` Get Parameter: preamble + `key:uint8`.
-- Expected TM `20/3` from the producing target APID.
+All use APID `0x100` and PUS-C Source ID `0x0010`.
 
-### Camera control, target PI
+## 6. System HK
 
-- TC `200/1` Capture: preamble + `{mode:uint8, burst_count:uint16, exposure_us:uint32}`.
-- TC `200/2` Camera Settings Set: preamble + `key:uint8` + `value:TLV`.
-- TC `200/3` Camera Settings Get: preamble + `key:uint8`.
-- Expected TM `200/4`, `200/5`, and Service 23 image-transfer TMs as applicable.
+### 6.1 Request
 
-### FPGA control, target FPGA
+`TC[3,128]` Application Data:
 
-- TC `210/1` Execute: preamble + `{pipeline:uint8, modelId:uint16, flags:uint16}`.
-- TC `210/2` Processing Settings Set: preamble + `key:uint8` + `value:TLV`.
-- TC `210/3` Processing Settings Get: preamble + `key:uint8`.
-- Expected TM `210/4`/`210/5` and event/report packets as applicable.
+```text
+transaction_id:u16
+include_mask:u8
+detail_mask:u16
+```
 
-### Data transfer
+`include_mask`:
 
-- TC `23/1` Start Transfer: preamble + `{imageId:uint16, dest:uint8, chunk_size:uint16}`.
-- TC `23/2` Stop Transfer: preamble + `{imageId:uint16}`.
-- Expected TM `23/10` Metadata, `23/11` Chunks, and `23/12` Complete.
+- bit0 OBC;
+- bit1 PI-CAM;
+- bit2 FPGA;
+- bit3 Antenna;
+- bit4 PI-MGMT;
+- bits5..7 reserved.
 
----
+### 6.2 Report
 
-## 6. Legacy GS reporting packet, Service 250/1
+`TM[3,129]` is produced by OBC and addressed to Ground.
 
-GS may produce reporting packet `250/1` when application-level UI/proxy acknowledgement is required.
+Application Data:
 
-- Packet Type: TM/report (`0`).
-- Producer APID: GS `0x0F0`.
-- PUS profile: `PUS:revA:TM`.
-- Application Data: `{transactionId:uint16, ackCode:uint8, detail:uint16}`.
+```text
+transaction_id:u16
+present_mask:u8
+status:u8
+block_count:u8
+repeat block_count:
+    producer_apid:u16
+    block_length:u16
+    block[block_length]
+```
 
-The physical direction is still GS -> MCU. Packet Type expresses the current EXN request/report convention rather than being hard-bound to link direction. This packet remains supported only for compatibility: the target profile uses PUS Service 1 for spacecraft request verification and keeps daemon/link acknowledgements in the local GS IPC protocol.
+`status`:
 
----
+| Value | Meaning |
+|---:|---|
+| 0 | OK |
+| 1 | PARTIAL |
+| 2 | TIMEOUT |
+| 3 | ERROR |
 
-## 7. CCSDSPack v2 construction hints
+Each embedded block is the latest valid endpoint HK data selected by the OBC aggregation policy.
 
-Current GS compatibility-profile TC construction uses:
+## 7. Parameter management from Ground
 
-- selector `PUS:revA:TC`;
-- one-octet Source ID width;
-- Source ID `0x10`;
-- CRC16 enabled;
-- sequence flags UNSEGMENTED;
-- destination APID according to the direct packet endpoint.
+Service 20 is **runtime configuration**, not a generic command service.
 
-System HK is the first GS client flow migrated to this API. Other UI command builders should reuse the same shared packet-construction layer rather than adding command-specific packet synthesis to the daemon.
+For an OBC parameter, Ground sends the standard Service 20 payload directly to APID `0x100`.
 
+For Camera/FPGA/Antenna/PI-MGMT parameters, Ground sends the same target Service 20 payload behind the routing envelope from Section 4.
 
-The PUS-C migration shall update GS packet builders, simulator fixtures, acknowledgement flags and golden vectors in the same change as the shared interface definitions. The GS daemon remains service-agnostic and should require little or no service-specific change.
+Examples:
 
+- read OBC heartbeat period -> Service 20;
+- set Antenna `payload_forwarding.enable` -> routed Service 20;
+- set Camera exposure -> **not** Service 20; routed Service 200;
+- restart Camera -> **not** Service 20; routed Service 8 to PI-MGMT.
 
-## 8. Target operator service coverage
+## 8. Operator-visible service coverage
 
-After the coordinated PUS-C migration, the GS application layer should be able to exercise the full component contract in `../component-services.md`.
+The Ground application shall support the central EXN service catalogue rather than maintaining a separate local one.
 
-Operator-facing functions include:
+Required operator coverage:
 
-- endpoint heartbeat/HK and sensor/alarm inspection;
-- Camera capability/query/set controls, acquisition, product catalog and downlink;
-- FPGA capability/job/status/result control;
-- Pi Camera/Antenna restart and Pi reboot through PI-MGMT;
-- OBC time synchronization and endpoint sync status;
-- payload-object transfer status;
-- software inventory/update stage/activate/rollback.
+- Service 1 request verification;
+- Service 3 heartbeat/HK/System HK;
+- Service 5 event/alarm display;
+- Service 8 recovery/reboot functions;
+- Service 9 OBC time synchronization/status;
+- Service 12 monitoring/alarm state;
+- Service 20 runtime configuration;
+- Service 200 Camera control/capability/product catalog;
+- Service 210 FPGA capabilities/jobs/results;
+- Service 220 object transfer and transfer status;
+- Service 230 software inventory/update lifecycle.
 
-The GS daemon remains transport-only. These are UI/application operations, not daemon responsibilities.
+## 9. PUS-C construction
+
+GS telecommands use:
+
+- `PUS:revC:TC`;
+- Source ID `0x0010`;
+- CRC16;
+- destination APID according to the direct hop;
+- acknowledgement flags from `../ICD.md`.
+
+GS decodes telemetry using `PUS:revC:TM` with the EXN six-octet CUC timestamp profile.
+
+There is no GS Service 250 packet. Local daemon acknowledgements/status remain local IPC, while spacecraft request verification uses PUS Service 1.
