@@ -34,6 +34,22 @@ Consequently, EXN shall not redefine a standardized service/subservice identifie
 
 ## 3. Service-definition rule
 
+### 3.1 Command granularity rule
+
+EXN allocates subservices by **operation class**, not by individual configuration field.
+
+A component shall prefer one bounded structured TC that changes a coherent configuration set over many nearly-identical TCs such as `SetExposure`, `SetGain`, `SetFocus`, and `SetJpegQuality`.
+
+Examples:
+
+- Camera image configuration -> one `TC[200,3]` batch;
+- Camera acquisition -> one Start Acquisition TC;
+- FPGA processing -> one Submit Job TC with operation/parameter descriptors;
+- runtime policy -> Service 20 parameter batches;
+- recovery action -> one Service 8 function TC with function ID/arguments.
+
+Separate subservices are justified when the operation has meaningfully different lifecycle, verification, timing, safety, or result semantics.
+
 EXN shall not freeze a service merely by assigning it a number and a short name.
 
 Every service definition shall explain:
@@ -194,7 +210,7 @@ Target functions include:
 
 - start/stop acquisition;
 - SINGLE, BURST and TIMELAPSE acquisition, with STREAM reserved as an optional/future mode;
-- set/get camera controls;
+- atomically set a bounded batch of Camera configuration fields and query active configuration by scope;
 - report camera capabilities and driver-supported ranges;
 - list/delete stored camera products;
 - report acquisition status.
@@ -207,9 +223,9 @@ Target message allocation:
 |---|---|
 | TC[200,1] | Start Acquisition |
 | TC[200,2] | Stop Acquisition |
-| TC[200,3] | Set Camera Controls |
-| TC[200,4] | Get Camera Controls |
-| TM[200,5] | Camera Controls Report |
+| TC[200,3] | Set Camera Configuration |
+| TC[200,4] | Get Camera Configuration |
+| TM[200,5] | Camera Configuration Report |
 | TC[200,6] | Get Camera Capabilities |
 | TM[200,7] | Camera Capabilities Report |
 | TC[200,8] | List Products |
@@ -218,9 +234,9 @@ Target message allocation:
 | TC[200,11] | Get Acquisition Status |
 | TM[200,12] | Acquisition Status Report |
 
-The control and payload model is defined in `component-services.md` and the PI-CAM ICD.
+The configuration model is defined in `component-services.md` and the PI-CAM ICD. Exposure, gain, focus, white balance, crop, HDR and encoding values are fields inside the single Camera configuration transaction rather than independent TC subservices.
 
-Service 1 provides verification; the legacy Camera 200/5 ACK/NACK message is retired in the target profile.
+Service 1 provides verification for the complete configuration transaction.
 
 ### 4.9 Service 210: Payload Processing
 
