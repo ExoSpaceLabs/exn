@@ -11,7 +11,7 @@ EXN is a modular avionics and payload demonstrator. The architecture intentional
 The main rules are:
 
 1. **STM32 is the spacecraft control authority.** It owns supervision, command orchestration, health/fault handling, time distribution, and control-plane routing.
-2. **The Raspberry Pi is an Embedded Linux Payload Platform.** It may host multiple independent services, initially Camera and Antenna/Communications, without making those services one monolithic application.
+2. **The Raspberry Pi 5 is a dual-role Embedded Linux payload node.** In the initial EXN deployment it performs both the Camera role and the Antenna/Communications role. Those roles are separate logical endpoints/services even though they share one physical computer.
 3. **The FPGA is a processing node.** Its EXN role is image preprocessing, inference, postprocessing, and other hardware-accelerated payload computation.
 4. **Processing results do not have one fixed destination.** The requester or mission policy selects where a result is delivered.
 5. **Bulk payload data need not transit the MCU.** Control traffic should remain MCU-centric, while high-volume data paths may connect payload endpoints directly.
@@ -68,11 +68,16 @@ Ground Station
        HardRT + DAS           Image/AI acceleration
 ```
 
-Camera and Antenna/Communications are therefore **independent logical services even when they execute on the same Raspberry Pi**. A later deployment may move either service to a different Linux computer without changing its mission responsibility.
+Camera and Antenna/Communications are therefore **two first-class responsibilities of the initial Raspberry Pi 5** while remaining independent logical services. The Pi is expected to do both: acquire/manage payload imagery and provide the spacecraft communications endpoint toward Ground/OBC. A later deployment may move either service to a different Linux computer without changing its mission responsibility.
 
-## 4. Linux payload platform
+## 4. Raspberry Pi dual-role payload node
 
-The Raspberry Pi should be treated as a supervised Linux service platform rather than as one camera executable.
+The Raspberry Pi shall be treated as one physical spacecraft payload computer with two mission-facing functions rather than as one camera executable with optional extras:
+
+1. **PI-CAM** acquires and owns payload imagery/products.
+2. **PI-COMMS** acts as the Antenna/Communications endpoint, maintaining the Ground-facing communications path, communicating with the OBC, and transmitting telemetry/payload products directly to Ground when routing policy allows it.
+
+Linux platform management supervises both functions but is not itself a third primary mission role.
 
 A representative service layout is:
 
@@ -112,7 +117,7 @@ Responsibilities include:
 - direct transmission of payload data when mission policy permits it;
 - communications-link health and status reporting.
 
-The communications service is **not** the spacecraft command authority. Ground commands normally enter through it and are delivered to the OBC for control-plane handling.
+The communications service is **not** the spacecraft command authority. The Pi provides the communications path, while the OBC remains the authority: Ground commands enter through PI-COMMS and are delivered to the OBC for control-plane handling. In the reverse direction, the Pi can downlink OBC telemetry and can transfer bulk Camera/FPGA products directly to Ground without forcing those bytes through the OBC.
 
 ### 4.3 Platform service
 
