@@ -15,7 +15,8 @@ Refer to:
 - `../component-services.md` for common component behavior;
 - `../services.md` for the target PUS profile;
 - `../ICD.md` for packet/routing rules;
-- `pi-cam.md` for Camera-specific behavior.
+- `pi-cam.md` for Camera-specific behavior;
+- `hardware-sensors.md` for the normative Raspberry Pi 5 platform sensor IDs and engineering units.
 
 ## 1. Logical endpoints
 
@@ -216,20 +217,22 @@ Restart completion requires the selected systemd service to return active **and*
 
 ### SENSORS
 
-Every host sensor/health source actually available through the selected Pi/kernel stack, including:
+For the Raspberry Pi 5 reference profile, PI-MGMT shall implement the physical sensor catalogue in [hardware-sensors.md](hardware-sensors.md), including at minimum:
 
-- SoC temperature;
-- throttling/undervoltage status;
-- other board values only when they are genuinely exposed.
+- `0x1101 pi5.soc_temp` — SoC temperature;
+- `0x1102 pi5.ext5v` — PMIC-measured external 5 V input;
+- `0x1103 pi5.core_voltage` — optional PMIC core-voltage channel when exposed by the installed PMIC/firmware.
+
+Throttling, undervoltage, CPU frequency, memory/storage state and reset reason are platform **HEALTH** fields, not physical SENSORS.
 
 Camera-sensor-specific values remain Camera-owned unless they are only obtainable through the platform layer.
 
 ## 9. Platform monitoring
 
-PI-MGMT Service 12 predeclared monitoring definitions include, when available:
+PI-MGMT Service 12 predeclared monitoring definitions include:
 
-- Pi SoC temperature warning/critical;
-- undervoltage/throttling condition;
+- Pi SoC temperature warning/critical using sensor `0x1101`;
+- undervoltage and thermal-throttling HEALTH conditions;
 - payload storage low/critical;
 - update storage low/critical;
 - Camera service crash/restart storm;
