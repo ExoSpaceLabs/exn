@@ -54,7 +54,7 @@ Ground Station
 +------------------------------------------------+
 | Raspberry Pi 5 - Embedded Linux Payload Node   |
 |                                                |
-|  Camera Service       Antenna/Comms Service    |
+|  Camera Service       Antenna Service    |
 |        |                        |               |
 |        +------ platform services -------------+|
 |               watchdog / health / logging      |
@@ -103,7 +103,7 @@ Responsibilities include:
 - compression or host-side preparation;
 - transfer to FPGA for processing;
 - reception/association of processed products;
-- direct handoff to the communications service when appropriate.
+- direct handoff to the Antenna service when appropriate.
 
 The Camera service remains the natural owner of captured payload products even when computation is delegated to FPGA.
 
