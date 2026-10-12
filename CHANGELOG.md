@@ -4,6 +4,16 @@ This document records system, structural, interface-definition, and architecture
 
 ## 2026-10-12
 
+- Fully define the target component service contract in `docs/component-services.md`.
+- Add PI-MGMT APID `0x104` as Pi platform-management infrastructure for service restart, Pi reboot, platform HK/alarms and software lifecycle; Camera and Antenna remain the Pi's only mission roles.
+- Adopt target PUS Service 8 Function Management and a minimal predeclared Service 12 monitoring profile.
+- Define OBC `monotonic_ms` + synchronized Unix-epoch `unix_ms` time model and OBC-to-endpoint Service 9 propagation.
+- Fully define Camera Service 200 acquisition/control/capability/product-catalog behavior for Camera Module 3, including SINGLE/BURST/TIMELAPSE and future STREAM plus RAW/DNG/TIFF/JPEG/PNG products.
+- Redefine Service 210 as a generic FPGA capability/job/status/result interface while processing algorithms remain open.
+- Extend Service 220 with transfer status and explicitly define OBC-controlled producer-to-Antenna Ground downlink.
+- Reserve mission-specific Service 230 for software inventory, staging, activation, rollback and status.
+- Add heartbeat/HK structure classes, sensor registry rules, monitoring/alarm behavior, component state model and software-update health validation.
+
 - Audit the current EXN architecture against the implemented/released dependency state and the published ECSS PUS service catalogue.
 - Confirm the logical architecture remains valid: STM32/OBC control authority, independently supervised Linux Camera and Communications services, FPGA image/AI processing, controllable result routing, and direct bulk-data paths.
 - Add `docs/services.md` as the service-tailoring authority.
