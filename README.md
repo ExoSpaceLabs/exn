@@ -18,14 +18,14 @@ The detailed logical architecture is defined in [docs/architecture.md](docs/arch
 EXN separates responsibilities across independently testable logical components:
 
 - **STM32 Control Node / OBC:** system supervision, command/telemetry handling, health and fault management, time distribution, configuration, and control-plane routing/orchestration.
-- **Linux Payload Node:** Raspberry Pi-based Embedded Linux platform that may host multiple independent payload services.
-  - **Camera Service:** image acquisition, payload-product ownership, storage/preparation, compression, and image transfer.
-  - **Antenna / Communications Service:** ground-link ingress/egress, TC delivery toward the OBC, payload downlink, and communications-link health.
-  - **Platform Management:** Linux watchdog/supervision, service health, logging, storage and system housekeeping.
+- **Raspberry Pi 5 Payload Node:** one physical Embedded Linux computer with **two first-class mission roles**.
+  - **Camera role / PI-CAM:** image acquisition, payload-product ownership, storage/preparation, compression, and image transfer.
+  - **Antenna / Communications role / PI-COMMS:** the Pi acts as the spacecraft ground-communications endpoint, carrying communications with the OBC, accepting uplink traffic, and transferring telemetry/payload data directly to Ground when appropriate.
+  - **Platform Management:** local Linux watchdog/supervision, service health, logging, storage and host housekeeping supporting both mission roles; this is not a third primary payload role.
 - **FPGA Processing Node:** hardware-accelerated image preprocessing, inference, postprocessing, and other payload computation. The FPGA is a processing node in EXN, not a communications product.
 - **Ground/HIL:** operator tooling, command/telemetry inspection, subsystem simulation, fault injection, and integration validation.
 
-Camera and Antenna/Communications may initially execute on the **same Raspberry Pi 5** while remaining separate logical services. A later deployment may place them on different computers without changing their mission responsibilities.
+In the initial EXN deployment, **Camera and Antenna/Communications execute on the same Raspberry Pi 5**. They remain separate logical endpoints and services because they have different mission responsibilities, even though one physical Pi performs both roles. A later deployment may split them across computers without changing the interfaces.
 
 ## Routing Model
 
@@ -69,7 +69,7 @@ exn/
 
 - **[exn-gs](https://github.com/ExoSpaceLabs/exn-gs):** ground-control and hardware-in-the-loop environment.
 - **exn-mcu-rtos:** STM32 control/flight-software component.
-- **exn-pi-cam:** Raspberry Pi payload software; currently camera-focused and intended to evolve into the Linux payload-service implementation.
+- **exn-pi-cam:** Raspberry Pi payload-node software. The repository name is historical; the target node has both PI-CAM and PI-COMMS responsibilities on the same Raspberry Pi 5.
 - **exn-fpga-ai:** FPGA image-processing and AI-acceleration component.
 
 ### Reusable platform repositories
@@ -188,7 +188,7 @@ The architecture is ahead of the component implementations, deliberately:
 | CCSDSPack | released and qualified; v2.0.0 remains the current stable EXN baseline |
 | EXN-GS / HIL | implemented on the transitional PUS-A wire profile |
 | STM32 OBC | repository still requires implementation against HardRT + DAS |
-| Linux Camera / Communications | camera repository is legacy/experimental; multi-service Linux platform remains to be implemented |
+| Raspberry Pi dual-role payload node | existing repository is legacy/experimental; target implementation must provide both PI-CAM and PI-COMMS on the same Pi 5 |
 | FPGA processing | architecture defined; implementation repository remains a placeholder |
 | HardRT | released 0.5.1 |
 | DAS | released v0.1.0 for STM32H755 / NUCLEO-H755ZI-Q |
@@ -204,7 +204,7 @@ The current integration direction is:
 2. keep released CCSDSPack v2.0.0 as the reproducible dependency until a newer release is actually published and adopted;
 3. migrate shared packet templates, MCU headers, EXN-GS and simulators together to the normalized service profile;
 4. bring the MCU application up on **HardRT 0.5.1 + DAS v0.1.0** against the central EXN architecture/ICD;
-5. evolve the Pi from a camera-only implementation into the supervised Linux payload-service platform;
+5. evolve the Pi repository from its camera-only legacy implementation into the **dual-role Raspberry Pi payload node**, implementing both PI-CAM and PI-COMMS under Linux supervision;
 6. keep the FPGA focused on image/AI processing with configurable result routing;
 7. use direct payload-data paths where they reduce unnecessary MCU traffic;
 8. adopt **SpWKit v0.7.x** only where its logical-link/transport model improves EXN integration, and validate that integration explicitly;
