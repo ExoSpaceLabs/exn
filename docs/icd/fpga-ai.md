@@ -12,7 +12,8 @@ Refer to:
 - `../component-services.md` for the common component contract;
 - `../services.md` for target PUS mapping;
 - `../ICD.md` for packet/routing rules;
-- `../architecture.md` for result-routing ownership.
+- `../architecture.md` for result-routing ownership;
+- `hardware-sensors.md` for the normative K26/KV260 sensor catalogue.
 
 Private/commercial FPGA SpaceWire repositories are outside EXN scope. The EXN FPGA exists to process payload data.
 
@@ -184,22 +185,21 @@ The OBC uses this report to manage expected jobs and downstream transfers.
 
 ### SENSORS
 
-Report every actual hardware monitor exposed by the selected FPGA platform, such as:
+The EXN reference FPGA hardware is profiled explicitly:
 
-- die temperature;
-- rail voltages/currents;
-- fan/thermal state;
+- **Kria K26 SOM profile `0x0201`**: junction temperature and required PS/PL supply-voltage measurements from the Zynq UltraScale+ System Monitor;
+- **KV260 profile `0x0202`**: all K26 sensors plus SOM 5 V voltage/current/power from the carrier INA260.
 
-**only after the board is selected and those monitors are confirmed available**.
+Stable sensor IDs, units and required/optional status are defined in [hardware-sensors.md](hardware-sensors.md).
 
-The previous speculative fixed VCCINT/VCCAUX/VCCBRAM table is not a cross-platform requirement.
+If a different FPGA board is adopted later, it receives a new hardware profile and sensor table in the central ICD before its telemetry is treated as normative.
 
 ## 10. Monitoring and alarms
 
-Predeclared Service 12 definitions shall cover available FPGA health parameters, including where supported:
+Predeclared Service 12 definitions shall cover the active hardware-profile sensors, including:
 
-- die-temperature warning/critical;
-- rail out-of-range;
+- K26 junction-temperature warning/critical;
+- required PS/PL rail out-of-range;
 - repeated DMA/buffer failure;
 - processing timeout/error-rate threshold;
 - queue/resource saturation.
