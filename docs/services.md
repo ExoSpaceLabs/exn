@@ -171,7 +171,24 @@ Target functions include:
 
 A completed acquisition may retain sensor RAW and derive DNG/TIFF/JPEG/PNG/preview products without overwriting the source object. Product transfer itself uses Service 220.
 
-The target subtype catalogue and control model are defined in `component-services.md` and the PI-CAM ICD.
+Target message allocation:
+
+| Message | Meaning |
+|---|---|
+| TC[200,1] | Start Acquisition |
+| TC[200,2] | Stop Acquisition |
+| TC[200,3] | Set Camera Controls |
+| TC[200,4] | Get Camera Controls |
+| TM[200,5] | Camera Controls Report |
+| TC[200,6] | Get Camera Capabilities |
+| TM[200,7] | Camera Capabilities Report |
+| TC[200,8] | List Products |
+| TM[200,9] | Product Catalog Report |
+| TC[200,10] | Delete Product |
+| TC[200,11] | Get Acquisition Status |
+| TM[200,12] | Acquisition Status Report |
+
+The control and payload model is defined in `component-services.md` and the PI-CAM ICD.
 
 Service 1 provides verification; the legacy Camera 200/5 ACK/NACK message is retired in the target profile.
 
@@ -197,7 +214,19 @@ The target job request includes or references:
 - destination endpoint list;
 - output/delivery policy.
 
-Service 210 also reports supported processing capabilities because the concrete FPGA workload is intentionally not frozen yet.
+Target message allocation:
+
+| Message | Meaning |
+|---|---|
+| TC[210,1] | Submit Processing Job |
+| TC[210,2] | Cancel Processing Job |
+| TC[210,3] | Get Job Status |
+| TM[210,4] | Job Status Report |
+| TC[210,5] | Get Processing Capabilities |
+| TM[210,6] | Processing Capabilities Report |
+| TM[210,7] | Small Processing Result |
+
+Service 210 reports supported processing capabilities because the concrete FPGA workload is intentionally not frozen yet.
 
 Small results may be returned directly through Service 210. Large results become Service 220 objects.
 
@@ -260,13 +289,17 @@ No separate 'communications' subsystem is introduced: PI-COMMS is the logical id
 
 Reserve **Service 230** as the EXN mission-specific Software Management service.
 
-It provides:
+Target message allocation:
 
-- software/component inventory reporting;
-- stage update package;
-- activate staged update;
-- rollback;
-- update status reporting.
+| Message | Meaning |
+|---|---|
+| TC[230,1] | Get Software Inventory |
+| TM[230,2] | Software Inventory Report |
+| TC[230,3] | Stage Update |
+| TC[230,4] | Activate Update |
+| TC[230,5] | Roll Back Update |
+| TC[230,6] | Get Update Status |
+| TM[230,7] | Update Status Report |
 
 Update package bytes are transferred as bounded objects using Service 220; Service 230 controls the lifecycle and activation.
 
