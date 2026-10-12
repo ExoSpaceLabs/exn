@@ -1,0 +1,51 @@
+{
+  "name": "pkt_cam_config_tm",
+  "packetErrorControl": "crc16",
+  "primaryHeader": {
+    "version": 0,
+    "type": "TM",
+    "apid": 257,
+    "apidPolicy": "producer",
+    "secHdrFlag": 1,
+    "seqFlags": "UNSEG"
+  },
+  "pusHeader": {
+    "selector": "PUS:revC:TM",
+    "service": 200,
+    "subservice": 5,
+    "messageTypeCounter": 0,
+    "timeReferenceStatus": 0,
+    "destinationId": 1,
+    "time": {
+      "format": "CUC",
+      "epoch": "agency-defined:unix",
+      "pField": "implicit",
+      "coarseOctets": 4,
+      "fineOctets": 2
+    }
+  },
+  "appData": [
+    {
+      "name": "configuration_revision",
+      "type": "U32",
+      "bits": 32
+    },
+    {
+      "name": "scope_mask",
+      "type": "U16",
+      "bits": 16
+    },
+    {
+      "name": "count",
+      "type": "U16",
+      "bits": 16,
+      "maximum": 64
+    },
+    {
+      "name": "entries",
+      "type": "BYTES",
+      "description": "Repeated control_id:u16, status:u8, value_type:u8, value_length:u16, value[value_length]"
+    }
+  ],
+  "notes": "Scoped active Camera configuration snapshot. Revision increments after successful applied configuration."
+}
