@@ -4,6 +4,9 @@ This document records system, structural, interface-definition, and architecture
 
 ## 2026-10-12
 
+- Simplify Ground System HK to an empty-payload TC[3,128] that returns the OBC's complete cached spacecraft snapshot; Ground no longer selects individual endpoints/structures.
+- Define OBC supervision and automatic-recovery state, configurable heartbeat/health/offline/recovery timing, recovery attempt counters, and downloadable diagnostic/recovery journals.
+
 - Add a normative reference-hardware HK/sensor catalogue for STM32H755, Raspberry Pi 5 and AMD Kria K26/KV260, including stable sensor IDs, units, ownership and Service 12 monitoring expectations.
 - Separate physical SENSORS from software/resource HEALTH metrics and bind the SENSORS report to an explicit hardware-profile ID.
 
