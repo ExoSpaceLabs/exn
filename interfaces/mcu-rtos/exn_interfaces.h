@@ -173,6 +173,9 @@ typedef enum {
 #define EXN_CAM_SCOPE_ENCODING       (1u << 5)
 #define EXN_CAM_SCOPE_ALL            0xFFFFu
 
+#define EXN_CAM_CONFIG_MAX_ENTRIES    64u
+#define EXN_CAM_CONFIG_MAX_VALUE_SIZE 32u
+
 #define EXN_CAM_CONFIG_VALIDATE_ONLY    (1u << 0)
 #define EXN_CAM_CONFIG_DEFER_UNTIL_IDLE (1u << 1)
 #define EXN_CAM_CONFIG_REQUIRE_EXACT    (1u << 2)
