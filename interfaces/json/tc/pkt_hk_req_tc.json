@@ -10,21 +10,19 @@
     "seqFlags": "UNSEG"
   },
   "pusHeader": {
-    "selector": "PUS:revA:TC",
-    "sourceIdOctets": 1,
-    "acknowledgementFlags": 0,
+    "selector": "PUS:revC:TC",
+    "acknowledgementFlags": 8,
     "service": 3,
-    "subservice": 1,
+    "subservice": 27,
     "sourceId": 1
   },
   "appData": [
     {
-      "name": "detailMask",
+      "name": "structure_id",
       "type": "U16",
       "bits": 16,
-      "optional": true,
-      "description": "HK groups to include; 0 selects the default/all set"
+      "description": "Predeclared HK structure: 1 HEARTBEAT, 2 HEALTH, 3 SENSORS, 4 LINKS"
     }
   ],
-  "notes": "Default template is MCU -> PI. Override destination APID to 0x100 or 0x102 for MCU or FPGA HK."
+  "notes": "Default OBC -> PI-CAM; override destination APID for another endpoint."
 }
