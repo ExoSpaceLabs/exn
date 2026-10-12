@@ -1,6 +1,6 @@
 # EXN PUS Service Profile
 
-This document defines the EXN service-tailoring direction for CCSDS/PUS application traffic.
+This document is the **normative EXN PUS service catalogue and tailoring specification** for CCSDS/PUS application traffic.
 
 It separates three things that were previously mixed together:
 
@@ -8,7 +8,7 @@ It separates three things that were previously mixed together:
 2. the **ECSS PUS service catalogue**, whose standardized service and message identifiers have fixed meanings;
 3. the **target EXN mission profile**, which selects standard PUS services where they fit and uses mission-specific identifiers where EXN genuinely needs mission-specific behavior.
 
-The exact packet layouts remain controlled by [ICD.md](ICD.md). This document is the PUS service-level authority and migration plan. The endpoint behavior built from these services is defined in [component-services.md](component-services.md).
+The exact common packet/header rules remain controlled by [ICD.md](ICD.md); endpoint-specific payloads and IDs are frozen in [component-services.md](component-services.md) and `docs/icd/`. Component repositories consume these definitions and shall not maintain independent service-number or payload-layout specifications.
 
 ## 1. Standards baseline
 
