@@ -1,12 +1,56 @@
 {
   "name": "pkt_system_hk_tm",
-  "primaryHeader": { "version": 0, "type": "TM", "apid": 256, "secHdrFlag": 1, "seqFlags": "UNSEG" },
-  "pusHeader": { "type": "PusA", "version": 1, "service": 3, "subservice": 100, "sourceId": 1 },
+  "packetErrorControl": "crc16",
+  "primaryHeader": {
+    "version": 0,
+    "type": "TM",
+    "apid": 256,
+    "apidPolicy": "producer",
+    "secHdrFlag": 1,
+    "seqFlags": "UNSEG"
+  },
+  "pusHeader": {
+    "selector": "PUS:revC:TM",
+    "service": 3,
+    "subservice": 129,
+    "messageTypeCounter": 0,
+    "timeReferenceStatus": 0,
+    "destinationId": 16,
+    "time": {
+      "format": "CUC",
+      "epoch": "agency-defined:unix",
+      "pField": "implicit",
+      "coarseOctets": 4,
+      "fineOctets": 2
+    }
+  },
   "appData": [
-    { "name": "transactionId", "type": "U16", "bits": 16, "description": "Echo of request; 0 if unused" },
-    { "name": "present_mask", "type": "U8", "bits": 8, "description": "Bitmask: MCU, PI, FPGA present" },
-    { "name": "status", "type": "U8", "bits": 8, "description": "0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR" },
-    { "name": "reserved", "type": "U8", "bits": 8, "description": "0" },
-    { "name": "blocks", "type": "BYTES", "description": "Concatenated node HK blocks, each prefixed with U16 length" }
+    {
+      "name": "transaction_id",
+      "type": "U16",
+      "bits": 16
+    },
+    {
+      "name": "present_mask",
+      "type": "U8",
+      "bits": 8,
+      "description": "bit0 OBC, bit1 PI-CAM, bit2 FPGA, bit3 Antenna, bit4 PI-MGMT"
+    },
+    {
+      "name": "status",
+      "type": "U8",
+      "bits": 8,
+      "description": "0 OK, 1 PARTIAL, 2 TIMEOUT, 3 ERROR"
+    },
+    {
+      "name": "block_count",
+      "type": "U8",
+      "bits": 8
+    },
+    {
+      "name": "blocks",
+      "type": "BYTES",
+      "description": "Repeated producer_apid:u16, block_length:u16, block[block_length]"
+    }
   ]
 }
