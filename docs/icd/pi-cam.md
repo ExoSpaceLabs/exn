@@ -2,9 +2,9 @@
 
 This document specializes the EXN ICD for the Camera Payload service (APID 0x101), initially hosted on a Raspberry Pi 5 with Raspberry Pi Camera Module 3. The Camera service is a logical endpoint on the Embedded Linux Payload Platform and remains independent from the co-located Antenna/Communications service.
 
-It defines the Camera service Housekeeping (HK) telemetry, camera settings catalog (Service 200), and data transfer behavior (Service 23).
+It defines the Camera service Housekeeping (HK) telemetry, camera settings catalog (Service 200), and payload-product transfer behavior. The existing Service 23 packet definitions are transitional; the target service is mission-specific Service 220 Payload Object Transfer.
 
-Refer to `../ICD.md` for CCSDS/PUS conventions and `../architecture.md` for the system routing model.
+Refer to `../ICD.md` for the current wire contract, `../services.md` for target PUS service tailoring, and `../architecture.md` for the system routing model.
 
 ---
 
@@ -27,10 +27,9 @@ Application data follows big-endian unless otherwise stated. Timestamps use the 
 
 The PI-CAM HK report augments the generic HK in `ICD.md` with camera- and SoC-specific metrics. Values are big-endian.
 
-Notes:
-- PI-CAM SHALL respond promptly to TC 3/1 (HK Request) issued by MCU. Its TM 3/2 payload below is included verbatim as the PI-CAM block inside the aggregated System HK TM 3/100 when GS requests System HK (TC 3/10).
+The packet numbers below describe the current compatibility profile: PI-CAM responds to legacy TC 3/1 with TM 3/2, and that block may be aggregated into legacy System HK 3/100. The target PUS-C profile uses TC[3,27] / TM[3,25], while EXN System HK moves to 3/128 / 3/129.
 
-- TM 3/2 Report HK — Application Data
+- TM 3/2 Report HK — Application Data (transitional)
 
 | Name                | Type   | Bits | Description |
 |---------------------|--------|------|-------------|
@@ -71,7 +70,7 @@ Service 200 defines camera-specific TCs/TMs. The set aligns with the master cata
 | burst_count  | uint16 | 16   | 1..1000 (ignored if mode=single) |
 | exposure_us  | uint32 | 32   | 0=auto; else manual exposure time in µs |
 
-- TM 200/5 ACK/NACK — as in `ICD.md` Section 5.6.
+- TM 200/5 ACK/NACK — transitional compatibility message. The target profile uses PUS Service 1 request verification.
 
 - TC 200/2 Settings Set and TC 200/3 Settings Get use the key/TLV catalog below.
 - TM 200/4 Settings Report returns `key`, `status`, `value` (TLV) for the requested key or the last set.
@@ -124,9 +123,9 @@ Keys are stable 8-bit IDs. Unless noted, setting takes effect on next capture/st
 | 35  | hdr.merge             | U8  | enum    | 0=linear,1=reinhard,2=aces | 0 | HDR merge method |
 | 36  | output.jpeg_quality   | U8  | 0..100  | 0..100     | 90      | JPEG encode quality (if JPEG) |
 | 37  | output.compress       | U8  | enum    | 0=none,1=JPEG,2=LZ4 | 0 | App-level compression |
-| 38  | xfer.chunk_size       | U16 | bytes   | 256..4096  | 900     | Preferred chunk size for Service 23 |
-| 39  | xfer.dest             | U8  | enum    | 0=FPGA,1=MCU,2=PI-COMMS | 1 | Default payload transfer destination |
-| 40  | ts.embed_mode         | U8  | enum    | 0=none,1=app_payload | 1 | Timestamp placement; PUS-C secondary-header timestamps are not part of the current EXN profile |
+| 38  | xfer.chunk_size       | U16 | bytes   | 256..4096  | 900     | Preferred payload-object chunk size |
+| 39  | xfer.dest             | U8  | enum    | 0=FPGA,1=MCU,2=PI-COMMS | 1 | Transitional fixed destination; target profile uses endpoint/routing policy |
+| 40  | ts.embed_mode         | U8  | enum    | 0=none,1=app_payload | 1 | Transitional timestamp placement; target PUS-C TM timestamp tailoring is frozen separately |
 
 Notes:
 - Changing resolution/framerate may reconfigure the sensor pipeline and briefly stall.
@@ -135,7 +134,9 @@ Notes:
 
 ---
 
-## 4. Data Transfer (Service 23)
+## 4. Payload transfer
+
+The current executable profile uses legacy Service 23 for packetized image transfer:
 
 - TM 23/10 Metadata includes image dimensions, pixel type, total size, and chunk size per `../ICD.md`.
 - TM 23/11 Data Chunk uses `imageId`, `offset`, and `data[]` up to `xfer.chunk_size`.
@@ -144,11 +145,13 @@ Notes:
 
 When PI-CAM and PI-COMMS are co-located, an implementation may optimize the local bulk-data path through shared memory, Unix-domain sockets, file/object references, or another local IPC mechanism while preserving the logical service boundary.
 
+The target profile moves this behavior to **Service 220 Payload Object Transfer**, generalizes `imageId` to `objectId`/`transferId`, and keeps image dimensions as type-specific metadata rather than assuming every transferred object is an image.
+
 ---
 
 ## 5. Parameter Management (Service 20)
 
-For generic parameter exchange not covered by Service 200, PI-CAM supports the Service 20 TLV scheme with keys reserved [200..255] for camera-specific experimental features.
+For generic parameter exchange not covered by Service 200, PI-CAM uses Service 20. The existing TLV/key encoding is transitional; target message meanings follow PUS-C TC[20,1] report-values request, TM[20,2] value report, and TC[20,3] set-values request. Camera-specific settings that belong to Service 200 should not be duplicated into Service 20 merely for convenience.
 
 ---
 
@@ -157,4 +160,4 @@ For generic parameter exchange not covered by Service 200, PI-CAM supports the S
 - `pkt_cam_capture_tc`, `pkt_cam_ack_tm`
 - `pkt_xfer_meta_tm`, `pkt_xfer_chunk_tm`, `pkt_xfer_done_tm`
 
-All current PI-CAM interfaces use the master EXN PUS revision-A profile. TCs addressed to Camera use APID `0x101`; TMs produced by Camera also carry APID `0x101` under the EXN APID policy.
+All current PI-CAM interface artifacts use the transitional EXN PUS-A profile. TCs addressed to Camera use APID `0x101`; TMs produced by Camera also carry APID `0x101` under the EXN APID policy. New implementation work shall target the PUS-C service profile in `../services.md`, including Service 1 verification and Service 220 payload-object transfer.
