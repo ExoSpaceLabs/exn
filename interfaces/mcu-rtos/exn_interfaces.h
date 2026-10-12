@@ -165,6 +165,17 @@ typedef enum {
 } exn_hk_structure_t;
 
 typedef enum {
+  EXN_STATE_UNKNOWN  = 0u,
+  EXN_STATE_STARTING = 1u,
+  EXN_STATE_READY    = 2u,
+  EXN_STATE_BUSY     = 3u,
+  EXN_STATE_DEGRADED = 4u,
+  EXN_STATE_ERROR    = 5u,
+  EXN_STATE_UPDATING = 6u,
+  EXN_STATE_OFFLINE  = 7u
+} exn_endpoint_state_t;
+
+typedef enum {
   EXN_TIME_UNSYNCED = 0u,
   EXN_TIME_SYNCED   = 1u,
   EXN_TIME_HOLDOVER = 2u,
