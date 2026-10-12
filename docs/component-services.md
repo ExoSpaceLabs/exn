@@ -52,16 +52,16 @@ PUS Service 23 remains available for standardized file-system management, but EX
 
 The following logical state vocabulary is shared by OBC health/orchestration:
 
-| State | Meaning |
-|---|---|
-| `UNKNOWN` | no current state established |
-| `STARTING` | process/node is initializing |
-| `READY` | available for normal commands |
-| `BUSY` | valid operation in progress |
-| `DEGRADED` | responsive, but capability/health is reduced |
-| `ERROR` | responsive but unable to provide normal service |
-| `UPDATING` | software update/activation in progress |
-| `OFFLINE` | expected endpoint is not responding |
+| Value | State | Meaning |
+|---:|---|---|
+| 0 | `UNKNOWN` | no current state established |
+| 1 | `STARTING` | process/node is initializing |
+| 2 | `READY` | available for normal commands |
+| 3 | `BUSY` | valid operation in progress |
+| 4 | `DEGRADED` | responsive, but capability/health is reduced |
+| 5 | `ERROR` | responsive but unable to provide normal service |
+| 6 | `UPDATING` | software update/activation in progress |
+| 7 | `OFFLINE` | expected endpoint is not responding |
 
 Endpoints may expose more detailed internal states, but the OBC shall always be able to reduce them to this set.
 
