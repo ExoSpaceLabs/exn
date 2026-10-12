@@ -79,7 +79,7 @@ EXN's aggregated System HK remains useful but is mission-specific behavior added
 - **TC[3,128]**: Request System HK;
 - **TM[3,129]**: System HK Report.
 
-`TC[3,128]` has no Application Data: Ground asks for the complete current spacecraft snapshot. `TM[3,129]` contains the OBC's cached HK view of every registered endpoint, including explicit supervision state for stale/offline/non-responsive devices. Poll cadence and freshness/offline policy are OBC Service 20 configuration, not per-request Ground options.
+`TC[3,128]` has no Application Data: Ground asks for the complete current spacecraft snapshot. `TM[3,129]` contains the OBC's cached HK view of every registered endpoint, including explicit supervision state, last-report ages and compact recovery-policy state for stale/offline/non-responsive devices. Poll cadence, stale/offline thresholds and automatic-recovery timing are OBC Service 20 configuration, not per-request Ground options. Detailed recovery journals are exported as Service 220 diagnostic-log objects.
 
 ### 4.3 Service 5: Event Reporting
 
