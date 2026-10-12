@@ -32,19 +32,19 @@ sequenceDiagram
   MCU-->>GS: TM 3/100 System HK Report
 ```
 
-A flight-like deployment may place the Antenna/Communications service between GS and MCU without changing MCU control ownership.
+A flight-like deployment may place the Antenna service between GS and MCU without changing MCU control ownership.
 
 ---
 
 ## 2) Flight-like Ground Command Path
 
-Ground traffic enters through the communications service, while the OBC remains the command authority.
+Ground traffic enters through the Pi Antenna service, while the OBC remains the command authority. The same Antenna service carries OBC telemetry back to Ground.
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant GS as Ground
-  participant ANT as Antenna/Comms
+  participant ANT as Antenna
   participant MCU as STM32 OBC
   participant CAM as Camera Service
 
@@ -67,7 +67,7 @@ sequenceDiagram
   autonumber
   participant CAM as Camera Service
   participant FPGA as FPGA Processing
-  participant ANT as Antenna/Comms
+  participant ANT as Antenna
   participant GS as Ground
 
   CAM->>CAM: capture image
@@ -114,7 +114,7 @@ sequenceDiagram
   autonumber
   participant CAM as Camera Service
   participant FPGA as FPGA Processing
-  participant ANT as Antenna/Comms
+  participant ANT as Antenna
   participant GS as Ground
 
   CAM->>FPGA: image + request, route=communications
@@ -122,7 +122,7 @@ sequenceDiagram
   ANT-->>GS: direct result downlink
 ```
 
-The OBC may still receive separate status, metadata, or decision-relevant information. Direct data routing does not transfer command authority away from the OBC.
+The OBC may still receive separate status, metadata, or decision-relevant information. `Direct` here means FPGA -> Antenna -> Ground without routing the bulk result through the OBC; it does not bypass the Antenna link.
 
 ---
 
@@ -134,7 +134,7 @@ SpWKit may represent multiple logical relationships over one physical Ethernet c
 graph LR
   ETH[Shared Ethernet Carrier]
   CAM[Camera]
-  ANT[Antenna/Comms]
+  ANT[Antenna]
   MCU[STM32 OBC]
   FPGA[FPGA Processing]
 
