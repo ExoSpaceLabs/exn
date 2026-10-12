@@ -10,7 +10,7 @@ EXN is a modular avionics and payload demonstrator. The architecture intentional
 
 The main rules are:
 
-1. **STM32 is the spacecraft control authority.** It owns supervision, command orchestration, health/fault handling, time distribution, and control-plane routing.
+1. **STM32/OBC is the spacecraft platform authority.** It owns spacecraft mode, mission sequencing, command authorization/dispatch, time authority, spacecraft-wide supervision and FDIR. Platform and payload subsystems may execute local control/processing, but they remain subordinate to OBC authority.
 2. **The Raspberry Pi 5 is a dual-role Embedded Linux payload node.** In the initial EXN deployment it performs both the Camera role and the Antenna role. Those roles are separate logical endpoints/services even though they share one physical computer.
 3. **The FPGA is a processing node.** Its EXN role is image preprocessing, inference, postprocessing, and other hardware-accelerated payload computation.
 4. **Processing results do not have one fixed destination.** The requester or mission policy selects where a result is delivered.
@@ -18,6 +18,27 @@ The main rules are:
 6. **Transport is below mission semantics.** Packet/service behavior must not depend on whether the current carrier is Ethernet, a simulated SpaceWire link, local Linux IPC, or a future physical transport.
 7. **Reusable libraries remain independent projects.** EXN consumes CCSDSPack, HardRT, DAS, and optionally SpWKit. Their internal implementation scope is not part of the EXN mission architecture.
 8. **PUS services are explicitly tailored.** CCSDSPack supplies the packet/header mechanisms; EXN defines which standard PUS services it realizes and which mission-specific services it adds. Service identifiers shall not be repurposed with unrelated semantics.
+
+## 1.1 Centralized authority, distributed execution
+
+EXN distinguishes **authority** from **execution location**.
+
+The OBC does not need to execute every algorithm itself. A future AOCS controller may run attitude estimation and high-rate wheel/torquer loops; an EPS controller may perform power switching/protection; a thermal controller may run heater loops; an HPC may perform image/AI processing. Those are distributed execution resources.
+
+The OBC remains responsible for:
+
+- spacecraft mode and safe-state ownership;
+- mission/platform sequencing;
+- telecommand authorization and dispatch;
+- subsystem enable/disable and high-level set-points;
+- health aggregation and FDIR;
+- on-board time authority and distribution;
+- platform-wide recovery decisions;
+- deciding when payload products/processors may influence spacecraft actions.
+
+A subsystem may autonomously protect itself locally, but it shall not independently redefine spacecraft mission state or safety policy.
+
+The current EXN stage focuses on the payload/data-handling subset: Camera, Antenna, FPGA processing and Pi management. AOCS/ADCS, EPS, thermal and other platform subsystems are future scope and therefore intentionally lack detailed service ICDs today.
 
 ## 2. Logical system
 
