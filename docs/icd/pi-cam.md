@@ -3,7 +3,7 @@
 PI-CAM is the EXN Camera endpoint on the Raspberry Pi 5 Payload Node.
 
 - APID: `0x101`
-- Target PUS-C source identity: `0x02`
+- PUS-C source identity: `0x0002`
 - Reference sensor: Raspberry Pi Camera Module 3 / Sony IMX708
 - Mission role: capture, preserve, derive, catalog and transfer image products
 
@@ -12,11 +12,11 @@ The same physical Pi also hosts the Antenna endpoint (PI-COMMS) and PI-MGMT supe
 Refer to:
 
 - `../component-services.md` for the common functional contract;
-- `../services.md` for target PUS mapping;
+- `../services.md` for the normative PUS-C service mapping;
 - `../ICD.md` for packet/routing rules;
 - `linux-payload.md` for Pi supervision and Antenna behavior.
 
-The currently executable PUS-A camera packets remain transitional compatibility artifacts. New Camera implementation work targets this document.
+All maintained PI-CAM packet handling shall use the PUS-C contract defined by this ICD. PUS-A Camera packet definitions are obsolete.
 
 ## 1. Reference-camera capabilities
 
