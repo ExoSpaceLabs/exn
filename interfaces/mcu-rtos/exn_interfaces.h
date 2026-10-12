@@ -165,6 +165,58 @@ typedef enum {
 } exn_hk_structure_t;
 
 typedef enum {
+  EXN_HW_STM32H755_NUCLEO = 0x0001u,
+  EXN_HW_RPI5             = 0x0101u,
+  EXN_HW_KRIA_K26         = 0x0201u,
+  EXN_HW_KRIA_KV260       = 0x0202u
+} exn_hardware_profile_t;
+
+typedef enum {
+  EXN_SENSOR_OBC_MCU_JUNCTION_TEMP = 0x0101u,
+  EXN_SENSOR_OBC_VDDA_ESTIMATE     = 0x0102u,
+  EXN_SENSOR_OBC_VBAT              = 0x0103u,
+
+  EXN_SENSOR_PI5_SOC_TEMP          = 0x1101u,
+  EXN_SENSOR_PI5_EXT5V             = 0x1102u,
+  EXN_SENSOR_PI5_CORE_VOLTAGE      = 0x1103u,
+
+  EXN_SENSOR_K26_JUNCTION_TEMP     = 0x2101u,
+  EXN_SENSOR_K26_PS_0V85           = 0x2110u,
+  EXN_SENSOR_K26_PS_1V80           = 0x2111u,
+  EXN_SENSOR_K26_PL_0V72           = 0x2120u,
+  EXN_SENSOR_K26_PL_1V80           = 0x2121u,
+  EXN_SENSOR_K26_PL_0V85           = 0x2122u,
+
+  EXN_SENSOR_KV260_SOM_5V_VOLTAGE = 0x2180u,
+  EXN_SENSOR_KV260_SOM_5V_CURRENT = 0x2181u,
+  EXN_SENSOR_KV260_SOM_5V_POWER   = 0x2182u
+} exn_sensor_id_t;
+
+typedef enum {
+  EXN_SENSOR_VALID       = 0u,
+  EXN_SENSOR_UNAVAILABLE = 1u,
+  EXN_SENSOR_STALE       = 2u,
+  EXN_SENSOR_FAULT       = 3u
+} exn_sensor_status_t;
+
+typedef enum {
+  EXN_ALARM_NORMAL    = 0u,
+  EXN_ALARM_WARN_LOW  = 1u,
+  EXN_ALARM_WARN_HIGH = 2u,
+  EXN_ALARM_CRIT_LOW  = 3u,
+  EXN_ALARM_CRIT_HIGH = 4u
+} exn_sensor_alarm_t;
+
+#define EXN_PI_HEALTH_UNDERVOLTAGE_NOW       (1u << 0)
+#define EXN_PI_HEALTH_FREQ_CAPPED_NOW        (1u << 1)
+#define EXN_PI_HEALTH_THROTTLED_NOW          (1u << 2)
+#define EXN_PI_HEALTH_SOFT_TEMP_LIMIT_NOW    (1u << 3)
+#define EXN_PI_HEALTH_UNDERVOLTAGE_OCCURRED  (1u << 16)
+#define EXN_PI_HEALTH_FREQ_CAPPED_OCCURRED   (1u << 17)
+#define EXN_PI_HEALTH_THROTTLED_OCCURRED     (1u << 18)
+#define EXN_PI_HEALTH_SOFT_TEMP_OCCURRED     (1u << 19)
+
+typedef enum {
   EXN_STATE_UNKNOWN  = 0u,
   EXN_STATE_STARTING = 1u,
   EXN_STATE_READY    = 2u,
@@ -266,6 +318,11 @@ typedef struct EXN_PACKED {
   uint8_t structure_id_be[2];
   uint8_t sample_unix_ms_be[8];
 } exn_hk_report_prefix_t;
+
+typedef struct EXN_PACKED {
+  uint8_t hardware_profile_id_be[2];
+  uint8_t count_be[2];
+} exn_sensors_report_prefix_t;
 
 typedef struct EXN_PACKED {
   uint8_t unix_ms_be[8];
