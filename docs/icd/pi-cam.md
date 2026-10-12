@@ -274,6 +274,18 @@ Scopes are used by `TC[200,4]` / `TM[200,5]` to request/report coherent groups w
 
 `scope_mask=0xFFFF` means **all supported Camera configuration**.
 
+### 6.8 Configuration bounds
+
+The wire format is bounded:
+
+- maximum configuration entries per Set/Report: **64**;
+- maximum value payload per entry: **32 bytes**;
+- scalar numeric/boolean fields use their fixed-width EXN value type;
+- unknown/reserved control IDs are rejected;
+- duplicate control IDs in one Set request are invalid.
+
+These limits permit fixed-size parsing/storage; dynamic allocation is not required.
+
 ### 6.8 Set Camera Configuration payload
 
 `TC[200,3]`:
