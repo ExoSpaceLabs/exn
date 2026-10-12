@@ -80,14 +80,14 @@ CCSDS permits APID naming to be mission-specific. EXN fixes the following conven
 
 Examples:
 
-- GS -> MCU System HK request: TC APID `0x100`, PUS-A TC Source ID `0x10`.
-- MCU -> PI camera command: TC APID `0x101`, PUS-A TC Source ID `0x01`.
-- MCU -> PI Antenna command: TC APID `0x103`, PUS-A TC Source ID `0x01`.
-- MCU -> Pi platform-management command: TC APID `0x104`, Source ID `0x01`.
-- PI-CAM -> MCU/GS camera ACK: TM APID `0x101`.
-- PI-COMMS/Antenna -> MCU link HK: TM APID `0x103`.
-- PI-MGMT -> MCU platform/service-supervision HK: TM APID `0x104`.
-- MCU -> GS System HK report: TM APID `0x100`.
+- GS -> OBC System HK request: TC APID `0x100`, PUS-C Source ID `0x0010`.
+- OBC -> PI-CAM Camera command: TC APID `0x101`, PUS-C Source ID `0x0001`.
+- OBC -> Antenna command: TC APID `0x103`, PUS-C Source ID `0x0001`.
+- OBC -> PI-MGMT command: TC APID `0x104`, PUS-C Source ID `0x0001`.
+- PI-CAM -> OBC Camera report: TM APID `0x101`, PUS-C Destination ID `0x0001`.
+- Antenna -> OBC link HK: TM APID `0x103`, Destination ID `0x0001`.
+- PI-MGMT -> OBC platform HK: TM APID `0x104`, Destination ID `0x0001`.
+- OBC -> GS System HK report: TM APID `0x100`, Destination ID `0x0010`.
 
 The Packet Sequence Count authority follows the complete managed Packet Identification stream, not a vague "per sender" rule.
 
@@ -226,8 +226,8 @@ The preamble is not part of the downstream packet. MCU removes it before re-issu
 
 Commands whose service endpoint is MCU itself do **not** use the proxy preamble. In particular:
 
-- TC `3/10` Request System HK is GS -> MCU and its Application Data is exactly `{transactionId, include_mask, detailMask}`.
-- A GS request for MCU-local `3/1` HK likewise needs no downstream proxy preamble.
+- `TC[3,128]` Request System HK is GS -> OBC and its Application Data is `{transaction_id:u16, include_mask:u8, detail_mask:u16}`.
+- A GS request for OBC-local one-shot HK uses standard `TC[3,27]` and likewise needs no routing envelope.
 
 This avoids the previous duplicate `transactionId` definition around System HK.
 
