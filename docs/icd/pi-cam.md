@@ -117,6 +117,15 @@ Modes:
 
 STREAM is intentionally represented now so later live/video work does not require replacing the command model.
 
+Acquisition flags:
+
+| Bit | Meaning |
+|---:|---|
+| 0 | `USE_CURRENT_FOCUS` — with `af.mode=AUTO`, skip the normal pre-acquisition one-shot AF cycle |
+| 1 | `FAIL_IF_PRODUCT_UNAVAILABLE` — reject acquisition if any requested product cannot be produced |
+| 2 | `KEEP_PARTIAL_PRODUCTS` — retain successfully created products if a later derivation fails |
+| 3..15 | reserved |
+
 ### 5.2 Stop Acquisition
 
 `TC[200,2]` contains `acquisitionId`.
@@ -164,13 +173,20 @@ Camera Module 3 supports long exposures, but exact active-mode limits are obtain
 | Control | Meaning |
 |---|---|
 | `af.mode` | MANUAL / AUTO / CONTINUOUS |
-| `af.trigger` | START / CANCEL for triggered autofocus |
 | `af.range` | supported AF search-range policy |
 | `af.speed` | supported AF speed policy |
 | `lens.position_dioptres` | manual focus position; 0 represents infinity |
 | `af.window` | normalized/declared autofocus region where supported |
 
 AF status metadata includes current AF state and read-back lens position.
+
+Autofocus execution follows acquisition semantics:
+
+- `af.mode=AUTO`: PI-CAM performs a one-shot focus cycle before the first requested frame unless the acquisition flags explicitly request use of the current focus position;
+- `af.mode=CONTINUOUS`: continuous AF remains active according to the Camera stack;
+- `af.mode=MANUAL`: `lens.position_dioptres` is used.
+
+An explicit AF trigger is therefore not part of the Camera **configuration** transaction. If standalone focus actions become operationally necessary later, they will be defined as a Camera action operation rather than a writable configuration field.
 
 ### 6.4 White balance / colour / ISP controls
 
@@ -225,7 +241,6 @@ Camera control IDs are 16-bit and stable across implementations. Capability repo
 | `0x0202` | `awb.red_gain` | F32 | |
 | `0x0203` | `awb.blue_gain` | F32 | |
 | `0x0300` | `af.mode` | U8 | 0=MANUAL, 1=AUTO, 2=CONTINUOUS |
-| `0x0301` | `af.trigger` | U8 | 1=START, 2=CANCEL; command-like/write-only |
 | `0x0302` | `af.range` | U8 | capability-reported enum |
 | `0x0303` | `af.speed` | U8 | capability-reported enum |
 | `0x0304` | `lens.position_dioptres` | F32 | 0 = infinity |
