@@ -1,6 +1,21 @@
 # ICD — EXN CCSDS/PUS Interface Control Document
 
-This document is the wire-level source of truth for communication between EXN logical endpoints. Device-specific behavior and parameter ranges live under `docs/icd/`; the functional component contract is defined in `docs/component-services.md`; packet identifiers, header policy, routing rules, service identifiers, and common application-data layouts are defined here.
+This repository is the **complete EXN Interface Control Document authority**.
+
+This master document defines the common wire contract for communication between EXN logical endpoints. It is part of a normative ICD set:
+
+- `docs/ICD.md` — common CCSDS/PUS headers, APIDs, routing and shared wire rules;
+- `docs/services.md` — service/subservice allocation and PUS tailoring;
+- `docs/component-services.md` — common operational semantics and cross-component payload models;
+- `docs/icd/gs.md` — Ground/HIL endpoint contract;
+- `docs/icd/mcu-rtos.md` — OBC endpoint contract;
+- `docs/icd/pi-cam.md` — Camera endpoint contract;
+- `docs/icd/linux-payload.md` — Antenna and PI-MGMT endpoint contracts;
+- `docs/icd/fpga-ai.md` — FPGA processing endpoint contract.
+
+Together, these files are the full EXN ICD. Component repositories are implementations of this contract, not additional interface authorities.
+
+If an implementation requires a new command, telemetry item, field, state, event, parameter, sensor, routing behavior, or error code, the normative definition shall be added to this ICD set before the implementation depends on it.
 
 Logical endpoints may be co-located on one physical computer. In particular, PI-CAM, PI-COMMS/Antenna and the PI-MGMT supervisor execute on the same Raspberry Pi while retaining independent endpoint identities. PI-MGMT is management infrastructure, not a third Pi mission purpose.
 
