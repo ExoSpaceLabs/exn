@@ -4,6 +4,9 @@ This document records system, structural, interface-definition, and architecture
 
 ## 2026-10-12
 
+- Define the general TC granularity rule: allocate subservices by operation class, not individual fields; Camera image settings now use one bounded atomic Set Configuration TC and scoped Get/Report pair.
+- Move PI-CAM storage-retention/free-space policy out of Service 200 image configuration into Service 20 runtime parameters.
+
 - Simplify Ground System HK to an empty-payload TC[3,128] that returns the OBC's complete cached spacecraft snapshot; Ground no longer selects individual endpoints/structures.
 - Define OBC supervision and automatic-recovery state, configurable heartbeat/health/offline/recovery timing, recovery attempt counters, and downloadable diagnostic/recovery journals.
 
