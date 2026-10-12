@@ -12,9 +12,25 @@ Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../s
 | PUS-C source/destination ID | `0x0001` |
 | PUS revision | C |
 
-The OBC is the spacecraft command authority, component orchestrator, System-HK aggregator, time authority and health/fault supervisor.
+The OBC is the **spacecraft platform authority**: spacecraft-mode owner, command authority, component/subsystem orchestrator, System-HK aggregator, time authority and health/FDIR supervisor.
 
 The intended implementation baseline is HardRT 0.5.1 + DAS v0.1.0 on STM32H755 / NUCLEO-H755ZI-Q.
+
+The STM32H755 is used to model the **OBC architectural role**, not to claim a flight-qualified OBC implementation. Its dual-core Cortex-M7/M4 resources are more than sufficient for the current EXN command/data-handling demonstrator and for representative distributed-subsystem orchestration. Flight deployment would additionally depend on mission-specific radiation tolerance, redundancy, memory protection, watchdog/recovery, interface, qualification and availability requirements.
+
+## 1.1 Spacecraft-authority scope
+
+The OBC authority extends beyond the payload services currently implemented by EXN.
+
+Future examples include:
+
+- AOCS/ADCS: OBC owns spacecraft attitude/mode objectives and supervision; a dedicated controller may execute estimation and fast actuator loops.
+- EPS: OBC owns spacecraft power policy/mode; dedicated power electronics/controllers perform local switching and protection.
+- Thermal: OBC owns thermal mode/policy; local controllers may execute heater loops.
+- Mechanisms/actuators: OBC authorizes and supervises operations; local electronics may close low-level loops.
+- HPC/payload computers: OBC authorizes jobs and use of results; HPC execution does not confer spacecraft authority.
+
+These future interfaces are intentionally **not allocated service IDs yet**. EXN shall define them centrally when they become implementation scope rather than reserving speculative packet semantics now.
 
 ## 2. Packet behavior
 
