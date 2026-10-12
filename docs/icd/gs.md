@@ -86,8 +86,8 @@ OBC-local requests do not carry this envelope.
 
 Examples of direct Ground -> OBC requests include:
 
-- `TC[3,27]` one-shot OBC HK;
-- `TC[3,128]` EXN System HK;
+- `TC[3,128]` EXN System HK — normal Ground spacecraft-HK request;
+- `TC[3,27]` one-shot OBC HK — diagnostic/direct endpoint request, not the normal flight snapshot;
 - `TC[9,128]` Set Mission Time;
 - OBC Service 20 configuration;
 - OBC Service 8 functions;
@@ -97,24 +97,19 @@ All use APID `0x100` and PUS-C Source ID `0x0010`.
 
 ## 6. System HK
 
+System HK is deliberately simple for Ground.
+
 ### 6.1 Request
 
-`TC[3,128]` Application Data:
+`TC[3,128]` means:
 
-```text
-transaction_id:u16
-include_mask:u8
-detail_mask:u16
-```
+> **Return the current spacecraft housekeeping snapshot.**
 
-`include_mask`:
+It has **no Application Data**.
 
-- bit0 OBC;
-- bit1 PI-CAM;
-- bit2 FPGA;
-- bit3 Antenna;
-- bit4 PI-MGMT;
-- bits5..7 reserved.
+Ground does not select PI-CAM, FPGA, Antenna, PI-MGMT, or individual HK structures in the normal flight interface. The OBC already supervises all registered endpoints and owns the authoritative spacecraft-health cache.
+
+The request uses the normal PUS-C TC identity and Service 1 acceptance verification; no extra Ground transaction ID is needed.
 
 ### 6.2 Report
 
@@ -123,26 +118,37 @@ detail_mask:u16
 Application Data:
 
 ```text
-transaction_id:u16
-present_mask:u8
-status:u8
-block_count:u8
-repeat block_count:
+request_id[4]              # original TC Packet ID + Packet Sequence Control
+snapshot_unix_ms:u64
+system_status:u8           # 0=OK, 1=DEGRADED, 2=ERROR
+endpoint_count:u8
+
+repeat endpoint_count:
     producer_apid:u16
-    block_length:u16
-    block[block_length]
+    supervision_state:u8   # UNKNOWN/OK/STALE/OFFLINE/ERROR
+    endpoint_state:u8      # last self-reported common endpoint state
+    structure_count:u8
+
+    repeat structure_count:
+        structure_id:u16
+        age_ms:u32         # age at snapshot creation, saturating at UINT32_MAX
+        block_length:u16
+        block[block_length]
 ```
 
-`status`:
+Every registered spacecraft endpoint appears in the report, including the OBC itself. Future AOCS/EPS/thermal controllers therefore join the same snapshot model without changing the Ground request.
+
+`system_status` is:
 
 | Value | Meaning |
 |---:|---|
-| 0 | OK |
-| 1 | PARTIAL |
-| 2 | TIMEOUT |
-| 3 | ERROR |
+| 0 | `OK` — all required endpoints are supervised OK |
+| 1 | `DEGRADED` — at least one endpoint is stale/offline/error, but the OBC can provide a coherent snapshot |
+| 2 | `ERROR` — the OBC could not construct a coherent spacecraft snapshot |
 
-Each embedded block is the latest valid endpoint HK data selected by the OBC aggregation policy.
+A stale/offline endpoint is **not omitted**. Its entry remains present with the OBC supervision state and any last valid cached HK blocks. Ground can therefore distinguish "device is offline" from "the report forgot that device exists."
+
+The System-HK report is built from the OBC cache and does not normally trigger downstream TCs. Supervision cadence, stale/offline thresholds, and which structures are maintained in the cache are configured separately through OBC Service 20.
 
 ## 7. Parameter management from Ground
 
