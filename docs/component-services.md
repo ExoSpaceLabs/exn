@@ -215,7 +215,9 @@ An endpoint may therefore have last reported `endpoint_state=READY` while the OB
 
 The OBC continuously refreshes its HK cache according to Service 20 supervision policy. Ground System-HK requests do not normally trigger a new cascade of endpoint requests.
 
-Three consecutive missing heartbeat intervals are the integration default for transition to `OFFLINE`; the threshold is configurable. The OBC emits a Service 5 event on supervision-state transitions. Automatic restart policy is configurable and disabled by default until recovery behavior is verified.
+Three consecutive missing heartbeat intervals are the integration default for transition from `OK` to `STALE`. `offline_after_ms` then controls transition to `OFFLINE`. If `auto_recovery_enable` is set and the endpoint remains unavailable for `recovery_after_ms`, the OBC may trigger the endpoint's configured recovery action.
+
+The OBC emits a Service 5 event on every supervision-state and recovery-state transition. Automatic recovery is disabled by default until the platform-specific reset path has been verified.
 
 ### 5.3 Common HEARTBEAT / HEALTH wire prefix
 
@@ -411,6 +413,7 @@ A function with no arguments has `argument_count=0`.
 | `0x0003` | reboot node/platform | OBC, PI-MGMT, FPGA platform |
 | `0x0004` | enter idle/safe application state | Camera, FPGA |
 | `0x0005` | leave idle/safe application state | Camera, FPGA |
+| `0x0006` | create diagnostic-log object | OBC and managed endpoints where supported |
 
 ### 8.3 Pi supervisor functions
 
@@ -426,7 +429,84 @@ PI-MGMT additionally provides:
 
 OBC uses PI-MGMT for restart/recovery so a failed Camera or Antenna process is not required to receive its own restart request.
 
-## 8.4 Event ID namespaces
+### 8.4 Recovery policy and state
+
+The OBC owns automatic recovery policy. Endpoint self-protection may exist, but spacecraft-level recovery decisions are recorded and supervised by the OBC.
+
+Recovery state:
+
+| Value | State | Meaning |
+|---:|---|---|
+| 0 | `NONE` | no recovery active |
+| 1 | `PENDING` | trigger condition met; waiting for configured recovery delay/cooldown |
+| 2 | `ACTION_SENT` | recovery command/reset request issued |
+| 3 | `WAITING_FOR_HEALTH` | waiting for heartbeat/HK after recovery action |
+| 4 | `RECOVERED` | endpoint returned healthy |
+| 5 | `FAILED` | recovery attempt failed or timed out |
+| 6 | `SUPPRESSED` | policy wanted recovery but action was disabled/unavailable/exhausted |
+
+Recovery reason:
+
+| Value | Reason |
+|---:|---|
+| 0 | `NONE` |
+| 1 | `HEARTBEAT_TIMEOUT` |
+| 2 | `HEALTH_TIMEOUT` |
+| 3 | `PROTOCOL_ERROR` |
+| 4 | `CRASH_LOOP` |
+| 5 | `THERMAL` |
+| 6 | `POWER_FAULT` |
+| 7 | `MANUAL` |
+
+Recovery action:
+
+| Value | Action | Requirement |
+|---:|---|---|
+| 0 | `NONE` | no action |
+| 1 | `REINITIALIZE` | endpoint/service command path responsive |
+| 2 | `RESTART_SERVICE` | supervisor such as PI-MGMT responsive |
+| 3 | `SOFT_REBOOT` | endpoint management path responsive |
+| 4 | `HARD_RESET` | independent reset control available |
+| 5 | `POWER_CYCLE` | independent EPS/power-switch control available |
+
+A completely unreachable endpoint cannot be recovered by a soft reboot command sent over the failed communication path. EXN shall therefore report `SUPPRESSED` when the configured action requires an independent reset/power path that is not implemented.
+
+Each endpoint supervision record stores:
+
+- current recovery state/reason/action;
+- cumulative recovery-attempt count;
+- successful-recovery count;
+- last recovery start/completion time;
+- last recovery result/error;
+- whether automatic recovery is currently inhibited by cooldown or retry limit.
+
+### 8.5 Recovery journal and diagnostic logs
+
+The OBC maintains a bounded persistent or retained **recovery journal** containing at minimum:
+
+```text
+record_id:u32
+event_unix_ms:u64
+endpoint_apid:u16
+previous_supervision_state:u8
+new_supervision_state:u8
+recovery_reason:u8
+recovery_action:u8
+recovery_result:u8
+heartbeat_age_ms:u32
+health_age_ms:u32
+endpoint_uptime_ms:u64      # last valid value if available
+endpoint_restart_count:u32  # last valid value if available
+error_code:u16
+```
+
+The latest recovery summary is visible in System HK. Detailed journal data is downloadable as a Service 220 object of type `DIAGNOSTIC_LOG`.
+
+Common Service 8 function `0x0006 CREATE_DIAGNOSTIC_LOG` asks the target/OBC to snapshot its available diagnostics into an immutable Service 220 object. Ground then downloads that object using the ordinary payload-object transfer mechanism.
+
+A dead endpoint is not required to provide its own post-mortem log. The OBC recovery journal remains available even when the failed endpoint never returns.
+
+## 8.6 Event ID namespaces
 
 Service 5 event IDs are partitioned so logs can be decoded without guessing the producer-specific dictionary.
 
@@ -645,6 +725,7 @@ without relaying Y through the MCU.
 | `0x0004` | processing result blob |
 | `0x0005` | thumbnail/preview |
 | `0x0010` | software update package |
+| `0x0020` | diagnostic/recovery log |
 | `0x7FFF` | mission-defined opaque object |
 
 `format:uint16` identifies serialization:
@@ -813,12 +894,14 @@ OBC Service 20 parameters include:
 
 | ID | Name | Type | Default |
 |---:|---|---|---|
-| `0x0001` | `supervision.heartbeat_period_ms` | U32 | 1000 |
+| `0x0001` | `supervision.heartbeat_period_ms` | U32 | 2000 |
 | `0x0002` | `supervision.health_period_ms` | U32 | 10000 |
 | `0x0003` | `supervision.missed_heartbeat_limit` | U8 | 3 |
-| `0x0004` | `supervision.auto_restart_enable` | BOOL | false |
-| `0x0005` | `supervision.stale_after_ms` | U32 | 15000 |
-| `0x0006` | `supervision.offline_after_ms` | U32 | 30000 |
+| `0x0004` | `supervision.auto_recovery_enable` | BOOL | false |
+| `0x0005` | `supervision.offline_after_ms` | U32 | 15000 |
+| `0x0006` | `supervision.recovery_after_ms` | U32 | 60000 |
+| `0x0007` | `supervision.recovery_cooldown_ms` | U32 | 120000 |
+| `0x0008` | `supervision.max_auto_recoveries` | U8 | 3 |
 | `0x0010` | `time.resync_period_ms` | U32 | 60000 |
 | `0x0011` | `time.max_sync_age_ms` | U32 | deployment-defined |
 | `0x0020` | `transfer.default_chunk_size` | U16 | deployment-defined |
