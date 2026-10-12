@@ -2,7 +2,7 @@
 
 This document defines the logical EXN system architecture and the ownership boundaries between the control computer, Linux payload services, FPGA processing, ground communications, and reusable platform libraries.
 
-The master wire-level contract remains [`docs/ICD.md`](ICD.md), while [`docs/services.md`](services.md) defines the mission PUS service tailoring. This document describes how EXN components are intended to be composed and how control/data may flow between them without forcing one fixed mission pipeline.
+The master wire-level contract remains [`docs/ICD.md`](ICD.md), [`docs/services.md`](services.md) defines the mission PUS service tailoring, and [`docs/component-services.md`](component-services.md) defines the complete endpoint behavior. This document describes how EXN components are intended to be composed and how control/data may flow between them without forcing one fixed mission pipeline.
 
 ## 1. Architectural principles
 
@@ -77,7 +77,7 @@ The Raspberry Pi shall be treated as one physical spacecraft payload computer wi
 1. **PI-CAM** acquires and owns payload imagery/products.
 2. **PI-COMMS is the Antenna service.** It owns the Ground-facing link, exchanges TCs/TMs with the OBC, and transmits payload products from Camera or FPGA to Ground.
 
-Linux platform management supervises both functions but is not itself a third primary mission role.
+Linux platform management supervises both functions but is not itself a third primary mission role. It is exposed as supporting endpoint **PI-MGMT (`0x104`)** so the OBC can restart/update Camera or Antenna even when the target mission process is not responsive.
 
 A representative service layout is:
 
@@ -86,7 +86,7 @@ Linux
  |
  +-- exn-camera.service
  +-- exn-antenna.service
- +-- exn-platform.service
+ +-- exn-platform.service      PI-MGMT / 0x104
  +-- system watchdog
  +-- journald / telemetry collection
  +-- persistent payload storage
@@ -119,7 +119,7 @@ Responsibilities include:
 
 The Antenna service is **not** the spacecraft command authority. The OBC remains the authority. Ground TCs pass `Ground -> Antenna -> OBC`; OBC TMs pass `OBC -> Antenna -> Ground`. For bulk data, the OBC may command PI-CAM or FPGA to send an object to the Antenna service, which then transmits it to Ground. This bypasses the OBC as a bulk-data router while preserving OBC control.
 
-### 4.3 Platform service
+### 4.3 Platform management / PI-MGMT
 
 The Linux platform-management layer should provide or aggregate:
 
@@ -132,7 +132,7 @@ The Linux platform-management layer should provide or aggregate:
 - restart/error counters;
 - uptime and system-level events.
 
-`systemd` may provide process supervision and watchdog integration, while mission-facing health is reported through EXN housekeeping/event services.
+`systemd` may provide process supervision and watchdog integration. PI-MGMT turns those host capabilities into an OBC-addressable management endpoint for service restart, Pi reboot, platform HK/alarms and software activation.
 
 ## 5. Control plane and data plane
 
@@ -347,6 +347,7 @@ For the STM32 control node in particular:
 The documentation boundary is:
 
 - **`docs/architecture.md`**: logical nodes, responsibilities, control/data paths, routing policy, and reusable-stack composition;
+- **`docs/component-services.md`**: complete endpoint functions, management, heartbeat, time, acquisition, processing, transfer and update behavior;
 - **`docs/services.md`**: PUS service tailoring, standard/mission-specific allocation, and migration policy;
 - **`docs/ICD.md`**: exact CCSDS/PUS wire contract and routing fields;
 - **`docs/icd/`**: endpoint-specific service behavior and payload layouts;
