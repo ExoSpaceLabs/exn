@@ -9,30 +9,40 @@ The diagrams show **valid flows**, not one mandatory pipeline. EXN separates con
 
 ---
 
-## 1) System Housekeeping Aggregation
+## 1) System Housekeeping Snapshot
 
-The existing HIL profile may connect GS directly to MCU/OBC. The MCU fans out HK requests, aggregates the reports, and returns System HK.
+The OBC supervises endpoints continuously and maintains the authoritative spacecraft HK cache. A Ground System-HK request does not normally create a downstream TC fan-out; it asks the OBC to serialize its current snapshot.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant GS as GS
-  participant MCU as STM32 OBC
-  participant CAM as Camera Service
-  participant FPGA as FPGA Processing
+  participant GS as Ground
+  participant OBC as STM32 OBC
+  participant CAM as PI-CAM
+  participant FPGA as FPGA
+  participant ANT as Antenna
+  participant PM as PI-MGMT
 
-  GS->>MCU: TC 3/128 Request System HK
-  par Fan-out HK requests
-    MCU->>CAM: TC 3/1 Request HK
-    MCU->>FPGA: TC 3/1 Request HK
-    MCU->>MCU: Collect self HK
+  loop OBC supervision policy
+    par Heartbeat / health refresh
+      OBC->>CAM: TC[3,27]
+      OBC->>FPGA: TC[3,27]
+      OBC->>ANT: TC[3,27]
+      OBC->>PM: TC[3,27]
+    end
+    CAM-->>OBC: TM[3,25]
+    FPGA-->>OBC: TM[3,25]
+    ANT-->>OBC: TM[3,25]
+    PM-->>OBC: TM[3,25]
+    OBC->>OBC: update HK cache + supervision/recovery state
   end
-  CAM-->>MCU: TM 3/2 HK Report
-  FPGA-->>MCU: TM 3/2 HK Report
-  MCU-->>GS: TM 3/129 System HK Report
+
+  GS->>OBC: TC[3,128] System HK (empty payload)
+  OBC->>OBC: snapshot own HK + cached endpoint HK
+  OBC-->>GS: TM[3,129] complete spacecraft snapshot
 ```
 
-A flight-like deployment may place the Antenna service between GS and MCU without changing MCU control ownership.
+An endpoint that does not respond remains represented in the snapshot as STALE/OFFLINE/ERROR, together with its last valid cached data and OBC recovery state.
 
 ---
 
@@ -200,7 +210,7 @@ sequenceDiagram
   OBC->>OBC: update endpoint registry / alarm state
 ```
 
-Missing heartbeat intervals transition an endpoint toward OFFLINE according to OBC policy and produce Service 5 events.
+Missing heartbeat intervals transition an endpoint through STALE/OFFLINE according to OBC Service 20 policy and produce Service 5 events. If automatic recovery is enabled and the configured recovery delay expires, the OBC records and attempts the configured recovery action; System HK exposes that state.
 
 ---
 
