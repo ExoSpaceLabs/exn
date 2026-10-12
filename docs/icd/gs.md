@@ -9,7 +9,7 @@ This document specializes the EXN master ICD for the Ground Station. The wire pr
 - EXN supports a direct HIL profile where the GS device link terminates at MCU-RTOS (`0x100`).
 - The flight-like profile inserts PI-COMMS (`0x103`) as the communications transport between Ground and the OBC, without changing the logical destination of OBC-directed commands.
 - GS-originated control requests therefore normally target MCU APID `0x100`.
-- MCU consumes device-proxy metadata and may re-issue a new TC to PI-CAM (`0x101`), FPGA-AI (`0x102`), or PI-COMMS (`0x103`) when required.
+- MCU consumes device-proxy metadata and may re-issue a new TC to PI-CAM (`0x101`), FPGA-AI (`0x102`), PI-COMMS/Antenna (`0x103`), or target PI-MGMT (`0x104`) when required.
 - Forwarded node TMs retain the producing node APID where the active transport permits complete Space Packet routing.
 
 All currently implemented GS mission packets use the **transitional PUS-A compatibility profile** defined by the master ICD. New service development targets the PUS-C profile in `../services.md`.
@@ -61,10 +61,10 @@ A GS TC that MCU must re-issue to another EXN endpoint begins its Application Da
 | Field | Type | Bits | Description |
 |---|---|---:|---|
 | `transactionId` | uint16 | 16 | `1..65535`; `0` reserved |
-| `target` | uint8 | 8 | `1=PI-CAM`, `2=FPGA-AI`, `3=PI-COMMS` |
+| `target` | uint8 | 8 | current compatibility: `1=PI-CAM`, `2=FPGA-AI`, `3=PI-COMMS`; target profile additionally reserves `4=PI-MGMT` |
 | `options` | uint8 | 8 | bit0 mirror response to GS; bit1 mirror to peer; remaining bits zero |
 
-The GS -> MCU packet still has TC APID `0x100` and PUS-A Source ID `0x10` because MCU is the direct endpoint of that hop.
+The GS -> MCU packet still has TC APID `0x100` and PUS-A Source ID `0x10` because MCU is the direct endpoint of that hop. PI-MGMT target value 4 belongs to the target interface and is not claimed as implemented by the current GS compatibility code.
 
 MCU removes the preamble before creating the downstream packet. The downstream TC then uses target APID `0x101`, `0x102`, or `0x103` and MCU Source ID `0x01` under the current compatibility profile.
 
@@ -115,7 +115,7 @@ GS -> MCU TC `3/10`:
 | Field | Type | Description |
 |---|---|---|
 | `transactionId` | uint16 | request/response correlation |
-| `include_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS |
+| `include_mask` | uint8 | current compatibility: bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS; target System HK adds bit4 PI-MGMT |
 | `detailMask` | uint16 | common detail selection |
 
 MCU -> GS TM `3/100` uses producer APID `0x100` and echoes `transactionId`.
@@ -186,3 +186,20 @@ System HK is the first GS client flow migrated to this API. Other UI command bui
 
 
 The PUS-C migration shall update GS packet builders, simulator fixtures, acknowledgement flags and golden vectors in the same change as the shared interface definitions. The GS daemon remains service-agnostic and should require little or no service-specific change.
+
+
+## 8. Target operator service coverage
+
+After the coordinated PUS-C migration, the GS application layer should be able to exercise the full component contract in `../component-services.md`.
+
+Operator-facing functions include:
+
+- endpoint heartbeat/HK and sensor/alarm inspection;
+- Camera capability/query/set controls, acquisition, product catalog and downlink;
+- FPGA capability/job/status/result control;
+- Pi Camera/Antenna restart and Pi reboot through PI-MGMT;
+- OBC time synchronization and endpoint sync status;
+- payload-object transfer status;
+- software inventory/update stage/activate/rollback.
+
+The GS daemon remains transport-only. These are UI/application operations, not daemon responsibilities.
