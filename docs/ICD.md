@@ -1,8 +1,8 @@
 # ICD — EXN CCSDS/PUS Interface Control Document
 
-This document is the wire-level source of truth for communication between EXN logical endpoints. Device-specific behavior and parameter ranges live under `docs/icd/`; packet identifiers, header policy, routing rules, service identifiers, and common application-data layouts are defined here.
+This document is the wire-level source of truth for communication between EXN logical endpoints. Device-specific behavior and parameter ranges live under `docs/icd/`; the functional component contract is defined in `docs/component-services.md`; packet identifiers, header policy, routing rules, service identifiers, and common application-data layouts are defined here.
 
-Logical endpoints may be co-located on one physical computer. In particular, PI-CAM and PI-COMMS may initially execute on the same Raspberry Pi while retaining independent endpoint identities.
+Logical endpoints may be co-located on one physical computer. In particular, PI-CAM, PI-COMMS/Antenna and the PI-MGMT supervisor execute on the same Raspberry Pi while retaining independent endpoint identities. PI-MGMT is management infrastructure, not a third Pi mission purpose.
 
 ## 0. Current protocol baseline
 
@@ -33,15 +33,16 @@ No new endpoint implementation shall extend the legacy Service 17/20/23 assignme
 
 ### Nodes
 
-| Node | APID | PUS-A TC Source ID | Role |
+| Node | APID | Transitional/target Source ID | Role |
 |---|---:|---:|---|
 | GS | `0x0F0` | `0x10` | Ground station/operator client |
-| MCU-RTOS | `0x100` | `0x01` | Control/router node and time master |
+| MCU-RTOS / OBC | `0x100` | `0x01` | command authority, orchestration and time master |
 | PI-CAM | `0x101` | `0x02` | Camera/image payload service |
 | FPGA-AI | `0x102` | `0x03` | Processing/inference node |
-| PI-COMMS | `0x103` | `0x04` | Antenna/communications logical service |
+| PI-COMMS / Antenna | `0x103` | `0x04` | single Ground-link service |
+| PI-MGMT | `0x104` | `0x05` | Pi platform supervisor, restart/reboot/update management |
 
-PI-CAM and PI-COMMS are logical endpoints. Their current co-location on a Raspberry Pi does not make them one packet endpoint.
+PI-CAM and PI-COMMS are the two Pi mission endpoints. PI-MGMT is a supporting management endpoint owned by `exn-platform.service`; it exists so the OBC can restart/update a failed Pi mission service without addressing the failed process itself.
 
 ---
 
@@ -78,9 +79,11 @@ Examples:
 
 - GS -> MCU System HK request: TC APID `0x100`, PUS-A TC Source ID `0x10`.
 - MCU -> PI camera command: TC APID `0x101`, PUS-A TC Source ID `0x01`.
-- MCU -> PI communications command: TC APID `0x103`, PUS-A TC Source ID `0x01`.
+- MCU -> PI Antenna command: TC APID `0x103`, PUS-A TC Source ID `0x01`.
+- MCU -> Pi platform-management command: TC APID `0x104`, Source ID `0x01`.
 - PI-CAM -> MCU/GS camera ACK: TM APID `0x101`.
-- PI-COMMS -> MCU communications HK: TM APID `0x103`.
+- PI-COMMS/Antenna -> MCU link HK: TM APID `0x103`.
+- PI-MGMT -> MCU platform/service-supervision HK: TM APID `0x104`.
 - MCU -> GS System HK report: TM APID `0x100`.
 
 The Packet Sequence Count authority follows the complete managed Packet Identification stream, not a vague "per sender" rule.
@@ -139,14 +142,14 @@ Where this ICD specifies `ts_cuc`, EXN currently uses a six-octet mission CUC re
 EXN supports two ground-link deployment profiles without changing control ownership:
 
 1. **HIL/direct profile:** GS connects directly to MCU-RTOS.
-2. **Flight-like profile:** GS connects to PI-COMMS, which delivers ground traffic toward MCU-RTOS. PI-COMMS is a communications endpoint, not the spacecraft command authority.
+2. **Flight-like profile:** GS connects to the PI-COMMS Antenna service, which delivers ground traffic toward MCU-RTOS. The Antenna is the Ground link, not the spacecraft command authority.
 
 In both profiles, device-directed commands are supervised/routed by MCU-RTOS before being re-issued to controlled payload endpoints.
 
 For downstream-device operations handled by the MCU proxy path:
 
 1. **GS -> MCU:** TC APID `0x100`, Source ID `0x10`. In the flight-like profile this packet is transported through PI-COMMS without changing its logical destination.
-2. **MCU -> target:** MCU consumes the proxy preamble and creates a new TC using the target APID (`0x101`, `0x102`, or `0x103`) and Source ID `0x01`.
+2. **MCU -> target:** MCU consumes the proxy preamble and creates a new TC using the target APID (`0x101`, `0x102`, `0x103`, or `0x104`) and Source ID `0x01`.
 
 Device TMs retain their producer APID while MCU and/or the communications path routes them toward GS where the deployment permits it.
 
@@ -157,7 +160,7 @@ The proxy preamble is exactly four octets and is used on GS-originated TCs that 
 | Field | Type | Bits | Meaning |
 |---|---|---:|---|
 | `transactionId` | uint16 | 16 | Correlation ID, `1..65535`; `0` reserved |
-| `target` | uint8 | 8 | `1=PI-CAM`, `2=FPGA-AI`, `3=PI-COMMS` |
+| `target` | uint8 | 8 | `1=PI-CAM`, `2=FPGA-AI`, `3=PI-COMMS/Antenna`, `4=PI-MGMT` |
 | `options` | uint8 | 8 | bit0 mirror response to GS; bit1 mirror to peer; remaining bits zero |
 
 The preamble is not part of the downstream packet. MCU removes it before re-issuing the command.
@@ -233,7 +236,7 @@ All entries below describe the **currently executable compatibility profile** an
 | 210/5 | FPGA ACK/NACK | TM | FPGA `0x102` |
 | 250/1 | GS Link/Proxy ACK | TM/report | producer GS APID `0x0F0`, routed to MCU |
 
-PI-COMMS currently uses the common services (3, 5, 17, 20 and 23 where applicable). A dedicated communications-control service may be introduced later if the common parameter/event model is insufficient.
+PI-COMMS/Antenna currently uses common compatibility services where applicable. The target profile adds PI-MGMT, Service 8 recovery, Service 12 monitoring, Service 220 object transfer and Service 230 software management as defined in `services.md` and `component-services.md`.
 
 ### 5.1 Housekeeping, Service 3
 
@@ -262,7 +265,7 @@ Exactly five Application Data octets, no proxy preamble:
 | Field | Type | Notes |
 |---|---|---|
 | `transactionId` | uint16 | correlation ID; current GS client uses non-zero IDs |
-| `include_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS |
+| `include_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS/Antenna, bit4 PI-MGMT |
 | `detailMask` | uint16 | common HK detail selection |
 
 #### TM 3/100 System HK Report
@@ -272,7 +275,7 @@ Header fields:
 | Field | Type | Notes |
 |---|---|---|
 | `transactionId` | uint16 | echoes request |
-| `present_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS |
+| `present_mask` | uint8 | bit0 MCU, bit1 PI-CAM, bit2 FPGA, bit3 PI-COMMS/Antenna, bit4 PI-MGMT |
 | `status` | uint8 | `0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR` |
 | `reserved` | uint8 | zero |
 
@@ -408,7 +411,7 @@ Implementations and tests shall enforce at least the following:
 7. GS -> MCU System HK `3/10` carries exactly the five service payload octets and no proxy preamble.
 8. The GS transport daemon and PI-COMMS service may move packets, but mission scheduling and control decisions remain application/OBC responsibilities.
 9. FPGA processing-result routing is configurable and shall not be implemented as one fixed destination.
-10. Physical co-location of PI-CAM and PI-COMMS shall not collapse their logical endpoint identities.
+10. Physical co-location of PI-CAM, PI-COMMS and PI-MGMT shall not collapse their logical endpoint identities.
 11. No new implementation shall introduce additional use of the legacy Service 17 time, Service 20 subtype, or Service 23 payload-transfer assignments.
 12. Target service semantics and mission-specific allocations shall conform to `docs/services.md`.
 
