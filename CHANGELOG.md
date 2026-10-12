@@ -20,14 +20,14 @@ This document records system, structural, interface-definition, and architecture
 - Audit the current EXN architecture against the implemented/released dependency state and the published ECSS PUS service catalogue.
 - Confirm the logical architecture remains valid: STM32/OBC control authority, independently supervised Linux Camera and Antenna services, FPGA image/AI processing, controllable result routing, and direct bulk-data paths.
 - Add `docs/services.md` as the service-tailoring authority.
-- Classify the existing PUS-A Service 17/20/23 mappings as a transitional compatibility profile rather than the target PUS service baseline.
-- Select PUS-C as the target EXN service profile and define the migration direction for standard Services 1, 3, 5, 9 and 20.
+- Retire the previous PUS-A / legacy Service 17/20/23 profile from the active EXN contract.
+- Select **PUS Revision C as the only active EXN profile** and normalize standard Services 1, 3, 5, 8, 9, 12 and 20.
 - Reserve mission-specific Service 220 for Payload Object Transfer; retain Services 200 and 210 for Camera and Processing.
 - Deprecate legacy Service 250 as a target mission service; request verification moves to standard Service 1 and GS daemon acknowledgements remain local IPC.
 - Align PI-COMMS identifiers across documentation and the MCU compatibility header: APID `0x103`, transitional Source ID `0x04`, proxy target 3, System-HK mask bit3.
 - Remove the implied dynamic-heap requirement from the planned MCU HK definition and align the OBC documentation with HardRT/DAS static-oriented execution.
 - Refresh the released reusable-component baseline: CCSDSPack v2.0.0, HardRT 0.5.1, DAS v0.1.0, SpWKit v0.7.0.
-- Mark the existing CCSDSPack templates, JSON mirrors, and MCU header as compatibility artifacts that must migrate together with EXN-GS.
+- Migrate CCSDSPack templates, JSON mirrors, MCU interface header and EXN-GS/HIL packet code to the PUS-C service catalogue.
 - Clarify the initial Raspberry Pi 5 as a **dual-role payload node**: PI-CAM camera/payload acquisition and PI-COMMS antenna/communications, including OBC communications and direct payload-data downlink to Ground.
 
 ## 2026-09-11
