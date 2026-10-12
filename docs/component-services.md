@@ -123,6 +123,34 @@ The standard verification reports used by EXN are:
 
 Verification packets identify the original request through the standard PUS request-identification fields. EXN does not add a second mission transaction ID unless the application operation itself needs one, such as `acquisitionId`, `jobId`, or `transferId`.
 
+### 4.1 Verification Application Data
+
+Every Service 1 verification report begins with the standard 32-bit **request ID**, copied from the first four octets of the verified TC's CCSDS primary header:
+
+```text
+request_packet_id:u16
+request_packet_sequence_control:u16
+```
+
+This is the original TC Packet ID word followed by its Packet Sequence Control word, both copied verbatim.
+
+EXN tailors the remaining fields as follows:
+
+- `TM[1,1]`, `TM[1,3]`, `TM[1,7]`: request ID only;
+- `TM[1,5]`: request ID + `progress_step_id:u16`;
+- failure reports `TM[1,2]`, `TM[1,4]`, `TM[1,6]`, `TM[1,8]`:
+
+```text
+request_id[4]
+failure_code:u16
+failure_data_length:u16
+failure_data[failure_data_length]
+```
+
+`failure_code` values are allocated by the endpoint ICD/event/error dictionary. `failure_data` is bounded auxiliary information specific to that code and may be empty.
+
+The PUS-C TM Destination ID of the verification report identifies the issuer of the verified TC. Thus an OBC->Camera TC is verified by a PI-CAM TM[1,x] addressed to PUS ID `0x0001`; a Ground->OBC TC is verified by an OBC TM[1,x] addressed to `0x0010`.
+
 Baseline policy:
 
 - every state-changing command requests **acceptance** and **completion** verification;
