@@ -2,7 +2,7 @@
 
 This document defines the logical EXN system architecture and the ownership boundaries between the control computer, Linux payload services, FPGA processing, ground communications, and reusable platform libraries.
 
-The master wire-level contract remains [`docs/ICD.md`](ICD.md). This document describes how EXN components are intended to be composed and how control/data may flow between them without forcing one fixed mission pipeline.
+The master wire-level contract remains [`docs/ICD.md`](ICD.md), while [`docs/services.md`](services.md) defines the mission PUS service tailoring. This document describes how EXN components are intended to be composed and how control/data may flow between them without forcing one fixed mission pipeline.
 
 ## 1. Architectural principles
 
@@ -17,6 +17,7 @@ The main rules are:
 5. **Bulk payload data need not transit the MCU.** Control traffic should remain MCU-centric, while high-volume data paths may connect payload endpoints directly.
 6. **Transport is below mission semantics.** Packet/service behavior must not depend on whether the current carrier is Ethernet, a simulated SpaceWire link, local Linux IPC, or a future physical transport.
 7. **Reusable libraries remain independent projects.** EXN consumes CCSDSPack, HardRT, DAS, and optionally SpWKit. Their internal implementation scope is not part of the EXN mission architecture.
+8. **PUS services are explicitly tailored.** CCSDSPack supplies the packet/header mechanisms; EXN defines which standard PUS services it realizes and which mission-specific services it adds. Service identifiers shall not be repurposed with unrelated semantics.
 
 ## 2. Logical system
 
@@ -277,7 +278,29 @@ STM32 Ethernet hardware
 
 SpWKit must not require DAS directly, and DAS must not know about SpWKit. HardRT provides scheduling, synchronization, timing, IRQ-to-task signalling, and timeout/retry execution around the application and transport integration.
 
-## 8. Reusable software stack
+## 8. PUS service architecture
+
+EXN treats the PUS service catalogue as an application-interface layer above CCSDS packet construction and below endpoint mission logic.
+
+The current EXN-GS/HIL implementation still uses a transitional **PUS-A secondary-header profile with legacy EXN service numbering**. The target coherent system baseline uses the standards-aware service plan in [`services.md`](services.md) and migrates to PUS-C in one coordinated wire revision.
+
+The target service split is:
+
+- standard Service 1 for request verification;
+- standard Service 3 for housekeeping, with EXN System HK using mission-specific subtypes;
+- standard Service 5 for event reporting;
+- standard Service 9 for time management, with a mission-specific time-set request if required;
+- standard Service 20 for parameter management;
+- mission-specific Service 200 for Camera control;
+- mission-specific Service 210 for payload/AI processing;
+- mission-specific Service 220 for payload-object transfer;
+- standard Service 23 reserved for its PUS file-management meaning.
+
+This distinction is architectural, not cosmetic. A transport implementation such as SpWKit carries complete packet bytes and does not redefine PUS services; likewise, FPGA image-processing logic does not acquire communications-service ownership merely because it can physically emit results.
+
+The service profile shall be frozen before the placeholder MCU and FPGA repositories become implementation baselines, so those components do not encode the current legacy collisions into new APIs.
+
+## 9. Reusable software stack
 
 ```text
 EXN mission applications / services
@@ -306,11 +329,12 @@ For the STM32 control node in particular:
                                 STM32H755
 ```
 
-## 9. Interface ownership
+## 10. Interface ownership
 
 The documentation boundary is:
 
 - **`docs/architecture.md`**: logical nodes, responsibilities, control/data paths, routing policy, and reusable-stack composition;
+- **`docs/services.md`**: PUS service tailoring, standard/mission-specific allocation, and migration policy;
 - **`docs/ICD.md`**: exact CCSDS/PUS wire contract and routing fields;
 - **`docs/icd/`**: endpoint-specific service behavior and payload layouts;
 - **component repositories**: implementation details;
