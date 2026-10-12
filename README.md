@@ -8,7 +8,7 @@
 
 The platform exercises realistic spacecraft engineering boundaries: CCSDS/ECSS packet interfaces, embedded supervision, image acquisition, hardware-accelerated image/AI processing, communications services, telemetry/telecommand workflows, flexible payload-data routing, and end-to-end integration testing.
 
-The detailed logical architecture is defined in [docs/architecture.md](docs/architecture.md). The wire-level packet contract remains [docs/ICD.md](docs/ICD.md).
+The detailed logical architecture is defined in [docs/architecture.md](docs/architecture.md). The wire-level packet contract remains [docs/ICD.md](docs/ICD.md), while [docs/services.md](docs/services.md) defines the PUS service-tailoring profile and migration direction.
 
 > [!IMPORTANT]
 > EXN is the **system architecture and interface authority**, not a monolithic firmware repository. Logical endpoint responsibilities must remain independent from the physical computer that happens to host them in the current demonstrator.
@@ -74,10 +74,10 @@ exn/
 
 ### Reusable platform repositories
 
-- **[CCSDSPack](https://github.com/ExoSpaceLabs/CCSDSPack):** CCSDS Space Packet / ECSS PUS packet library.
-- **[HardRT](https://github.com/ExoSpaceLabs/hardrt):** RTOS/runtime used for STM32 scheduling, synchronization, timers, signalling and execution control.
-- **[DAS](https://github.com/Inczert/device-abstraction-stack):** MCU/device/board abstraction layer, currently targeting STM32H755 / NUCLEO-H755ZI-Q.
-- **[SpWKit](https://github.com/ExoSpaceLabs/spwkit):** optional SpaceWire-style transport/simulation toolkit for logical EXN links.
+- **[CCSDSPack](https://github.com/ExoSpaceLabs/CCSDSPack):** CCSDS Space Packet / ECSS PUS packet library. Current released EXN baseline: **v2.0.0**.
+- **[HardRT](https://github.com/ExoSpaceLabs/hardrt):** RTOS/runtime for STM32 scheduling, synchronization, timers, signalling and execution control. Current released baseline: **0.5.1**.
+- **[DAS](https://github.com/Inczert/device-abstraction-stack):** MCU/device/board abstraction layer for STM32H755 / NUCLEO-H755ZI-Q. Current released baseline: **v0.1.0**.
+- **[SpWKit](https://github.com/ExoSpaceLabs/spwkit):** optional SpaceWire-style transport/simulation toolkit for logical EXN links. Current released baseline: **v0.7.0**.
 
 Private/commercial FPGA SpaceWire implementation repositories are **outside EXN scope**. The EXN FPGA node exists for payload image/AI processing. Reusing FPGA hardware for separate SpaceWire development is a different product/integration concern.
 
@@ -161,6 +161,7 @@ Additional sequence diagrams are maintained in [docs/diagrams.md](docs/diagrams.
 ## Interfaces and ICDs
 
 - **System architecture:** [docs/architecture.md](docs/architecture.md)
+- **PUS service profile:** [docs/services.md](docs/services.md)
 - **Master wire-level ICD:** [docs/ICD.md](docs/ICD.md)
 - **Ground/HIL:** [docs/icd/gs.md](docs/icd/gs.md)
 - **MCU control node:** [docs/icd/mcu-rtos.md](docs/icd/mcu-rtos.md)
@@ -177,17 +178,37 @@ Additional sequence diagrams are maintained in [docs/diagrams.md](docs/diagrams.
 
 Wire-level changes must remain synchronized with these shared definitions. Architecture changes alone must not silently change packet layouts.
 
+## Current implementation status
+
+The architecture is ahead of the component implementations, deliberately:
+
+| Area | Current state |
+|---|---|
+| System architecture / ICD | defined; service profile normalization in progress |
+| CCSDSPack | released and qualified; v2.0.0 remains the current stable EXN baseline |
+| EXN-GS / HIL | implemented on the transitional PUS-A wire profile |
+| STM32 OBC | repository still requires implementation against HardRT + DAS |
+| Linux Camera / Communications | camera repository is legacy/experimental; multi-service Linux platform remains to be implemented |
+| FPGA processing | architecture defined; implementation repository remains a placeholder |
+| HardRT | released 0.5.1 |
+| DAS | released v0.1.0 for STM32H755 / NUCLEO-H755ZI-Q |
+| SpWKit | released v0.7.0; optional EXN transport integration, not a mandatory architecture dependency |
+
+The current PUS-A templates are a **transitional compatibility profile**, not the final service-tailoring baseline. Several legacy EXN service identifiers collide with standardized PUS-C meanings. New flight/payload implementation work shall follow [docs/services.md](docs/services.md) rather than extending those legacy assignments.
+
 ## Integration Direction
 
 The current integration direction is:
 
-1. keep CCSDSPack v2.x as the packet/interface baseline;
-2. bring the MCU application up on HardRT + DAS against the central EXN ICD;
-3. evolve the Pi from a camera-only implementation into the supervised Linux payload-service platform;
-4. keep the FPGA focused on image/AI processing and make processing-result routing configurable;
-5. use direct payload-data paths where they reduce unnecessary MCU traffic;
-6. adopt SpWKit only where its logical-link/transport model improves EXN integration, and validate that integration explicitly;
-7. restore complete node-to-node HIL/system regression before freezing an EXN system release.
+1. freeze the EXN PUS-C service tailoring and request-verification policy defined in `docs/services.md`;
+2. keep released CCSDSPack v2.0.0 as the reproducible dependency until a newer release is actually published and adopted;
+3. migrate shared packet templates, MCU headers, EXN-GS and simulators together to the normalized service profile;
+4. bring the MCU application up on **HardRT 0.5.1 + DAS v0.1.0** against the central EXN architecture/ICD;
+5. evolve the Pi from a camera-only implementation into the supervised Linux payload-service platform;
+6. keep the FPGA focused on image/AI processing with configurable result routing;
+7. use direct payload-data paths where they reduce unnecessary MCU traffic;
+8. adopt **SpWKit v0.7.x** only where its logical-link/transport model improves EXN integration, and validate that integration explicitly;
+9. restore complete node-to-node HIL/system regression before freezing an EXN system release.
 
 ## License
 
