@@ -10,33 +10,30 @@
     "seqFlags": "UNSEG"
   },
   "pusHeader": {
-    "selector": "PUS:revA:TC",
-    "sourceIdOctets": 1,
-    "acknowledgementFlags": 0,
+    "selector": "PUS:revC:TC",
+    "acknowledgementFlags": 8,
     "service": 3,
-    "subservice": 10,
+    "subservice": 128,
     "sourceId": 16
   },
   "proxyPreamble": false,
   "appData": [
     {
-      "name": "transactionId",
+      "name": "transaction_id",
       "type": "U16",
-      "bits": 16,
-      "description": "Correlation ID; current GS client uses 1..65535"
+      "bits": 16
     },
     {
       "name": "include_mask",
       "type": "U8",
       "bits": 8,
-      "description": "Bit0=MCU, Bit1=PI, Bit2=FPGA"
+      "description": "bit0 OBC, bit1 PI-CAM, bit2 FPGA, bit3 Antenna, bit4 PI-MGMT"
     },
     {
-      "name": "detailMask",
+      "name": "detail_mask",
       "type": "U16",
-      "bits": 16,
-      "description": "Common HK detail mask applied to selected nodes"
+      "bits": 16
     }
   ],
-  "notes": "Direct GS -> MCU service. Application Data is exactly five octets and does not include the four-octet downstream proxy preamble."
+  "notes": "Direct GS -> OBC System HK request."
 }
