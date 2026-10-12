@@ -1,0 +1,38 @@
+{
+  "name": "pkt_cam_set_config_tc",
+  "packetErrorControl": "crc16",
+  "primaryHeader": {
+    "version": 0,
+    "type": "TC",
+    "apid": 257,
+    "apidPolicy": "destination",
+    "secHdrFlag": 1,
+    "seqFlags": "UNSEG"
+  },
+  "pusHeader": {
+    "selector": "PUS:revC:TC",
+    "acknowledgementFlags": 9,
+    "service": 200,
+    "subservice": 3,
+    "sourceId": 1
+  },
+  "appData": [
+    {
+      "name": "flags",
+      "type": "U16",
+      "bits": 16
+    },
+    {
+      "name": "count",
+      "type": "U16",
+      "bits": 16,
+      "maximum": 64
+    },
+    {
+      "name": "entries",
+      "type": "BYTES",
+      "description": "Repeated control_id:u16, value_type:u8, value_length:u16, value[value_length], with value_length<=32"
+    }
+  ],
+  "notes": "Atomic batched Camera configuration. Complete batch validates before apply."
+}
