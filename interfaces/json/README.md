@@ -1,14 +1,14 @@
 # EXN Packet Interfaces (JSON)
 
-This directory contains machine-readable mirrors used by tooling and validation. The authoritative wire contract is `docs/ICD.md`; authoritative CCSDSPack runtime templates are under `interfaces/ccsdspack/`.
+This directory contains machine-readable mirrors used by tooling and validation. The authoritative current wire contract is `docs/ICD.md`; authoritative compatibility-profile CCSDSPack runtime templates are under `interfaces/ccsdspack/`; the target PUS service allocation is `docs/services.md`.
 
 The JSON set is currently **partial**, not a complete mirror of every `.cfg` file. Do not infer that a missing JSON file means the corresponding service is undefined.
 
-## Current protocol model
+## Current transitional protocol model
 
 - CCSDS Space Packet version 0.
 - CRC-16 packet error control.
-- PUS revision A for all currently defined services.
+- PUS revision A for the currently represented compatibility services.
 - TC selector: `PUS:revA:TC`, one-octet source ID.
 - TM selector: `PUS:revA:TM`, zero-octet destination ID.
 - TC APID identifies the destination endpoint.
@@ -41,4 +41,6 @@ Example shape:
 }
 ```
 
-Service-specific event IDs, CUC time values, transaction IDs, and similar fields belong to Application Data unless the master ICD explicitly states otherwise. In particular, EXN does not use the old JSON model that associated Service 5 with a PUS-B header or Service 17 with a PUS-C header.
+Service-specific event IDs, CUC time values, transaction IDs, and similar fields belong to Application Data unless the master ICD explicitly states otherwise.
+
+The present JSON files intentionally mirror legacy EXN-GS/HIL packet identifiers. They shall not be used to infer the target service catalogue. The next interface migration should replace the partial hand-maintained mirrors with generated or cross-validated definitions sourced from one mission interface model.
