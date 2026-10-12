@@ -65,6 +65,45 @@ The following logical state vocabulary is shared by OBC health/orchestration:
 
 Endpoints may expose more detailed internal states, but the OBC shall always be able to reduce them to this set.
 
+## 3.1 Common typed value encoding
+
+Where EXN mission-specific services need a typed scalar/value, use:
+
+| Type | Code | Encoding |
+|---|---:|---|
+| BOOL | 1 | uint8 0/1 |
+| U8 | 2 | uint8 |
+| U16 | 3 | big-endian uint16 |
+| U32 | 4 | big-endian uint32 |
+| U64 | 5 | big-endian uint64 |
+| I16 | 6 | big-endian int16 |
+| I32 | 7 | big-endian int32 |
+| F32 | 8 | IEEE-754 binary32, big-endian bytes |
+| STRING | 9 | bounded UTF-8 |
+| BYTES | 10 | bounded opaque bytes |
+
+Variable values always carry an explicit length. No target packet definition requires unbounded strings or dynamic allocation.
+
+## 3.2 Common Service 20 parameter format
+
+EXN parameter IDs are `uint16` scoped by endpoint APID.
+
+`TC[20,1]` requests one or more parameter IDs.
+
+`TM[20,2]` reports:
+
+```text
+count:u16
+repeat count:
+    parameter_id:u16
+    status:u8
+    value_type:u8
+    value_length:u16
+    value[value_length]
+```
+
+`TC[20,3]` uses the same repeated ID/type/length/value structure without the status byte.
+
 ## 4. Request verification
 
 Service 1 is used for command verification.
@@ -144,6 +183,23 @@ Examples:
 - Antenna: signal/link metrics only when the selected Ground-link technology exposes them;
 - FPGA: die temperature/voltage rails only if the selected FPGA platform exposes those monitors.
 
+### 5.4 Sensor report wire model
+
+The SENSORS HK block contains bounded entries:
+
+```text
+count:u16
+repeat count:
+    sensor_id:u16
+    status:u8          # VALID/UNAVAILABLE/STALE/FAULT
+    alarm_state:u8     # NORMAL/WARN_LOW/WARN_HIGH/CRIT_LOW/CRIT_HIGH
+    value_type:u8
+    value_length:u16
+    value[value_length]
+```
+
+Sensor IDs are endpoint-local and published by the endpoint capability/ICD. Unsupported sensors are not fabricated with zero values; they are omitted or explicitly marked UNAVAILABLE.
+
 ## 6. Monitoring and alarms
 
 EXN uses a **minimal Service 12 profile** for monitoring declared parameters/sensors.
@@ -221,7 +277,24 @@ This provides finer wire resolution than the application-level millisecond clock
 
 Standard `TC[8,1] Perform a Function` is used for management actions.
 
-### 8.1 Common function IDs
+### 8.1 Function request encoding
+
+EXN uses the standard Service 8 function identifier plus bounded arguments.
+
+Function arguments follow:
+
+```text
+argument_count:u8
+repeat argument_count:
+    argument_id:u16
+    value_type:u8
+    value_length:u16
+    value[value_length]
+```
+
+A function with no arguments has `argument_count=0`.
+
+### 8.2 Common function IDs
 
 | ID | Function | Typical target |
 |---:|---|---|
@@ -231,7 +304,7 @@ Standard `TC[8,1] Perform a Function` is used for management actions.
 | `0x0004` | enter idle/safe application state | Camera, FPGA |
 | `0x0005` | leave idle/safe application state | Camera, FPGA |
 
-### 8.2 Pi supervisor functions
+### 8.3 Pi supervisor functions
 
 PI-MGMT additionally provides:
 
@@ -244,6 +317,20 @@ PI-MGMT additionally provides:
 | `0x0105` | orderly Raspberry Pi shutdown |
 
 OBC uses PI-MGMT for restart/recovery so a failed Camera or Antenna process is not required to receive its own restart request.
+
+## 8.4 Event ID namespaces
+
+Service 5 event IDs are partitioned so logs can be decoded without guessing the producer-specific dictionary.
+
+| Range | Owner |
+|---|---|
+| `0x1000..0x1FFF` | OBC |
+| `0x2000..0x2FFF` | PI-CAM |
+| `0x3000..0x3FFF` | FPGA |
+| `0x4000..0x4FFF` | Antenna |
+| `0x5000..0x5FFF` | PI-MGMT |
+
+Each device ICD may allocate concrete IDs inside its range. Severity is carried by the standard Service 5 subtype rather than encoded in the event ID.
 
 ## 9. Camera service, Service 200
 
@@ -368,15 +455,25 @@ Payload sources are PI-CAM, FPGA, or OBC itself.
 
 The OBC controls the downlink decision. The payload producer sends the bytes directly to Antenna using Service 220; the OBC does not relay the bulk object.
 
-Antenna Service 20 parameters include, at minimum:
+Antenna Service 20 parameters are:
 
-- `link.enable`;
-- `uplink.enable`;
-- `downlink.enable`;
-- `payload_forwarding.enable`;
-- optional `rate_limit_bps`.
+| ID | Name | Type | Default |
+|---:|---|---|---|
+| `0x0001` | `link.enable` | BOOL | true |
+| `0x0002` | `uplink.enable` | BOOL | true |
+| `0x0003` | `downlink.enable` | BOOL | true |
+| `0x0004` | `payload_forwarding.enable` | BOOL | true |
+| `0x0005` | `rate_limit_bps` | U32 | 0 = deployment default/unlimited by software |
 
 Technology-specific Wi-Fi/RF/network configuration remains deployment configuration unless a concrete operational requirement needs remote mutation.
+
+The functional minimum therefore includes:
+
+- link enable/disable;
+- uplink enable/disable;
+- downlink enable/disable;
+- payload forwarding enable/disable;
+- optional software rate limiting.
 
 Antenna HK includes link state, Ground-session state, TX/RX packet and byte counters, error/drop counters, throughput and technology-specific signal metrics when available.
 
@@ -570,6 +667,22 @@ It shall:
 - track expected transfers and completions;
 - route Ground requests only after OBC supervision.
 
+### 13.1 OBC orchestration parameters
+
+OBC Service 20 parameters include:
+
+| ID | Name | Type | Default |
+|---:|---|---|---|
+| `0x0001` | `supervision.heartbeat_period_ms` | U32 | 1000 |
+| `0x0002` | `supervision.health_period_ms` | U32 | 10000 |
+| `0x0003` | `supervision.missed_heartbeat_limit` | U8 | 3 |
+| `0x0004` | `supervision.auto_restart_enable` | BOOL | false |
+| `0x0010` | `time.resync_period_ms` | U32 | 60000 |
+| `0x0011` | `time.max_sync_age_ms` | U32 | deployment-defined |
+| `0x0020` | `transfer.default_chunk_size` | U16 | deployment-defined |
+
+Defaults are integration defaults and may be changed after measurement.
+
 Typical flow:
 
 ```text
@@ -581,6 +694,22 @@ FPGA -> OBC: classification result
 OBC -> Camera/FPGA: transfer selected object to Ground
 Camera/FPGA -> Antenna -> Ground
 ```
+
+## 13.2 PI-MGMT platform parameters
+
+PI-MGMT Service 20 parameters include:
+
+| ID | Name | Type | Purpose |
+|---:|---|---|---|
+| `0x0001` | `watchdog.enable` | BOOL | platform watchdog policy |
+| `0x0002` | `service.restart_limit` | U16 | restart-storm threshold |
+| `0x0003` | `service.restart_window_ms` | U32 | restart-storm window |
+| `0x0010` | `storage.payload_warn_free_bytes` | U64 | payload-store warning |
+| `0x0011` | `storage.payload_critical_free_bytes` | U64 | payload-store critical |
+| `0x0020` | `thermal.soc_warn_cC` | I16 | Pi SoC warning threshold |
+| `0x0021` | `thermal.soc_critical_cC` | I16 | Pi SoC critical threshold |
+
+Thermal values are deployment parameters, not protocol constants.
 
 ## 14. Software and service updates, Service 230
 
