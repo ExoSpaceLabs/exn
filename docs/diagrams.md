@@ -171,3 +171,132 @@ graph LR
 ```
 
 The logical routes are independent of whether Camera and Antenna currently execute on the same Raspberry Pi.
+
+---
+
+## 8) Heartbeat / Health Supervision
+
+The OBC supervises every endpoint independently.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant OBC as STM32 OBC
+  participant CAM as PI-CAM
+  participant ANT as Antenna
+  participant PM as PI-MGMT
+  participant FPGA as FPGA
+
+  par Periodic heartbeat
+    OBC->>CAM: TC[3,27] HEARTBEAT
+    OBC->>ANT: TC[3,27] HEARTBEAT
+    OBC->>PM: TC[3,27] HEARTBEAT
+    OBC->>FPGA: TC[3,27] HEARTBEAT
+  end
+  CAM-->>OBC: TM[3,25]
+  ANT-->>OBC: TM[3,25]
+  PM-->>OBC: TM[3,25]
+  FPGA-->>OBC: TM[3,25]
+  OBC->>OBC: update endpoint registry / alarm state
+```
+
+Missing heartbeat intervals transition an endpoint toward OFFLINE according to OBC policy and produce Service 5 events.
+
+---
+
+## 9) Restart Failed Camera Service
+
+PI-MGMT performs process recovery so a failed Camera process is not required to receive its own restart command.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant OBC as STM32 OBC
+  participant PM as PI-MGMT
+  participant CAM as PI-CAM
+
+  OBC->>PM: TC[8,1] restart exn-camera.service
+  PM->>PM: systemd restart Camera
+  PM-->>OBC: Service 1 start/progress verification
+  CAM-->>OBC: HEARTBEAT recovered
+  PM-->>OBC: Service 1 completion verification
+```
+
+The same pattern applies to the Antenna service.
+
+---
+
+## 10) OBC Time Synchronization
+
+The OBC owns the synchronized mission clock and distributes it to every endpoint.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant GS as Ground
+  participant ANT as Antenna
+  participant OBC as STM32 OBC
+  participant CAM as PI-CAM
+  participant PM as PI-MGMT
+  participant FPGA as FPGA
+
+  GS->>ANT: time synchronization TC
+  ANT->>OBC: TC[9,128] Set Mission Time
+  OBC->>OBC: update unix_ms offset from monotonic_ms
+  par Distribute time
+    OBC->>CAM: TC[9,128]
+    OBC->>ANT: TC[9,128]
+    OBC->>PM: TC[9,128]
+    OBC->>FPGA: TC[9,128]
+  end
+```
+
+Endpoint timers remain monotonic; synchronized Unix-epoch time is used for mission timestamps.
+
+---
+
+## 11) Camera Acquisition and Multi-Format Products
+
+One acquisition may preserve RAW and create multiple derived products.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant OBC as STM32 OBC
+  participant CAM as PI-CAM
+
+  OBC->>CAM: TC[200,1] SINGLE, products=RAW|TIFF|JPEG
+  CAM->>CAM: capture sensor frame
+  CAM->>CAM: preserve RAW object
+  CAM->>CAM: derive TIFF
+  CAM->>CAM: derive JPEG
+  CAM-->>OBC: Service 1 completion
+  OBC->>CAM: TC[200,8] List Products
+  CAM-->>OBC: TM[200,9] object catalog
+```
+
+The OBC may then select any product for processing, local retention or Ground downlink.
+
+---
+
+## 12) Software Update of Pi Camera Service
+
+Update payload transfer and software activation are separate operations.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant OBC as STM32 OBC
+  participant PM as PI-MGMT
+  participant CAM as PI-CAM
+
+  OBC->>PM: Service 220 update package object
+  OBC->>PM: TC[230,3] Stage Camera update
+  PM->>PM: validate package / hash / compatibility
+  OBC->>PM: TC[230,4] Activate update
+  PM->>PM: install and restart exn-camera.service
+  CAM-->>OBC: heartbeat + version
+  PM-->>OBC: Service 1 completion / update status
+```
+
+An update is not successful until the updated component returns healthy.
