@@ -1,163 +1,353 @@
 # PI-CAM Device/Service ICD — Raspberry Pi 5 + Camera Module 3
 
-This document specializes the EXN ICD for the **Camera half** of the dual-role Raspberry Pi 5 Payload Node (PI-CAM, APID 0x101) with Raspberry Pi Camera Module 3. The same physical Pi is also required to provide the PI-COMMS Antenna/Communications role (APID 0x103), defined in `linux-payload.md`. The two roles remain separate logical endpoints despite sharing one computer.
+PI-CAM is the EXN Camera endpoint on the Raspberry Pi 5 Payload Node.
 
-It defines the Camera service Housekeeping (HK) telemetry, camera settings catalog (Service 200), and payload-product transfer behavior. The existing Service 23 packet definitions are transitional; the target service is mission-specific Service 220 Payload Object Transfer.
+- APID: `0x101`
+- Target PUS-C source identity: `0x02`
+- Reference sensor: Raspberry Pi Camera Module 3 / Sony IMX708
+- Mission role: capture, preserve, derive, catalog and transfer image products
 
-Refer to `../ICD.md` for the current wire contract, `../services.md` for target PUS service tailoring, and `../architecture.md` for the system routing model.
+The same physical Pi also hosts the Antenna endpoint (PI-COMMS) and PI-MGMT supervisor. Those are separate logical endpoints.
 
----
+Refer to:
 
-## 1. Role and Interfaces
+- `../component-services.md` for the common functional contract;
+- `../services.md` for target PUS mapping;
+- `../ICD.md` for packet/routing rules;
+- `linux-payload.md` for Pi supervision and Antenna behavior.
 
-- Captures images from Camera Module 3 and publishes metadata and payload products.
-- Owns captured-image identity, local buffering/storage, and association with derived products.
-- Responds to TCs from MCU-RTOS for capture, settings, parameter management, and transfer control.
-- Can send image data to MCU-RTOS, FPGA-AI, or PI-COMMS depending on transfer policy.
-- May receive processed products/results back from FPGA-AI for association, storage, or later downlink.
-- May hand payload products directly to PI-COMMS without carrying bulk data through MCU-RTOS.
+The currently executable PUS-A camera packets remain transitional compatibility artifacts. New Camera implementation work targets this document.
 
-Camera and PI-COMMS may currently execute on the same Raspberry Pi, but their mission interfaces must not depend on that co-location. Local IPC may be used as an implementation optimization.
+## 1. Reference-camera capabilities
 
-Application data follows big-endian unless otherwise stated. Timestamps use the mission 6-byte CUC Application Data representation defined by the master ICD.
+The reference Camera Module 3 provides:
 
----
+- Sony IMX708 sensor;
+- native resolution up to 4608x2592 in the normal non-HDR mode;
+- RAW10 sensor output;
+- powered autofocus;
+- manual, triggered-auto and continuous autofocus through the current libcamera/Picamera2 stack;
+- HDR support subject to sensor/mode restrictions.
 
-## 2. Housekeeping (Service 3)
+EXN does **not** hard-code driver ranges where libcamera can report the actual supported control metadata. The runtime Camera Capabilities Report is authoritative for:
 
-The PI-CAM HK report augments the generic HK in `ICD.md` with camera- and SoC-specific metrics. Values are big-endian.
+- available sensor modes;
+- min/max/default values;
+- supported autofocus controls;
+- exposure/gain limits;
+- frame-rate constraints;
+- supported transforms and image formats.
 
-The packet numbers below describe the current compatibility profile: PI-CAM responds to legacy TC 3/1 with TM 3/2, and that block may be aggregated into legacy System HK 3/100. The target PUS-C profile uses TC[3,27] / TM[3,25], while EXN System HK moves to 3/128 / 3/129.
+## 2. Service set
 
-- TM 3/2 Report HK — Application Data (transitional)
+PI-CAM provides/consumes:
 
-| Name                | Type   | Bits | Description |
-|---------------------|--------|------|-------------|
-| uptime_ms           | uint64 | 64   | Service/node uptime in ms |
-| soc_temp_cC         | int16  | 16   | SoC temperature (centi-°C) |
-| cam_temp_cC         | int16  | 16   | Camera sensor temperature (centi-°C), 0x7FFF if unknown |
-| throttling_flags    | uint16 | 16   | Bitmask: [0]undervolt, [1]freq_capped, [2]throttled, [3]temp_limit, [4]soft_oc |
-| cpu_load_mpermil    | uint16 | 16   | CPU load in milli-percent (0..100000) |
-| mem_used_kib        | uint32 | 32   | Used memory kibibytes |
-| mem_free_kib        | uint32 | 32   | Free memory kibibytes |
-| frames_captured     | uint32 | 32   | Total frames captured since boot |
-| frames_dropped      | uint32 | 32   | Frames dropped (pipeline) |
-| last_capture_ms     | uint32 | 32   | Duration of last capture (ms) |
-| isp_analogue_gain_q8| uint16 | 16   | ISP analogue gain in Q8.8 (divide by 256) |
-| isp_digital_gain_q8 | uint16 | 16   | ISP digital gain in Q8.8 |
-| exposure_us         | uint32 | 32   | Current exposure time (µs) |
-| iso                 | uint16 | 16   | Current ISO (100..1600 typical) |
-| wb_r_gain_q8        | uint16 | 16   | AWB red gain Q8.8 |
-| wb_b_gain_q8        | uint16 | 16   | AWB blue gain Q8.8 |
-| lens_position       | uint16 | 16   | Lens focus position (0..1023), 0xFFFF if N/A |
-| status_flags        | uint16 | 16   | Bitmask: [0]cam_present, [1]streaming, [2]recording, [3]af_locked, [4]ae_locked |
-| last_error          | uint16 | 16   | Last error code |
-| ts_cuc              | bytes  | 48   | 6-byte CUC timestamp in Application Data |
+- Service 1 Request Verification;
+- Service 3 Housekeeping;
+- Service 5 Event Reporting;
+- Service 8 Function Management for Camera reinitialization/idle operations;
+- Service 9 Time Management;
+- Service 12 On-board Monitoring;
+- Service 20 Parameter Management for generic service/storage policy;
+- Service 200 Camera Control;
+- Service 220 Payload Object Transfer.
 
-Host-wide Linux/platform metrics may later move into a dedicated platform-management HK block; until then, camera HK may expose the subset required for payload health.
+Software activation/restart of the Camera process is owned by PI-MGMT through Service 230/Service 8.
 
----
+## 3. Camera state
 
-## 3. Camera Control (Service 200)
+PI-CAM detailed state is one of:
 
-Service 200 defines camera-specific TCs/TMs. The set aligns with the master catalog but enumerates concrete keys, types, units, and ranges for Camera Module 3.
+| State | Meaning |
+|---|---|
+| `STARTING` | service/camera initialization |
+| `READY` | camera available, no acquisition active |
+| `ACQUIRING` | finite acquisition in progress |
+| `STREAMING` | continuous acquisition active |
+| `PROCESSING` | deriving/storing requested product formats |
+| `DEGRADED` | responsive with reduced camera/storage capability |
+| `ERROR` | camera function unavailable |
+| `IDLE` | deliberately quiesced |
 
-- TC 200/1 Capture — Application Data
+These map to the common OBC endpoint states.
 
-| Field        | Type   | Bits | Values |
-|--------------|--------|------|--------|
-| mode         | uint8  | 8    | 0=single, 1=burst |
-| burst_count  | uint16 | 16   | 1..1000 (ignored if mode=single) |
-| exposure_us  | uint32 | 32   | 0=auto; else manual exposure time in µs |
+## 4. Service 200 message catalogue
 
-- TM 200/5 ACK/NACK — transitional compatibility message. The target profile uses PUS Service 1 request verification.
+| Message | Name | Purpose |
+|---|---|---|
+| `TC[200,1]` | Start Acquisition | create single/burst/timelapse/stream acquisition |
+| `TC[200,2]` | Stop Acquisition | stop active finite/stream acquisition |
+| `TC[200,3]` | Set Camera Controls | set one or more camera controls atomically where possible |
+| `TC[200,4]` | Get Camera Controls | request current control values |
+| `TM[200,5]` | Camera Controls Report | current/read-back controls |
+| `TC[200,6]` | Get Camera Capabilities | request available controls/modes/ranges |
+| `TM[200,7]` | Camera Capabilities Report | capabilities and dynamic ranges |
+| `TC[200,8]` | List Products | query stored Camera products |
+| `TM[200,9]` | Product Catalog Report | product/object metadata |
+| `TC[200,10]` | Delete Product | delete one or more locally stored products |
+| `TC[200,11]` | Get Acquisition Status | request acquisition/session status |
+| `TM[200,12]` | Acquisition Status Report | state/progress/product IDs |
 
-- TC 200/2 Settings Set and TC 200/3 Settings Get use the key/TLV catalog below.
-- TM 200/4 Settings Report returns `key`, `status`, `value` (TLV) for the requested key or the last set.
+All state-changing TCs use Service 1 acceptance/completion verification.
 
-### 3.1 TLV Types
+## 5. Acquisition control
 
-Use these TLV type codes in Application Data:
-- 1=U8, 2=U16, 3=U32, 4=I32, 5=F32 (IEEE-754), 6=STR (UTF-8), 7=BYTES, 8=U64, 9=BOOL (U8 0/1).
+### 5.1 Start Acquisition
 
-### 3.2 Camera Settings Catalog (Camera Module 3)
+`TC[200,1]` application fields:
 
-Keys are stable 8-bit IDs. Unless noted, setting takes effect on next capture/start.
+| Field | Type | Meaning |
+|---|---|---|
+| `acquisitionId` | uint32 | OBC-assigned acquisition/session ID |
+| `mode` | uint8 | SINGLE/BURST/TIMELAPSE/STREAM |
+| `count` | uint16 | requested frame count; 1 for SINGLE |
+| `interval_ms` | uint32 | interval for burst/timelapse; zero = fastest valid |
+| `duration_ms` | uint32 | optional bounded stream/session duration; zero = not duration-limited |
+| `product_mask` | uint16 | products to retain/derive |
+| `flags` | uint16 | acquisition policy flags |
 
-| Key | Name                  | TLV | Units   | Range/Enum | Default | Description |
-|-----|-----------------------|-----|---------|------------|---------|-------------|
-| 1   | sensor.mode           | U8  | enum    | 0=auto,1=still,2=video | 0 | Sensor operating preset |
-| 2   | stream.enable         | BOOL| bool    | 0/1        | 0       | Continuous streaming mode |
-| 3   | size.width            | U16 | px      | 64..4608   | 1920    | Output width |
-| 4   | size.height           | U16 | px      | 64..2592   | 1080    | Output height |
-| 5   | framerate             | F32 | fps     | 0.1..120.0 | 30.0    | Frames per second |
-| 6   | pixel.format          | U8  | enum    | 1=RGB888,2=GRAY8,3=GRAY16,4=YUV420,5=BAYER_RGGB8 | 1 | Output pixel format |
-| 7   | bayer.order           | U8  | enum    | 0=RGGB,1=BGGR,2=GRBG,3=GBRG | 0 | Sensor Bayer order (raw modes) |
-| 8   | stride.align          | U16 | bytes   | 1..256     | 64      | Line stride alignment |
-| 9   | roi.x                 | U16 | px      | 0..(W-1)   | 0       | ROI top-left X |
-| 10  | roi.y                 | U16 | px      | 0..(H-1)   | 0       | ROI top-left Y |
-| 11  | roi.w                 | U16 | px      | 1..W       | W       | ROI width |
-| 12  | roi.h                 | U16 | px      | 1..H       | H       | ROI height |
-| 13  | flip.h                | BOOL| bool    | 0/1        | 0       | Horizontal flip |
-| 14  | flip.v                | BOOL| bool    | 0/1        | 0       | Vertical flip |
-| 15  | rotate.deg            | U16 | deg     | 0,90,180,270 | 0     | Rotation |
-| 16  | ae.enable             | BOOL| bool    | 0/1        | 1       | Auto Exposure enable |
-| 17  | ae.exposure_us        | U32 | µs      | 100..33000 | 0       | Manual exposure; 0=auto |
-| 18  | ae.iso                | U16 | ISO     | 100..1600  | 0       | ISO; 0=auto |
-| 19  | ae.metermode          | U8  | enum    | 0=center,1=spot,2=matrix | 2 | Metering mode |
-| 20  | ae.comp_ev            | F32 | EV      | -4.0..+4.0 | 0.0     | Exposure compensation |
-| 21  | af.mode               | U8  | enum    | 0=off,1=auto,2=continuous | 1 | Autofocus mode (CM3 supports PDAF) |
-| 22  | af.trigger            | U8  | enum    | 0=none,1=start,2=cancel | 0 | One-shot AF trigger |
-| 23  | af.range              | U8  | enum    | 0=normal,1=macro,2=full | 0 | AF range |
-| 24  | lens.position         | U16 | ticks   | 0..1023    | 0xFFFF  | Manual focus position; 0xFFFF=auto |
-| 25  | awb.enable            | BOOL| bool    | 0/1        | 1       | Auto White Balance enable |
-| 26  | awb.mode              | U8  | enum    | 0=auto,1=incandescent,2=fluorescent,3=daylight,4=cloudy | 0 | WB preset |
-| 27  | awb.r_gain            | F32 | gain    | 0.5..8.0   | 1.0     | Manual red gain (when awb.enable=0) |
-| 28  | awb.b_gain            | F32 | gain    | 0.5..8.0   | 1.0     | Manual blue gain (when awb.enable=0) |
-| 29  | denoise               | U8  | enum    | 0=off,1=low,2=med,3=high | 1 | Spatial/temporal NR level |
-| 30  | sharpness             | F32 | factor  | 0.0..2.0   | 1.0     | Sharpen strength |
-| 31  | contrast              | F32 | factor  | 0.0..2.0   | 1.0     | Contrast adjustment |
-| 32  | saturation            | F32 | factor  | 0.0..2.0   | 1.0     | Saturation adjustment |
-| 33  | brightness            | F32 | factor  | -1.0..1.0  | 0.0     | Brightness offset |
-| 34  | hdr.enable            | BOOL| bool    | 0/1        | 0       | Enable sensor HDR (if supported) |
-| 35  | hdr.merge             | U8  | enum    | 0=linear,1=reinhard,2=aces | 0 | HDR merge method |
-| 36  | output.jpeg_quality   | U8  | 0..100  | 0..100     | 90      | JPEG encode quality (if JPEG) |
-| 37  | output.compress       | U8  | enum    | 0=none,1=JPEG,2=LZ4 | 0 | App-level compression |
-| 38  | xfer.chunk_size       | U16 | bytes   | 256..4096  | 900     | Preferred payload-object chunk size |
-| 39  | xfer.dest             | U8  | enum    | 0=FPGA,1=MCU,2=PI-COMMS | 1 | Transitional fixed destination; target profile uses endpoint/routing policy |
-| 40  | ts.embed_mode         | U8  | enum    | 0=none,1=app_payload | 1 | Transitional timestamp placement; target PUS-C TM timestamp tailoring is frozen separately |
+Modes:
 
-Notes:
-- Changing resolution/framerate may reconfigure the sensor pipeline and briefly stall.
-- Some ranges depend on mode; Camera Module 3 supports up to 4608×2592 stills, high-speed modes at reduced FOV.
-- `xfer.dest=PI-COMMS` permits direct camera-payload handoff toward downlink without requiring bulk data to transit the MCU.
+| Value | Mode | Baseline |
+|---:|---|---|
+| 0 | SINGLE | required |
+| 1 | BURST | required |
+| 2 | TIMELAPSE | required |
+| 3 | STREAM | optional/future-capable |
 
----
+STREAM is intentionally represented now so later live/video work does not require replacing the command model.
 
-## 4. Payload transfer
+### 5.2 Stop Acquisition
 
-The current executable profile uses legacy Service 23 for packetized image transfer:
+`TC[200,2]` contains `acquisitionId`.
 
-- TM 23/10 Metadata includes image dimensions, pixel type, total size, and chunk size per `../ICD.md`.
-- TM 23/11 Data Chunk uses `imageId`, `offset`, and `data[]` up to `xfer.chunk_size`.
-- TM 23/12 Transfer Complete summarizes the chunk count. Sequence flags currently remain UNSEGMENTED; application-level `offset` provides ordering/reassembly.
-- Transfer destination may be FPGA for processing, MCU for a control/test path, or PI-COMMS for direct payload downlink.
+For finite capture modes, Stop cancels remaining frames. For STREAM it terminates the stream/session cleanly.
 
-When PI-CAM and PI-COMMS are co-located, an implementation may optimize the local bulk-data path through shared memory, Unix-domain sockets, file/object references, or another local IPC mechanism while preserving the logical service boundary.
+## 6. Camera controls
 
-The target profile moves this behavior to **Service 220 Payload Object Transfer**, generalizes `imageId` to `objectId`/`transferId`, and keeps image dimensions as type-specific metadata rather than assuming every transferred object is an image.
+`TC[200,3]` and `TC[200,4]` operate on stable EXN control IDs. Actual support/range is reported by `TM[200,7]`.
 
----
+### 6.1 Sensor/output geometry
 
-## 5. Parameter Management (Service 20)
+| Control | Meaning |
+|---|---|
+| `sensor.mode` | selected sensor/libcamera mode |
+| `output.width` | output width |
+| `output.height` | output height |
+| `output.pixel_format` | application pixel format |
+| `frame_rate` | requested frame rate |
+| `crop.x/y/w/h` | crop/ROI |
+| `transform.hflip` | horizontal flip |
+| `transform.vflip` | vertical flip |
 
-For generic parameter exchange not covered by Service 200, PI-CAM uses Service 20. The existing TLV/key encoding is transitional; target message meanings follow PUS-C TC[20,1] report-values request, TM[20,2] value report, and TC[20,3] set-values request. Camera-specific settings that belong to Service 200 should not be duplicated into Service 20 merely for convenience.
+Rotation requiring a host transform is represented as product-processing policy rather than assumed to be a sensor control.
 
----
+### 6.2 Exposure / gain
 
-## 6. CCSDSPack Interfaces
+| Control | Meaning |
+|---|---|
+| `ae.enable` | automatic exposure/gain control |
+| `exposure_us` | exposure time when manual/overridden |
+| `analogue_gain` | sensor analogue gain |
+| `exposure_compensation_ev` | AE compensation |
+| `metering_mode` | metering algorithm when supported |
+| `exposure_mode` | normal/short/long/custom mode where supported |
 
-- `pkt_cam_capture_tc`, `pkt_cam_ack_tm`
-- `pkt_xfer_meta_tm`, `pkt_xfer_chunk_tm`, `pkt_xfer_done_tm`
+Camera Module 3 supports long exposures, but exact active-mode limits are obtained from the runtime capabilities rather than encoded as mission constants.
 
-All current PI-CAM interface artifacts use the transitional EXN PUS-A profile. TCs addressed to Camera use APID `0x101`; TMs produced by Camera also carry APID `0x101` under the EXN APID policy. New implementation work shall target the PUS-C service profile in `../services.md`, including Service 1 verification and Service 220 payload-object transfer.
+### 6.3 Autofocus
+
+| Control | Meaning |
+|---|---|
+| `af.mode` | MANUAL / AUTO / CONTINUOUS |
+| `af.trigger` | START / CANCEL for triggered autofocus |
+| `af.range` | supported AF search-range policy |
+| `af.speed` | supported AF speed policy |
+| `lens.position_dioptres` | manual focus position; 0 represents infinity |
+| `af.window` | normalized/declared autofocus region where supported |
+
+AF status metadata includes current AF state and read-back lens position.
+
+### 6.4 White balance / colour / ISP controls
+
+| Control | Meaning |
+|---|---|
+| `awb.enable` | automatic white balance |
+| `awb.mode` | AWB profile when supported |
+| `awb.red_gain` | manual red gain |
+| `awb.blue_gain` | manual blue gain |
+| `brightness` | image brightness |
+| `contrast` | image contrast |
+| `saturation` | image saturation |
+| `sharpness` | sharpening |
+| `denoise.mode` | denoise policy |
+| `hdr.enable` | sensor/HDR mode request where supported |
+
+### 6.5 Product controls
+
+| Control | Meaning |
+|---|---|
+| `jpeg.quality` | JPEG encoder quality |
+| `thumbnail.enable` | create preview product |
+| `thumbnail.max_width` | preview bound |
+| `storage.retention_count` | local retention policy |
+| `storage.minimum_free_bytes` | guard before accepting capture |
+
+## 7. Product generation and storage
+
+Each captured source frame has a `captureId`. One capture may generate several stored products.
+
+### 7.1 Product mask
+
+| Bit | Product | Notes |
+|---:|---|---|
+| 0 | SENSOR_RAW | raw/Bayer sensor data |
+| 1 | DNG | raw sensor data in DNG where supported |
+| 2 | TIFF | lossless derived still |
+| 3 | JPEG | compressed still |
+| 4 | PNG | lossless host-encoded still |
+| 5 | THUMBNAIL | preview/quick-look |
+| 6 | STREAM_ARTIFACT | future video/stream output |
+
+When RAW is requested, PI-CAM shall preserve that source product before deriving TIFF/JPEG/other formats. Derivation never silently replaces the source.
+
+### 7.2 Product metadata
+
+Every stored product has an opaque `objectId:uint64`.
+
+Catalog metadata includes:
+
+- `objectId`;
+- `acquisitionId`;
+- `captureId`;
+- `created_unix_ms`;
+- product type/format;
+- width/height;
+- pixel format/bit depth;
+- byte size;
+- checksum;
+- parent/source object ID where derived;
+- storage state;
+- transfer state if active.
+
+The mission interface does not expose Linux filesystem paths as the object identity.
+
+### 7.3 Product lifecycle
+
+PI-CAM owns:
+
+- creation;
+- validation;
+- retention;
+- cataloging;
+- explicit deletion;
+- garbage collection according to configured storage policy.
+
+The OBC may list products before deciding whether to process, retain, transfer to OBC, transfer to FPGA, or downlink to Ground.
+
+## 8. Payload transfer
+
+Service 220 transfers Camera objects.
+
+Examples:
+
+```text
+OBC -> PI-CAM: transfer RAW object to FPGA
+PI-CAM -> FPGA
+
+OBC -> PI-CAM: downlink JPEG object to Ground
+PI-CAM -> Antenna -> Ground
+
+OBC -> PI-CAM: transfer TIFF object to OBC
+PI-CAM -> OBC
+```
+
+PI-CAM never opens the Ground link directly. A Ground destination resolves through the Antenna service.
+
+Because Camera and Antenna are co-located, the local Pi implementation may optimize the PI-CAM -> Antenna bulk path with file/object references, shared memory or local IPC while preserving Service 220 semantics externally.
+
+## 9. Housekeeping
+
+PI-CAM exposes predeclared Service 3 structures.
+
+### HEARTBEAT
+
+- Camera state;
+- software version;
+- acquisition/session state;
+- active acquisition ID;
+- mission time sync state;
+- uptime;
+- last error;
+- restart count.
+
+### HEALTH
+
+- camera present/available;
+- storage available/free bytes for Camera product store;
+- frames captured;
+- frames failed/dropped;
+- active product-derivation jobs;
+- last capture duration;
+- last encode duration;
+- control/read-back validity.
+
+### SENSORS / runtime metadata
+
+- camera/sensor temperature **only if the active driver exposes a valid value**;
+- current exposure time;
+- current analogue gain;
+- AF state;
+- lens position;
+- relevant sensor metadata exposed by the selected libcamera mode.
+
+Host-wide SoC temperature/memory/filesystem/platform state belongs primarily to PI-MGMT, not duplicated as Camera ownership.
+
+## 10. Monitoring and events
+
+PI-CAM supports predeclared Service 12 monitoring for Camera-owned health parameters such as:
+
+- repeated capture failure;
+- storage-low threshold;
+- frame-drop/error rate;
+- camera unavailable/disconnected;
+- sensor temperature when available.
+
+Representative Service 5 events include:
+
+- Camera service ready;
+- acquisition started/completed/cancelled;
+- product created/deleted;
+- Camera unavailable;
+- AF failure;
+- storage low/critical;
+- product encoding failure;
+- repeated frame capture failure.
+
+Threshold values and severity mapping are configured rather than buried in code.
+
+## 11. Time
+
+PI-CAM consumes OBC `TC[9,128] Set Mission Time` and timestamps acquisitions/products using synchronized `unix_ms`.
+
+Each product records capture time from the EXN mission clock independently from Linux filesystem timestamps.
+
+## 12. Recovery
+
+PI-CAM itself may provide a Service 8 reinitialize-camera function while still responsive.
+
+Process-level restart is commanded:
+
+```text
+OBC -> PI-MGMT: restart exn-camera.service
+```
+
+This remains functional even when PI-CAM is unresponsive.
+
+## 13. Software update
+
+PI-CAM packages are transferred/staged and activated by PI-MGMT using Service 220 + Service 230.
+
+Activation shall restart only the Camera service unless the package declares a platform dependency requiring Pi reboot.
+
+Post-update success requires Camera heartbeat, Camera presence and basic capability report to succeed.
