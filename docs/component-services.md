@@ -1,6 +1,6 @@
 # EXN Component and Service Contract
 
-This document defines the **normative target functional service contract** for all EXN components. It is part of the central EXN ICD and is implemented by the component repositories.
+This document defines the **normative active normative functional service contract** for all EXN components. It is part of the central EXN ICD and is implemented by the component repositories.
 
 It complements:
 
@@ -28,7 +28,7 @@ The Raspberry Pi still has only **two mission purposes**: Camera and Antenna. PI
 
 ## 2. Common service set
 
-Every controllable endpoint implements the applicable subset of the following target services.
+Every controllable endpoint implements the applicable subset of the following active services.
 
 | Service | Name | EXN use |
 |---:|---|---|
@@ -128,7 +128,7 @@ Baseline policy:
 - every state-changing command requests **acceptance** and **completion** verification;
 - long-running commands may additionally request start/progress verification;
 - read/report requests require acceptance verification and may use completion verification when generation can fail asynchronously;
-- command-specific ACK/NACK telemetry in Services 200/210 is not part of the target profile.
+- command-specific ACK/NACK telemetry in Services 200/210 is not part of the EXN profile; Service 1 is authoritative.
 
 Completion means the requested operation reached its defined completion point, not merely that it was queued.
 
@@ -330,7 +330,7 @@ The OBC sends the command to PI-CAM, PI-COMMS, PI-MGMT and FPGA after acquiring 
 
 ### 7.3 Packet timestamp
 
-The target PUS-C telemetry timestamp is six-octet CUC:
+The normative PUS-C telemetry timestamp is six-octet CUC:
 
 - four octets coarse seconds;
 - two octets fine fraction;
