@@ -101,9 +101,9 @@ typedef enum {
 
   SUB_CAM_START              = 1u,
   SUB_CAM_STOP               = 2u,
-  SUB_CAM_SET_CONTROLS       = 3u,
-  SUB_CAM_GET_CONTROLS       = 4u,
-  SUB_CAM_CONTROLS_REPORT    = 5u,
+  SUB_CAM_SET_CONFIGURATION  = 3u,
+  SUB_CAM_GET_CONFIGURATION  = 4u,
+  SUB_CAM_CONFIGURATION_REPORT = 5u,
   SUB_CAM_GET_CAPABILITIES   = 6u,
   SUB_CAM_CAPABILITIES       = 7u,
   SUB_CAM_LIST_PRODUCTS      = 8u,
@@ -164,6 +164,77 @@ typedef enum {
   EXN_VALUE_STRING = 9u,
   EXN_VALUE_BYTES  = 10u
 } exn_value_type_t;
+
+#define EXN_CAM_SCOPE_SENSOR_OUTPUT  (1u << 0)
+#define EXN_CAM_SCOPE_EXPOSURE_GAIN  (1u << 1)
+#define EXN_CAM_SCOPE_COLOR_WB       (1u << 2)
+#define EXN_CAM_SCOPE_FOCUS          (1u << 3)
+#define EXN_CAM_SCOPE_ISP_HDR        (1u << 4)
+#define EXN_CAM_SCOPE_ENCODING       (1u << 5)
+#define EXN_CAM_SCOPE_ALL            0xFFFFu
+
+#define EXN_CAM_CONFIG_VALIDATE_ONLY    (1u << 0)
+#define EXN_CAM_CONFIG_DEFER_UNTIL_IDLE (1u << 1)
+#define EXN_CAM_CONFIG_REQUIRE_EXACT    (1u << 2)
+
+typedef enum {
+  EXN_CAM_CONFIG_OK                          = 0u,
+  EXN_CAM_CONFIG_UNSUPPORTED                 = 1u,
+  EXN_CAM_CONFIG_UNAVAILABLE_IN_CURRENT_MODE = 2u,
+  EXN_CAM_CONFIG_READ_ONLY                   = 3u,
+  EXN_CAM_CONFIG_INVALID                     = 4u
+} exn_camera_config_status_t;
+
+typedef enum {
+  EXN_CAM_SENSOR_MODE              = 0x0001u,
+  EXN_CAM_OUTPUT_WIDTH             = 0x0002u,
+  EXN_CAM_OUTPUT_HEIGHT            = 0x0003u,
+  EXN_CAM_OUTPUT_PIXEL_FORMAT      = 0x0004u,
+  EXN_CAM_FRAME_RATE               = 0x0005u,
+  EXN_CAM_CROP_X                   = 0x0006u,
+  EXN_CAM_CROP_Y                   = 0x0007u,
+  EXN_CAM_CROP_W                   = 0x0008u,
+  EXN_CAM_CROP_H                   = 0x0009u,
+  EXN_CAM_HFLIP                    = 0x000Au,
+  EXN_CAM_VFLIP                    = 0x000Bu,
+
+  EXN_CAM_AE_ENABLE                = 0x0100u,
+  EXN_CAM_EXPOSURE_US              = 0x0101u,
+  EXN_CAM_ANALOGUE_GAIN            = 0x0102u,
+  EXN_CAM_EXPOSURE_COMPENSATION_EV = 0x0103u,
+  EXN_CAM_METERING_MODE            = 0x0104u,
+  EXN_CAM_EXPOSURE_MODE            = 0x0105u,
+
+  EXN_CAM_AWB_ENABLE               = 0x0200u,
+  EXN_CAM_AWB_MODE                 = 0x0201u,
+  EXN_CAM_AWB_RED_GAIN             = 0x0202u,
+  EXN_CAM_AWB_BLUE_GAIN            = 0x0203u,
+
+  EXN_CAM_AF_MODE                  = 0x0300u,
+  EXN_CAM_AF_TRIGGER               = 0x0301u,
+  EXN_CAM_AF_RANGE                 = 0x0302u,
+  EXN_CAM_AF_SPEED                 = 0x0303u,
+  EXN_CAM_LENS_POSITION_DIOPTRES   = 0x0304u,
+  EXN_CAM_AF_WINDOW_X              = 0x0305u,
+  EXN_CAM_AF_WINDOW_Y              = 0x0306u,
+  EXN_CAM_AF_WINDOW_W              = 0x0307u,
+  EXN_CAM_AF_WINDOW_H              = 0x0308u,
+
+  EXN_CAM_HDR_ENABLE               = 0x0400u,
+  EXN_CAM_BRIGHTNESS               = 0x0401u,
+  EXN_CAM_CONTRAST                 = 0x0402u,
+  EXN_CAM_SATURATION               = 0x0403u,
+  EXN_CAM_SHARPNESS                = 0x0404u,
+  EXN_CAM_DENOISE_MODE             = 0x0405u,
+
+  EXN_CAM_JPEG_QUALITY             = 0x0500u,
+  EXN_CAM_THUMBNAIL_ENABLE         = 0x0501u,
+  EXN_CAM_THUMBNAIL_MAX_WIDTH      = 0x0502u
+} exn_camera_control_id_t;
+
+#define EXN_CAM_PARAM_STORAGE_RETENTION_COUNT      0x1001u
+#define EXN_CAM_PARAM_STORAGE_MINIMUM_FREE_BYTES   0x1002u
+#define EXN_CAM_PARAM_CATALOG_MAX_ENTRIES_PER_REPORT 0x1003u
 
 typedef enum {
   EXN_TARGET_PI_CAM  = 1u,
@@ -432,6 +503,34 @@ typedef struct EXN_PACKED {
   uint8_t product_mask_be[2];
   uint8_t flags_be[2];
 } exn_camera_start_t;
+
+typedef struct EXN_PACKED {
+  uint8_t flags_be[2];
+  uint8_t count_be[2];
+} exn_camera_set_configuration_prefix_t;
+
+typedef struct EXN_PACKED {
+  uint8_t control_id_be[2];
+  uint8_t value_type;
+  uint8_t value_length_be[2];
+} exn_camera_configuration_entry_prefix_t;
+
+typedef struct EXN_PACKED {
+  uint8_t scope_mask_be[2];
+} exn_camera_get_configuration_t;
+
+typedef struct EXN_PACKED {
+  uint8_t configuration_revision_be[4];
+  uint8_t scope_mask_be[2];
+  uint8_t count_be[2];
+} exn_camera_configuration_report_prefix_t;
+
+typedef struct EXN_PACKED {
+  uint8_t control_id_be[2];
+  uint8_t status;
+  uint8_t value_type;
+  uint8_t value_length_be[2];
+} exn_camera_configuration_report_entry_prefix_t;
 
 typedef struct EXN_PACKED {
   uint8_t transfer_id_be[4];
