@@ -8,10 +8,10 @@
 
 The platform exercises realistic spacecraft engineering boundaries: CCSDS/ECSS packet interfaces, embedded supervision, image acquisition, hardware-accelerated image/AI processing, Ground communications, telemetry/telecommand workflows, flexible payload-data routing, and end-to-end integration testing.
 
-The detailed logical architecture is defined in [docs/architecture.md](docs/architecture.md). The wire-level packet contract remains [docs/ICD.md](docs/ICD.md), while [docs/services.md](docs/services.md) defines the PUS service-tailoring profile and migration direction.
+The detailed logical architecture is defined in [docs/architecture.md](docs/architecture.md). **This repository owns the complete EXN ICD and mission interface definition**: [docs/ICD.md](docs/ICD.md) defines the common wire contract, [docs/services.md](docs/services.md) defines the PUS service profile, [docs/component-services.md](docs/component-services.md) defines the complete service behavior, and [docs/icd/](docs/icd/) contains the endpoint-specific ICDs.
 
 > [!IMPORTANT]
-> EXN is the **system architecture and interface authority**, not a monolithic firmware repository. Logical endpoint responsibilities must remain independent from the physical computer that happens to host them in the current demonstrator.
+> EXN is the **single system architecture and ICD authority**, not a monolithic firmware repository. **All mission-visible interfaces are defined here first.** Component repositories implement these definitions and may document implementation details, but they shall not independently assign APIDs, services/subservices, packet layouts, control/parameter IDs, HK structures, event IDs, routing semantics, timing rules, or update protocols.
 
 ## System Scope
 
@@ -100,16 +100,38 @@ The exact wire encoding of per-job processing-result routing will be introduced 
 
 ## Repository Role
 
-This repository contains the cross-component architecture, ICDs, diagrams, and shared interface definitions rather than component implementations.
+This repository contains the **complete system specification and ICD set** rather than component implementations. A component interface is not considered defined until it exists here.
 
 ```text
 exn/
-├── interfaces/             # Shared packet/interface definitions
-├── docs/                   # Architecture, ICDs, diagrams, and design notes
+├── interfaces/             # Machine-readable/shared interface artifacts derived from the ICD
+├── docs/
+│   ├── ICD.md              # Common CCSDS/PUS wire contract
+│   ├── services.md         # Standard + mission-specific PUS service allocation
+│   ├── component-services.md # Complete cross-component service behavior and payloads
+│   ├── icd/                # Endpoint-specific normative ICDs
+│   ├── architecture.md
+│   └── diagrams.md
 ├── CHANGELOG.md
 ├── LICENSE
 └── README.md
 ```
+
+### Interface ownership rule
+
+The dependency direction is one-way:
+
+```text
+ExoSpaceLabs/exn
+  architecture + full ICD + interface definitions
+        |
+        +--> exn-gs          implements Ground/HIL side
+        +--> exn-mcu-rtos    implements OBC side
+        +--> exn-pi-cam      implements Pi Camera/Antenna/PI-MGMT side
+        +--> exn-fpga-ai     implements FPGA side
+```
+
+If implementation work discovers a missing field, command, parameter, sensor, state, or error case, the contract is updated **here first**, then the component implementation follows it. The component repository does not silently extend the protocol.
 
 ### Component repositories
 
@@ -186,7 +208,7 @@ Mission packet/service semantics remain above that transport choice.
 - JSON mirrors for tooling: [interfaces/json/](interfaces/json/)
 - MCU header-only definitions: [interfaces/mcu-rtos/](interfaces/mcu-rtos/)
 
-Wire-level changes must remain synchronized with these shared definitions. Architecture changes alone must not silently change packet layouts. `docs/component-services.md` defines the target operational behavior for Camera, Antenna, OBC, FPGA and PI-MGMT.
+Wire-level and service changes must be made in this repository first and synchronized across its normative ICD documents and generated/shared artifacts. `docs/component-services.md` defines the target operational behavior for Camera, Antenna, OBC, FPGA and PI-MGMT; the endpoint ICDs freeze endpoint-specific IDs, fields, states, capabilities and payloads. Component repositories consume this contract and do not own parallel copies of it.
 
 ## Current implementation status
 
