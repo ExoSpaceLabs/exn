@@ -89,7 +89,42 @@ Per endpoint the OBC tracks:
 
 Normative default supervision parameters are defined in `../component-services.md` and exposed through Service 20.
 
-Three missed heartbeat periods mark an endpoint OFFLINE and produce an OBC Service 5 event unless configured otherwise.
+Default integration policy is:
+
+```text
+HEARTBEAT request period       2 s
+HEALTH request period         10 s
+3 missed heartbeats           -> STALE
+15 s unavailable              -> OFFLINE
+60 s unavailable              -> automatic recovery eligible
+120 s recovery cooldown       -> default retry spacing
+3 automatic recoveries        -> default retry limit
+```
+
+All values are configurable through OBC Service 20.
+
+Example:
+
+```text
+FPGA last heartbeat at t=0
+
+t=6 s    OBC: FPGA supervision = STALE
+t=15 s   OBC: FPGA supervision = OFFLINE
+t=60 s   OBC: recovery policy triggers
+          -> configured recovery action
+          -> recovery state = ACTION_SENT / WAITING_FOR_HEALTH
+
+FPGA returns heartbeat:
+          -> supervision = OK
+          -> recovery = RECOVERED
+          -> updated uptime/restart count cached
+
+or no independent reset path exists:
+          -> recovery = SUPPRESSED
+          -> Ground sees this in System HK
+```
+
+A software reboot is only possible while a management path remains responsive. Recovery of a totally unreachable Pi/FPGA requires an independent reset or power-control path, which belongs to future platform/EPS integration.
 
 ## 5. Housekeeping
 
@@ -133,6 +168,9 @@ Examples:
 | watchdog reset detected | 5/4 high |
 | time synchronization lost | 5/2 or 5/3 according to duration |
 | component recovery failed | 5/3 or 5/4 |
+| recovery policy triggered | 5/2 |
+| recovery succeeded | 5/1 |
+| recovery suppressed/no reset path | 5/3 |
 
 Event payload format is the common Service 5 model in `../component-services.md`.
 
@@ -149,6 +187,8 @@ Ground -> OBC: reboot OBC
 ```
 
 A Pi mission-service restart is addressed to PI-MGMT, not to the failing service itself.
+
+The OBC also owns a bounded recovery journal. Ground can request creation of a diagnostic-log object using common Service 8 function `0x0006 CREATE_DIAGNOSTIC_LOG`; the resulting Service 220 object contains supervision/recovery history suitable for post-mortem analysis.
 
 ## 8. Service 9 time authority
 
