@@ -12,7 +12,7 @@ The exact common packet/header rules remain controlled by [ICD.md](ICD.md); endp
 
 ## 1. Standards baseline
 
-EXN uses **ECSS-E-ST-70-41C PUS Revision C** as its only active PUS profile.
+EXN uses **ECSS-E-ST-70-41C (15 April 2016), PUS Revision C** as its only active PUS profile. This is the currently published active ECSS Packet Utilisation Standard; later public-review drafts are not treated as normative until formally published.
 
 CCSDSPack v2.0.0 provides the required PUS-C TC/TM secondary headers, fixed two-octet TC source ID and TM destination ID, acknowledgement flags, message type counter and CUC telemetry time support.
 
