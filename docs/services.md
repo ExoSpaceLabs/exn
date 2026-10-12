@@ -8,7 +8,7 @@ It separates three things that were previously mixed together:
 2. the **ECSS PUS service catalogue**, whose standardized service and message identifiers have fixed meanings;
 3. the **target EXN mission profile**, which selects standard PUS services where they fit and uses mission-specific identifiers where EXN genuinely needs mission-specific behavior.
 
-The exact packet layouts remain controlled by [ICD.md](ICD.md). This document is the service-level authority and migration plan.
+The exact packet layouts remain controlled by [ICD.md](ICD.md). This document is the PUS service-level authority and migration plan. The endpoint behavior built from these services is defined in [component-services.md](component-services.md).
 
 ## 1. Standards baseline
 
@@ -93,7 +93,20 @@ Use the standard severity meanings:
 
 EXN event-definition identifiers and auxiliary payloads are mission data layered onto this service.
 
-### 4.4 Service 9: Time Management
+### 4.4 Service 8: Function Management
+
+Use standard PUS Service 8 for endpoint/platform management functions.
+
+The EXN baseline requires `TC[8,1]` Perform a Function for:
+
+- clear/reinitialize actions;
+- Camera/Antenna service recovery through PI-MGMT;
+- OBC/FPGA/Pi reboot where supported;
+- entry/exit from endpoint idle/safe application state.
+
+Function IDs and target-specific behavior are defined in `component-services.md`. Request verification uses Service 1.
+
+### 4.5 Service 9: Time Management
 
 Use PUS Service 9 for time management.
 
@@ -110,7 +123,17 @@ Its payload is the mission-selected CUC time representation plus any time-qualit
 
 The old EXN 17/1 and 17/2 assignments shall not be used by new implementations.
 
-### 4.5 Service 20: Parameter Management
+### 4.6 Service 12: On-board Monitoring
+
+Use a deliberately small PUS Service 12 profile for sensor/health limit monitoring.
+
+The first EXN baseline uses **predeclared monitoring definitions** rather than dynamic creation of arbitrary definitions from Ground. Monitoring covers temperature, voltage/power-state indicators, storage thresholds, link loss and other endpoint-specific health parameters actually available on the selected hardware.
+
+Thresholds, hysteresis and dwell/debounce values are configurable parameters. Limit transitions emit Service 5 events and are reflected in Housekeeping/System HK.
+
+The target may later expand to additional Service 12 capabilities without changing the endpoint ownership model.
+
+### 4.7 Service 20: Parameter Management
 
 Adopt the standardized Service 20 message semantics:
 
@@ -122,19 +145,26 @@ The exact EXN parameter identifier and value representation shall be documented 
 
 The current EXN meaning of 20/1 = Set, 20/2 = Get, and 20/3 = Value is transitional and shall be migrated before the flight/payload nodes freeze their APIs.
 
-### 4.6 Service 200: Camera Control
+### 4.8 Service 200: Camera Control
 
-Service 200 is mission-specific and remains the Camera service.
+Service 200 is mission-specific and defines the PI-CAM application interface.
 
-Current functional scope is valid:
+Target functions include:
 
-- capture;
-- camera configuration;
-- camera state/settings reporting.
+- start/stop acquisition;
+- SINGLE, BURST and TIMELAPSE acquisition, with STREAM reserved as an optional/future mode;
+- set/get camera controls;
+- report camera capabilities and driver-supported ranges;
+- list/delete stored camera products;
+- report acquisition status.
 
-The final profile shall use Service 1 for command verification, allowing the legacy Camera 200/5 ACK/NACK message to be retired.
+A completed acquisition may retain sensor RAW and derive DNG/TIFF/JPEG/PNG/preview products without overwriting the source object. Product transfer itself uses Service 220.
 
-### 4.7 Service 210: Payload Processing
+The target subtype catalogue and control model are defined in `component-services.md` and the PI-CAM ICD.
+
+Service 1 provides verification; the legacy Camera 200/5 ACK/NACK message is retired in the target profile.
+
+### 4.9 Service 210: Payload Processing
 
 Service 210 is mission-specific and remains the FPGA/image/AI processing service.
 
@@ -147,18 +177,22 @@ It owns:
 
 Processing results are not hard-wired to a single endpoint. The job or mission policy may route a result to the OBC, Camera service, Antenna service, requester, or multiple endpoints.
 
-The final Execute request shall include or reference:
+The target job request includes or references:
 
 - job identifier;
-- processing/pipeline identifier;
+- operation/capability identifier;
 - input object/reference;
 - processing parameters;
-- result route;
-- delivery policy.
+- destination endpoint list;
+- output/delivery policy.
+
+Service 210 also reports supported processing capabilities because the concrete FPGA workload is intentionally not frozen yet.
+
+Small results may be returned directly through Service 210. Large results become Service 220 objects.
 
 Service 1 provides command verification. The legacy FPGA 210/5 ACK/NACK message is therefore transitional.
 
-### 4.8 Service 220: Payload Object Transfer
+### 4.10 Service 220: Payload Object Transfer
 
 Reserve **Service 220** as the EXN mission-specific Payload Object Transfer service.
 
@@ -179,21 +213,25 @@ Initial message allocation:
 |---|---|
 | TC[220,1] | Start Object Transfer |
 | TC[220,2] | Stop Object Transfer |
+| TC[220,3] | Get Transfer Status |
 | TM[220,10] | Object Metadata |
 | TM[220,11] | Object Chunk |
 | TM[220,12] | Object Transfer Complete |
+| TM[220,13] | Transfer Status |
 
-The common identifier is **objectId** or **transferId**, not imageId. Object metadata carries the object kind and any image-specific dimensions only when applicable.
+The common identifiers are **objectId** and **transferId**, not imageId. Object metadata carries the object kind and any image-specific dimensions only when applicable.
+
+For OBC-commanded Ground downlink, the payload producer sends the object directly to the Antenna endpoint and the Antenna forwards it to Ground. The OBC tracks the transfer but does not relay bulk bytes.
 
 PUS Service 13 remains available when EXN specifically needs the standardized **large PUS packet transfer** procedure. It is not used as a substitute for the mission-level payload-object model.
 
-### 4.9 Service 23: File Management
+### 4.11 Service 23: File Management
 
 Service 23 is reserved for its standardized PUS-C File Management meaning.
 
 EXN shall not use Service 23 for generic image or result chunking in the target profile.
 
-### 4.10 Antenna endpoint
+### 4.12 Antenna endpoint
 
 PI-COMMS initially requires no dedicated mission-specific service.
 
@@ -207,7 +245,25 @@ Its management should use:
 
 No separate 'communications' subsystem is introduced: PI-COMMS is the logical identifier for the Pi Antenna service. A dedicated antenna-control service shall only be allocated if concrete radio/link operations cannot be represented coherently by the common services.
 
-### 4.11 Legacy Service 250
+### 4.13 Service 230: Software Management
+
+Reserve **Service 230** as the EXN mission-specific Software Management service.
+
+It provides:
+
+- software/component inventory reporting;
+- stage update package;
+- activate staged update;
+- rollback;
+- update status reporting.
+
+Update package bytes are transferred as bounded objects using Service 220; Service 230 controls the lifecycle and activation.
+
+PI-MGMT owns Camera/Antenna/platform service updates so a mission service does not need to update or restart itself. OBC and FPGA software providers own their corresponding update targets.
+
+An update is complete only after post-activation heartbeat/HK validation succeeds.
+
+### 4.14 Legacy Service 250
 
 Service 250/1 currently represents a GS-originated link/proxy acknowledgement.
 
@@ -219,16 +275,19 @@ Service 250 remains reserved during migration so old HIL traffic can be recogniz
 
 The target service ownership is:
 
-| Service | GS/HIL | OBC | Camera | FPGA processing | Antenna |
-|---|---|---|---|---|---|
-| 1 Request verification | consume | provide/consume | provide/consume | provide/consume | provide/consume |
-| 3 Housekeeping | request/consume | provide + aggregate | provide | provide | provide |
-| 5 Event reporting | consume | provide | provide | provide | provide |
-| 9 Time management | request/consume | master/provider | consume/report | consume/report | consume/report |
-| 20 Parameter management | request/consume | provide | provide | provide | provide |
-| 200 Camera control | request | route | provide | - | transport only |
-| 210 Processing | request | route/use results | request/use results | provide | transport/use routed result |
-| 220 Payload object transfer | receive/request | optional route/receive | provide/receive | provide/receive | provide/receive/downlink |
+| Service | GS/HIL | OBC | Camera | FPGA processing | Antenna | PI-MGMT |
+|---|---|---|---|---|---|---|
+| 1 Request verification | consume | provide/consume | provide/consume | provide/consume | provide/consume | provide/consume |
+| 3 Housekeeping | request/consume | provide + aggregate | provide | provide | provide | provide |
+| 5 Event reporting | consume | provide | provide | provide | provide | provide |
+| 8 Function management | request | provide/consume | provide limited | provide | provide limited | provide platform/service recovery |
+| 9 Time management | request/consume | **master/provider** | consume/report | consume/report | consume/report | consume/report |
+| 12 On-board monitoring | request/consume | provide/aggregate | provide | provide | provide | provide |
+| 20 Parameter management | request/consume | provide | provide | provide | provide | provide |
+| 200 Camera control | request | route/control | provide | - | transport only | supervise only |
+| 210 Processing | request | route/control/use results | request/use results | provide | downlink routed result | - |
+| 220 Payload object transfer | receive/request | control/optional receive | provide/receive | provide/receive | downlink/receive | receive update packages |
+| 230 Software management | request | provide/control | via PI-MGMT | provide | via PI-MGMT | provide for Pi services |
 
 "Route" does not mean that the OBC must carry bulk object bytes. The architecture continues to permit direct payload data paths.
 
@@ -279,7 +338,7 @@ No new interface shall be added using a legacy-colliding assignment merely becau
 4. Generalize payload transfer from `imageId` to object/transfer semantics under Service 220.
 5. Migrate shared CCSDSPack templates, JSON/tooling definitions and MCU headers.
 6. Migrate EXN-GS packet builders and simulator together.
-7. Implement MCU, Camera, Antenna and FPGA endpoints against the normalized profile.
+7. Implement MCU, Camera, Antenna, PI-MGMT and FPGA endpoints against the normalized profile.
 8. Add golden-vector and cross-repository interoperability tests.
 9. Remove legacy service aliases only after no supported component depends on them.
 
@@ -291,6 +350,6 @@ EXN shall not declare a coherent flight/payload integration baseline until:
 - all supported packet artifacts agree with it;
 - EXN-GS and simulators interoperate with the same profile;
 - each implemented endpoint declares which standard and mission-specific services it supports;
-- request verification, error behavior and routing are covered by integration tests.
+- request verification, error behavior, health/monitoring, time synchronization, recovery, software-update lifecycle and routing are covered by integration tests.
 
 The architecture is already sufficiently stable to continue implementation. The service profile is the interface work that must be normalized before the currently placeholder MCU/FPGA repositories acquire incompatible APIs.
