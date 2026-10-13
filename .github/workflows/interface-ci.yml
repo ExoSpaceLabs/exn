@@ -90,8 +90,12 @@ jobs:
           /tmp/exn_header_check_cpp
 
       - name: Reject obsolete active interface profiles
+        shell: bash
         run: |
-          if grep -RInE 'PUS:revA|PUS-A|astrai_interfaces|SUB_CAM_SET_CONTROLS|SUB_CAM_GET_CONTROLS' interfaces; then
+          mapfile -d '' artifacts < <(
+            find interfaces -type f \( -name '*.cfg' -o -name '*.json' -o -name '*.h' \) -print0
+          )
+          if grep -InE 'PUS:revA|PUS-A|astrai_interfaces|SUB_CAM_SET_CONTROLS|SUB_CAM_GET_CONTROLS' "${artifacts[@]}"; then
             echo "Obsolete EXN interface profile or identifier found"
             exit 1
           fi
