@@ -65,7 +65,7 @@ The following logical state vocabulary is shared by OBC health/orchestration:
 
 Endpoints may expose more detailed internal states, but the OBC shall always be able to reduce them to this set.
 
-## 3.1 Common typed value encoding
+### 3.1 Common typed value encoding
 
 Where EXN mission-specific services need a typed scalar/value, use:
 
@@ -84,7 +84,7 @@ Where EXN mission-specific services need a typed scalar/value, use:
 
 Variable values always carry an explicit length. No target packet definition requires unbounded strings or dynamic allocation.
 
-## 3.2 Common Service 20 parameter format
+### 3.2 Common Service 20 parameter format
 
 EXN parameter IDs are `uint16` scoped by endpoint APID.
 
@@ -296,7 +296,7 @@ repeat count:
 
 Sensor IDs and engineering units are frozen in the reference-hardware sensor ICD. Unsupported optional sensors are omitted or explicitly marked UNAVAILABLE. A required profile sensor that becomes unavailable shall be marked UNAVAILABLE and reflected as degraded platform health; zero remains a valid measurement and never means "unsupported".
 
-## 5.6 Event report payload
+### 5.6 Event report payload
 
 All Service 5 reports use a common EXN Application Data prefix:
 
@@ -527,7 +527,7 @@ Common Service 8 function `0x0006 CREATE_DIAGNOSTIC_LOG` asks the target/OBC to 
 
 A dead endpoint is not required to provide its own post-mortem log. The OBC recovery journal remains available even when the failed endpoint never returns.
 
-## 8.6 Event ID namespaces
+### 8.6 Event ID namespaces
 
 Service 5 event IDs are partitioned so logs can be decoded without guessing the producer-specific dictionary.
 
@@ -740,7 +740,7 @@ FPGA -> Antenna -> Ground
 
 without relaying Y through the MCU.
 
-## 11.3 Common payload object types and formats
+### 11.3 Common payload object types and formats
 
 `object_type:uint16` identifies mission meaning:
 
@@ -965,7 +965,7 @@ OBC -> Camera/FPGA: transfer selected object to Ground
 Camera/FPGA -> Antenna -> Ground
 ```
 
-## 13.2 PI-MGMT platform parameters
+### 13.3 PI-MGMT platform parameters
 
 PI-MGMT Service 20 parameters include:
 
