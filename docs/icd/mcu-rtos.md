@@ -2,7 +2,7 @@
 
 This document is the normative EXN ICD for the STM32 OBC endpoint.
 
-Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../services.md`, and shared component behavior in `../component-services.md`.
+Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../services.md`, shared component behavior in `../component-services.md`, and the physical reference Ethernet/TCP link in [`inter-node-links.md`](inter-node-links.md). The OBC TCP/IP transport and the corresponding fixed-memory network stack remain integration work, not an already-qualified MCU feature.
 
 ## 1. Identity and role
 
