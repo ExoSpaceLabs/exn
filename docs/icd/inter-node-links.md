@@ -155,6 +155,16 @@ A **single active Ground command session** is the initial baseline. PI-COMMS sha
 
 The Wi-Fi network must use an appropriately secured local AP/hotspot (WPA2/WPA3 as available); no credentials belong in the repository. TCP and the CCSDS CRC16 **do not provide authentication or encryption**. This is a laboratory deployment only, not a security-approved flight or untrusted-internet command interface. Ground authorization, authentication and replay protection require a separate reviewed security profile before exposure to untrusted networks.
 
+### 6.1 Downlink multiplexing and bounded queues
+
+The PI-COMMS Ground TCP connection carries **more than one producer's TM**: OBC HK/events/verification and any authorized Camera/FPGA Service 220 object packets. Individual CCSDS packets remain intact and retain their producer APID.
+
+PI-COMMS shall provide bounded transmit queues and prioritize **Service 1 verification, Service 5 events and OBC System HK** ahead of bulk object chunks at packet scheduling boundaries. Bulk transfer must not indefinitely starve fault telemetry.
+
+TCP backpressure must propagate to the relevant Service 220 sender/transfer state. PI-COMMS shall not allocate unbounded buffering or silently declare a payload chunk delivered because a TCP write merely entered a local queue.
+
+The priority behavior is **transport scheduling only**: it does not alter CCSDS/PUS packet fields, does not grant Camera/FPGA independent Ground command authority, and does not permit partial interleaving of bytes from different CCSDS packets.
+
 ## 7. Availability, failure and recovery behavior
 
 - Onboard link failures and TCP disconnects affect the corresponding OBC **supervision state**. OBC uses Service 20 heartbeat/health/offline/recovery policy, not a TCP socket's `connected` flag, to decide that a device is operational.
