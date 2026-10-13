@@ -1,207 +1,220 @@
 # EXN Reference Inter-Device Link ICD
 
-**Status:** normative reference *integration transport profile* for the current STM32H755, Raspberry Pi 5, AMD Kria KV260 and PC/GS demonstrator. This document specifies how the already-defined logical endpoints communicate on the reference hardware. It does **not** redefine CCSDS/PUS message payloads or claim flight-qualified networking.
+**Status:** normative reference *laboratory integration transport profile* for the selected STM32H755 Nucleo OBC, Raspberry Pi 5, AMD Kria KV260, and PC/GS. **No switch is required.** This describes required software and cables, not verified working hardware.
 
-Related contracts:
+See [system architecture](../architecture.md), [master PUS-C packet ICD](../ICD.md), [Ground ICD](gs.md), [OBC ICD](mcu-rtos.md), [Pi ICD](linux-payload.md), [FPGA ICD](fpga-ai.md), and the matching [machine-readable reference profile](../../interfaces/network/reference-topology.json).
 
-- [System architecture](../architecture.md): spacecraft authority, logical nodes, control/data planes.
-- [Master packet ICD](../ICD.md): PUS-C identity, CCSDS packet framing, CRC, routing envelope.
-- [Ground ICD](gs.md), [OBC ICD](mcu-rtos.md), [Pi ICD](linux-payload.md), [FPGA ICD](fpga-ai.md): endpoint behavior.
-- [Service catalogue](../services.md) and [interaction sequences](../diagrams.md).
-- Machine-readable reference deployment: [`../../interfaces/network/reference-topology.json`](../../interfaces/network/reference-topology.json).
-
-## 1. Reference physical topology
+## 1. Physical connection baseline
 
 ```mermaid
 flowchart TB
-  PC["PC / Ground Station"]
-  AP["Wi-Fi access point<br/>or PC hotspot"]
+  GS["PC / Ground Station"]
+  WIFI["Secured Wi-Fi AP or PC hotspot"]
 
-  subgraph EXN["EXN reference hardware"]
-    PI["Raspberry Pi 5<br/>PI-COMMS + PI-CAM + PI-MGMT"]
-    SW["Onboard Ethernet switch<br/>Layer 2, external"]
-    MCU["NUCLEO-H755ZI-Q<br/>STM32 OBC"]
-    KV["AMD Kria KV260<br/>FPGA processing endpoint"]
+  subgraph BENCH["EXN reference hardware"]
+    PI["Raspberry Pi 5<br/>PI-COMMS · PI-CAM · PI-MGMT"]
+    OBC["STM32H755 OBC"]
+    KV["Kria KV260 FPGA processing"]
 
-    PI <-->|"Pi eth0 · 1 GbE"| SW
-    MCU <-->|"RMII PHY · 100 MbE"| SW
-    KV <-->|"KV260 Ethernet · 1 GbE"| SW
+    OBC <-->|"UART A · short 3.3 V TTL"| PI
+    OBC <-->|"UART B · Pmod / PL"| KV
+    PI <-->|"Direct Gigabit Ethernet · no switch"| KV
   end
-
-  PC <-->|"Wi-Fi/LAN"| AP
-  AP <-->|"Pi wlan0 · Wi-Fi"| PI
+  GS <-->|"Wi-Fi / TCP"| WIFI
+  WIFI <-->|"Wi-Fi"| PI
 ```
 
-| Interface | Equipment | Reference use | Physical/link capacity |
+| Link | Physical interface | Role | Status |
 |---|---|---|---|
-| Ground link | PC/GS ↔ Pi `wlan0` | command and telemetry uplink/downlink, payload download | Wi-Fi; negotiated by AP and clients |
-| OBC onboard | NUCLEO-H755ZI-Q RJ45 ↔ Ethernet switch | OBC TC/TM and supervision | 10/100 Ethernet, LAN8742A PHY |
-| Pi onboard | Pi 5 RJ45 ↔ Ethernet switch | Pi services, Camera objects, Ground gateway | Gigabit Ethernet |
-| FPGA onboard | KV260 RJ45 ↔ Ethernet switch | Service 210 control and Service 220 objects | Gigabit Ethernet |
-| Pi local | PI-CAM ↔ PI-COMMS ↔ PI-MGMT on same Linux host | cross-process management and product handoff | local IPC or loopback |
+| PC/GS ↔ Pi | Wi-Fi, via secured AP/hotspot | Ground PUS TCs, spacecraft TM, payload downloads | selected lab assumption |
+| OBC ↔ Pi | independent 3.3 V UART, crossed TX/RX and common GND | spacecraft command gateway, Pi endpoint HK/management | to be wired/implemented |
+| OBC ↔ KV260 | independent 3.3 V UART, OBC USART ↔ KV260 **J2 Pmod PL I/O** | FPGA job commands, HK, time, recovery/verification | **requires FPGA control-UART logic and host integration** |
+| Pi ↔ KV260 | **direct** RJ45 Gigabit Ethernet cable | input images, processed objects, bulk data to PI-COMMS | to be configured/validated |
+| PI-CAM ↔ PI-COMMS ↔ PI-MGMT | Pi Linux local IPC | Pi endpoint dispatch and same-host object handoff | to be implemented |
 
-The switch is a **required external integration component** for this three-host wired topology. It is not assumed to have already been purchased, connected or validated. No additional Ethernet port, Ethernet-over-USB adapter, or special FPGA carrier PHY is assumed.
+Neither the STM32 nor any other device is part of the Pi↔KV260 bulk-data path. **The STM32 Ethernet PHY is not used in this reference profile.** No Ethernet switch, adapter dongle, CAN transceiver, external level shifter or other active network module is needed for the selected physical topology; the FPGA's Pmod serial controller is software/RTL work.
 
-The PC and Pi may use an existing secured Wi-Fi AP or a PC-hosted hotspot. This is a laboratory Ground-link **emulation**, not an RF subsystem or a claim about in-orbit Wi-Fi support.
+A conventional Cat5e/Cat6 cable can directly join Pi 5 and KV260 Gigabit Ethernet ports; modern Ethernet PHYs normally support auto-MDI/MDIX. Both board ports and final cable/link negotiation must still be tested. Wi-Fi and wired Ethernet remain separate physical networks.
 
-## 2. Network separation and addressing
+## 2. Control-link UART electrical profile
 
-Two network domains are intentionally separate.
+### 2.1 OBC ↔ Pi UART A
 
-| Domain | Reference network | Configuration | Role |
-|---|---|---|---|
-| Onboard wired LAN | `10.77.0.0/24` | static IPv4, no default gateway or DHCP required | device↔device control and data |
-| Ground Wi-Fi LAN | assigned by the chosen AP | Pi `wlan0` and PC normally obtain DHCP leases | Ground↔PI-COMMS only |
+Reference connector allocation, subject to a **bench pinout check before wiring**:
 
-The `10.77.0.0/24` subnet is a **proposed EXN lab allocation** within RFC 1918 private space. It shall be changed in the deployment profile if it overlaps the selected Wi-Fi LAN or an existing network.
+- STM32H755: `LPUART1` on `PB6 TX`, `PB7 RX` (board Zio/morpho access).
+- Pi 5: `UART0` on GPIO14 TX (40-pin header physical **8**), GPIO15 RX (physical **10**), and header GND.
+- Cross `OBC TX → Pi RX` and `Pi TX → OBC RX`; connect GND.
+- Enable the Pi's **header** UART using the appropriate Linux pinmux/device-tree configuration. Do **not** assume that Pi 5 `/dev/serial0` points to GPIO14/15: its default primary/debug UART is on the separate debug header.
+- Reserve the selected UART for EXN; disable any serial login shell or boot console using those same GPIOs.
 
-| Hardware | Physical interface | Reference onboard IPv4 |
-|---|---|---|
-| STM32 OBC | Ethernet PHY / RJ45 | `10.77.0.10/24` |
-| Raspberry Pi 5 | `eth0` | `10.77.0.20/24` |
-| Kria KV260 | wired Ethernet (`eth0` when named so by Linux) | `10.77.0.30/24` |
+### 2.2 OBC ↔ KV260 UART B
 
-There is **no general IP route, NAT or bridge** between Wi-Fi and the onboard LAN. PI-COMMS is an **application-level CCSDS packet gateway**. GS/PC has no direct IP access to OBC or FPGA through the Pi in normal operations.
+Reference control link:
 
-IP addresses and TCP ports are properties of this reference deployment, **not spacecraft APIDs or PUS source IDs**. Alternative physical networks may change them while preserving the mission ICD.
+- STM32H755: independent `USART2` on `PD5 TX` / `PD6 RX` via the board's expansion connectors, after verifying their actual connector positions and alternate-function routing.
+- KV260: carrier **J2 Digilent Pmod**. Assign two suitable 3.3 V PL I/O pins to UART RX/TX in the platform constraints, cross the wires, and connect GND.
+- **Do not connect the KV260 FTDI/J4 USB debug UART directly to STM32 GPIO.** It is a USB device/debug interface, not a 3.3 V TTL header.
+- The Pmod UART requires a programmed FPGA configuration and a bridge to the processing software (e.g., a minimal PL UART peripheral and a Linux driver/character device). The exact Pmod pin mapping, RTL, device-tree and startup dependency will be frozen in a board-specific implementation note after checking the KV260 carrier revision and Vivado constraints.
+- The serial control interface must remain available through normal accelerator-job changes whenever practical; losing the PL configuration causes OBC to mark the FPGA control endpoint unavailable.
 
-## 3. Reference transport and packet framing
+### 2.3 Electrical and UART operating rules
 
-**Selected initial reference transport:** IPv4/TCP for both the Wi-Fi Ground link and the wired onboard host-to-host links.
+Both links are **point-to-point**, independent of one another, short 3.3 V push-pull TTL serial connections. They are for the bench, **not flight-grade wiring**. Verify common reference grounds and connector voltages with hardware documentation before connecting; never connect 5 V UART levels or directly join unrelated power rails. Avoid long loose wires and powered/unpowered I/O backfeeding.
 
-This deliberately reuses the existing EXN-GS `tcp://HOST:PORT` device-link support. The STM32 application still needs a verified Ethernet/TCP implementation (for example a bounded, statically provisioned TCP/IP stack); no implemented OBC network stack is assumed here.
+Initial settings on each link:
 
-Each TCP stream contains **concatenated complete CCSDS Space Packets**. There is no custom packet wrapper and no additional TCP length prefix:
+| Attribute | Baseline |
+|---|---|
+| UART mode | full duplex, 8 data, no parity, 1 stop (8N1) |
+| Initial baud | **115200**, then qualify **921600** as a configurable higher-rate mode |
+| Hardware flow control | none initially; bounded sender queues required |
+| Link identity | UART A = PI logical endpoint router; UART B = FPGA |
+| Electrical interface | 3.3 V logic; crossed TX/RX + GND |
+| Framing | COBS with `0x00` frame delimiter; details below |
 
-1. Read the first **6 bytes** of the CCSDS primary header.
-2. Decode the CCSDS 16-bit Packet Data Length field (`L`).
-3. Total packet length is **`6 + L + 1` bytes**.
-4. Read exactly that many bytes before decoding the packet, including the normal EXN CRC16.
-5. Repeat for the next packet. TCP reads/writes may split or coalesce packet boundaries.
+Distinct UART peripheral assignments prevent one unresponsive subordinate from blocking the other transport. OBC prioritization/scheduling must not share a blocking driver critical section between the two links.
 
-This is framing, **not** authorization or integrity authentication. PUS-C remains the common mission protocol and Service 1 remains the request-verification mechanism.
+## 3. Transport framing
 
-**Initial integration packet budget:** receivers shall support complete packets of up to **8192 bytes** per CCSDS Space Packet. Each endpoint shall use bounded memory and reject packets beyond its configured and tested receive capacity. Service 220 object chunks should initially carry at most **1024 payload bytes** per TM to leave room for PUS headers/object metadata and avoid large transient buffers.
+The **same complete CCSDS Space Packet with PUS-C and its CRC16** is exchanged across all links. Transport encapsulation is different:
 
-The System-HK `TM[3,129]` must be verified against this bound using all registered endpoints and their maximum configured cache structures. It shall **not silently discard endpoints or fields** to fit the packet. If the current representation cannot fit, the ICD/transfer strategy requires a coordinated amendment and a conformance test before that expanded profile is claimed supported.
+| Link | Transport encoding |
+|---|---|
+| GS ↔ PI-COMMS Wi-Fi | TCP IPv4 **byte stream of concatenated CCSDS Space Packets**; decode CCSDS 6-byte primary header to find packet extent |
+| PI ↔ KV260 Ethernet | TCP IPv4 **byte stream of concatenated CCSDS Space Packets**; same GS framing |
+| OBC ↔ Pi / OBC ↔ KV260 UART | **COBS(complete CCSDS Space Packet) + `0x00` delimiter** per frame |
 
-No application-layer packet sequence, acknowledgment, or segmentation header is introduced here. TCP carries complete Space Packets and supplies byte-stream transport; PUS performs operation verification and Service 220 defines object-transfer state. Reconnection alone does not mean a TC has completed or an object has been transferred.
+For TCP, CCSDS packet total bytes = `6 + (packet_data_length + 1)`. No extra TCP length prefix. A receiver must handle partial/coalesced TCP reads.
 
-## 4. Logical endpoints, addresses and listeners
+For serial, the transmitter encodes **all bytes of one complete CCSDS packet**, including primary header, PUS-C fields, application data and CRC16, into one COBS frame. It appends a single `0x00` delimiter. The receiver:
 
-The reference profile uses one **TCP service port per logical endpoint**, regardless of whether several endpoints share a Pi. These are EXN example integration allocations, not standardized internet service ports.
+1. buffers until a `0x00` delimiter with a configured bound;
+2. decodes COBS into a complete Space Packet;
+3. checks decoded size against the CCSDS primary-header length and per-link maximum;
+4. validates packet CRC16 and PUS-C/mission structure before dispatch;
+5. drops malformed/oversized frames and resynchronizes at the next delimiter without forwarding partial payloads.
 
-| EXN endpoint | APID | PUS-C ID | Listener in onboard LAN | Primary host |
-|---|---|---|---|---|
-| STM32 OBC | `0x100` | `0x0001` | `10.77.0.10:47100` | STM32 |
-| PI-CAM | `0x101` | `0x0002` | `10.77.0.20:47101` | Pi 5 |
-| FPGA processing | `0x102` | `0x0003` | `10.77.0.30:47102` | KV260 |
-| PI-COMMS/Antenna | `0x103` | `0x0004` | `10.77.0.20:47103` | Pi 5 |
-| PI-MGMT | `0x104` | `0x0005` | `10.77.0.20:47104` | Pi 5 |
-| Ground Station | `0x0F0` | `0x0010` | **no onboard LAN listener** | PC |
+COBS is **UART framing only**, not a new spacecraft protocol header or a substitute for packet CRC. Idle gaps/timeouts, serial overruns and buffer exhaustion are reported as transport errors. A partially received frame never causes TC execution.
 
-**Separate Ground-facing PI-COMMS listener:** TCP **port `47000` bound to the Pi Wi-Fi interface**. GS connects using the Wi-Fi address of that Pi, for example:
+Initial maximum decoded CCSDS Space Packet length: **8192 bytes** (requires fixed-size bounded RX memory on the STM32). UART TX/RX COBS buffers must also allow encoding overhead and delimiter. This cap and the resulting System-HK maximum must be validated; **System HK must not silently truncate endpoints**. Service 220 image/object chunks on the direct Ethernet data path initially use up to **1024 application-object bytes** per packet. High-volume image transfer is not routed over either UART.
 
-```sh
-exn_gsd --port tcp://<PI_WIFI_IP>:47000
-```
+Link-level reconnect or COBS resynchronization is **not** evidence that a command has completed. Service 1 verification remains authoritative; duplicate/replayed state-changing TCs need explicit handling at the application layer.
 
-The above is the existing GS daemon link URI syntax; Pi's listener at this port is **to be implemented**.
+## 4. Pi serial router and mission endpoints
 
-The Pi-COMMS Ground listener must **not** bind indiscriminately to the onboard-LAN interface. Onboard listeners must similarly be restricted to the wired interface and, where useful for Pi co-hosted services, explicit local loopback addresses. Host firewall rules shall reinforce the separation.
+The Pi has **one physical UART control link** and **three logical endpoints**: PI-CAM (`0x101`), PI-COMMS (`0x103`) and PI-MGMT (`0x104`).
 
-No APID-to-IP address guessing is permitted. A configured **endpoint registry** maps the destination APID to the reachable physical-host listener; a TCP port is never interpreted as an alternative mission identity.
-
-## 5. Inter-device interfaces and routing
-
-| Link | Who initiates | What travels | Destination/authority |
-|---|---|---|---|
-| GS ↔ PI-COMMS over Wi-Fi | GS/daemon connects to Pi | PUS-C Ground TCs; authorized TMs, events, System HK and payload downlink | Pi forwards Ground TCs to OBC, not directly to Camera/FPGA |
-| PI-COMMS ↔ OBC over Ethernet | OBC opens/maintains bidirectional supervisory session to Antenna listener; traffic flows both ways | Ground-origin TCs forwarded unchanged to OBC; OBC TM; Antenna HK/management TC/TM | OBC authorizes commands; antenna forwards |
-| OBC ↔ PI-CAM | OBC opens supervisory TCP session to Camera listener | Service 1/3/5/9/12/20, S200 and transfer instructions | OBC commands; Camera reports |
-| OBC ↔ FPGA | OBC opens supervisory TCP session to FPGA listener | Service 1/3/5/9/12/20, S210 jobs, S220 instructions | OBC commands; FPGA reports |
-| OBC ↔ PI-MGMT | OBC opens supervisory TCP session to management listener | Service 8, S230, Pi platform HK/sensors, time | OBC supervises host recovery |
-| PI-CAM ↔ FPGA | producing/receiving application opens object-delivery connection as required | Service 220 input images and returned products | OBC-controlled destinations |
-| FPGA ↔ PI-COMMS | FPGA opens object-delivery connection as required | Service 220 downlink packets | OBC authorizes transfer; Antenna forwards to GS |
-| PI-CAM ↔ PI-COMMS | same-host local IPC / loopback | Service 220 product handoff or object reference | PI-COMMS owns Ground-facing traffic |
-
-The primary OBC↔endpoint supervisory sessions are **bidirectional**: replies and events can travel back over an established connection without a new connection per HK request. A device requiring a separate direct object transfer uses the target endpoint's configured listener.
-
-An OBC-issued TC is a **new packet** with the target APID and OBC Source ID `0x0001`. A Ground-origin TC directed to OBC retains Ground Source ID `0x0010` while Antenna forwards it. The Antenna shall not reassign either packet's APID or PUS identifiers merely because it carried the bytes.
-
-A source-to-Antenna Service 220 downlink is forwarded with the **original producer APID** and Ground PUS destination `0x0010` where applicable. This avoids sending FPGA imagery through the STM32's 100-Mbit path.
-
-PI-CAM, PI-COMMS and PI-MGMT remain independent logical endpoints on one Linux host. Internal object references or Unix-domain sockets may optimize their implementation, but the logical Service 220/management contracts remain unchanged.
-
-## 6. Ground ingress and security boundary
+A lightweight, bounded **Pi packet-router transport daemon** (working name `exn-linkd`) terminates UART A and dispatches CCSDS packets locally by **destination APID for TCs**. Its local IPC clients are the three Pi services, which remain logically independent.
 
 ```mermaid
-sequenceDiagram
-  participant GS as PC / Ground
-  participant ANT as PI-COMMS · Pi Wi-Fi
-  participant OBC as STM32 OBC
-  participant FPGA as FPGA processing
-
-  GS->>ANT: TCP stream · PUS-C TC to APID 0x100
-  ANT->>OBC: Forward complete TC over onboard TCP
-  OBC->>OBC: Validate / authorize / correlate
-  OBC->>FPGA: New PUS-C TC to APID 0x102
-  FPGA-->>OBC: PUS Service 1 verification / result
-  OBC-->>ANT: OBC telemetry / operation response
-  ANT-->>GS: Forward permitted TM over Ground TCP
+flowchart LR
+  GS["GS Wi-Fi"] --> COMMS["PI-COMMS"]
+  subgraph PI["Raspberry Pi 5"]
+    ROUTER["exn-linkd<br/>UART packet router<br/>not a PUS endpoint"]
+    CAM["PI-CAM<br/>APID 0x101"]
+    COMMS
+    MGMT["PI-MGMT<br/>APID 0x104"]
+    ROUTER <--> CAM
+    ROUTER <--> COMMS
+    ROUTER <--> MGMT
+  end
+  ROUTER <-->|"UART A"| OBC["STM32 OBC"]
 ```
 
-A **single active Ground command session** is the initial baseline. PI-COMMS shall serialize packet writes to the Ground TCP stream. A second client shall not independently inject Ground telecommands until a multi-client command-authority policy is specified.
+The serial router must be **independently supervised by Linux/systemd**, not owned by the PI-COMMS process. A failed Antenna service must not remove OBC's ability to request PI-MGMT HK/restart operations across an otherwise functional Pi UART link. The router is **not** a fourth spacecraft endpoint and has no APID or PUS identity.
 
-The Wi-Fi network must use an appropriately secured local AP/hotspot (WPA2/WPA3 as available); no credentials belong in the repository. TCP and the CCSDS CRC16 **do not provide authentication or encryption**. This is a laboratory deployment only, not a security-approved flight or untrusted-internet command interface. Ground authorization, authentication and replay protection require a separate reviewed security profile before exposure to untrusted networks.
+PI-COMMS terminates the Wi-Fi Ground TCP session and sends Ground TCs through `exn-linkd` to the OBC; it does not independently authorize Camera/FPGA actions. Responses and selected OBC TM return through the Pi router to PI-COMMS. Direct FPGA object downlink arrives through Pi Ethernet and is forwarded by PI-COMMS to Ground.
 
-### 6.1 Downlink multiplexing and bounded queues
+TC APID identifies the logical **destination** endpoint; TM APID identifies the **producer**. On-board Ethernet IP addresses and local process/socket addresses do not determine PUS identity. The OBC remains spacecraft authority even though Linux owns the GPIO UART device on its end.
 
-The PI-COMMS Ground TCP connection carries **more than one producer's TM**: OBC HK/events/verification and any authorized Camera/FPGA Service 220 object packets. Individual CCSDS packets remain intact and retain their producer APID.
+## 5. Direct Pi ↔ KV260 Ethernet configuration
 
-PI-COMMS shall provide bounded transmit queues and prioritize **Service 1 verification, Service 5 events and OBC System HK** ahead of bulk object chunks at packet scheduling boundaries. Bulk transfer must not indefinitely starve fault telemetry.
+This is a **two-host private link**, not a routed LAN:
 
-TCP backpressure must propagate to the relevant Service 220 sender/transfer state. PI-COMMS shall not allocate unbounded buffering or silently declare a payload chunk delivered because a TCP write merely entered a local queue.
+| Device | Reference physical IP | Netmask |
+|---|---|---|
+| Pi 5 wired `eth0` | `10.77.0.1` | `/30` |
+| KV260 wired NIC | `10.77.0.2` | `/30` |
 
-The priority behavior is **transport scheduling only**: it does not alter CCSDS/PUS packet fields, does not grant Camera/FPGA independent Ground command authority, and does not permit partial interleaving of bytes from different CCSDS packets.
+No switch, default gateway, DHCP, NAT, bridge or IP forwarding is required on the wired link. Pi `wlan0` uses the separate Wi-Fi AP's configuration (usually DHCP). If the Wi-Fi network collides with `10.77.0.0/30`, reassign the wired lab subnet in the deployment configuration.
 
-## 7. Availability, failure and recovery behavior
+Reference data listeners:
 
-- Onboard link failures and TCP disconnects affect the corresponding OBC **supervision state**. OBC uses Service 20 heartbeat/health/offline/recovery policy, not a TCP socket's `connected` flag, to decide that a device is operational.
-- TCP reconnect may restore transport before the endpoint's post-recovery HEARTBEAT/HEALTH proves readiness. Endpoint software uptime/reset count and OBC recovery flags remain independent.
-- **Ground Wi-Fi loss** changes PI-COMMS Ground-link availability and is reported in its LINKS/HEALTH telemetry. OBC, Pi and FPGA continue their internal supervision and operations according to stored mission policy. Unsent Ground TMs are not automatically declared delivered.
-- **Pi failure** can simultaneously remove PI-CAM, PI-COMMS and PI-MGMT even though they have distinct APIDs. Their fault containment is logical, not physical; OBC shall reflect loss of all affected endpoints.
-- **Ethernet switch failure** is a common-mode onboard-link failure; it must not be misdiagnosed as independent crashes in all subordinate nodes.
-- **FPGA unreachable**: software reboot through the failed TCP connection is not an independent recovery path. Hard reset/power cycling requires explicitly wired/verified reset or EPS control hardware; otherwise recovery is SUPPRESSED.
-- **Application-level operation state** (Service 1, Service 210 jobs, Service 220 objects, Service 230 update activation) is independent of TCP connection state. TCP retransmission/reconnect must not result in silent duplicate state-changing TC execution.
+| Endpoint | Transport listener | Consumer |
+|---|---|---|
+| KV260 FPGA | `10.77.0.2:47102` TCP | receive PI-CAM image objects / send job-result objects |
+| PI-CAM | `10.77.0.1:47101` TCP or same-host IPC | receive FPGA output products |
+| PI-COMMS | `10.77.0.1:47103` TCP or same-host IPC | receive FPGA result objects destined for Ground |
+| Pi management | local IPC; **no Ethernet listener required** | recovery/software management from OBC UART |
 
-## 8. Configuration and integration evidence
+Those ports are **deployment allocations**, not APID numbers. The initial data path transports Service 220 PUS-C packets end to end with the same TCP framing as EXN-GS. An Ethernet listener is not proof that the corresponding processing/transfer implementation exists.
 
-The reference allocation is mirrored in [`interfaces/network/reference-topology.json`](../../interfaces/network/reference-topology.json). Physical addresses, ports, Wi-Fi SSID, credentials, interface names and enabled link providers are **deployment configuration**, not mission-visible Service 20 parameters. OBC-controlled policies *about* link enable/disable, HK cadence and recovery remain Service 20 or Service 8.
+## 6. Ground Wi-Fi interface
 
-Initial interface-qualification tests:
+The PC/GS connects to the Raspberry Pi's PI-COMMS Wi-Fi listener at:
 
-1. Confirm STM32 Ethernet PHY and board jumpers, Pi `eth0/wlan0`, KV260 Gigabit Ethernet and external switch connectivity.
-2. Establish wired TCP connectivity for OBC↔PI-CAM, OBC↔PI-COMMS, OBC↔PI-MGMT and OBC↔FPGA, with correct endpoint dispatch.
-3. Establish Wi-Fi GS `tcp://PI_WIFI_IP:47000`, send valid PUS-C TC through Antenna to OBC, and verify Service 1/response correlation.
-4. Collect `TC[3,128]` / `TM[3,129]` spacecraft HK, including nonresponsive endpoint states.
-5. Transfer an image PI-CAM→FPGA and a result FPGA→Antenna→GS using Service 220 **without routing bulk bytes through OBC**.
-6. Drop GS Wi-Fi only: onboard HK stays operational; PI-COMMS detects loss.
-7. Drop one onboard Ethernet/TCP session: OBC reports STALE/OFFLINE and only acts on the configured verified recovery path.
-8. Restart Pi/FPGA: verify TCP reconnection, endpoint uptime/reset counters and OBC recovery journal continuity.
-9. Verify maximum supported System-HK packet length, bounded memory and Service 220 chunking under low-memory MCU conditions.
-10. Validate no unauthorized Wi-Fi↔wired IP forwarding, and verify packets destined to an unregistered APID are rejected.
+```text
+tcp://<PI_WIFI_IP>:47000
+```
 
-**Release condition:** this document is an interface *definition*, not a claim that the physical links, STM32 TCP stack, PI-COMMS Wi-Fi gateway or FPGA Service 220 endpoint have been implemented or tested.
+This remains compatible with the existing EXN-GS daemon `tcp://HOST:PORT` device-link syntax. The Pi gateway/listener is still to be built.
 
-## 9. Future transport substitution
+Only **one authenticated-by-environment laboratory Ground command session** is permitted initially; arbitrary TCP clients must not control the spacecraft. Wi-Fi should use WPA2/WPA3 security and a trusted isolated AP/hotspot. **TCP, CRC16 and Wi-Fi link security alone do not provide spacecraft command authentication, replay protection or access-control policy**. Do not expose this lab interface to an untrusted network.
 
-The **PUS-C mission interface is transport-independent**. Future SpaceWire/SpaceFibre, SpWKit-backed virtual links, serial HIL or alternate wired links may replace a TCP carrier by an explicit deployment profile without reallocating APIDs, service numbers, payload fields or subsystem authority.
+PI-COMMS is an **application-level packet gateway**, not an IP router. No direct Wi-Fi/PC access to the OBC, KV260 processing application or private Ethernet data listener is authorized.
 
-SpWKit `v0.7.0` has a stable VSPW-TP/UDP hosted backend and an integration boundary for device/driver backends; this is **not** evidence of a plug-and-play raw-Ethernet or STM32 TCP backend. Adoption needs a separate interoperability test and binding definition.
+The shared PI-COMMS Ground stream carries OBC verification/HK/events as well as Camera/FPGA authorized payload/downlink TM. PI-COMMS must serialize complete packet writes, use bounded buffers and prioritize **Service 1 verification and Service 5 alarms** ahead of bulk Service 220 chunks, without corrupting/interleaving bytes inside a packet.
+
+## 7. Endpoint direction and authority
+
+| Path | Traffic | Command/data authority |
+|---|---|---|
+| GS → Pi Wi-Fi → UART A → OBC | Ground TC to OBC APID `0x100` | Pi packet router relays; OBC authenticates/authorizes as specified by mission policy |
+| OBC → UART A → PI-CAM/PI-MGMT/PI-COMMS | endpoint TC including S3 HK, S8 recovery, S200 Camera, S230 updates | OBC issues new PUS-C TC, Source ID `0x0001` |
+| OBC → UART B → KV260 | S3 HK, S210 jobs, time, service verification | OBC TC Source ID `0x0001`; FPGA responds over same UART |
+| PI-CAM → Ethernet → FPGA | image / input objects via S220 | authorized object transfer under OBC policy |
+| FPGA → Ethernet → PI-CAM | processed product object via S220 | destination defined by processing job |
+| FPGA → Ethernet → PI-COMMS → Wi-Fi → GS | payload result object via S220 | OBC decides transfer; no OBC byte relay |
+| OBC → UART A → PI-COMMS → Wi-Fi → GS | System HK, events, spacecraft reporting | OBC-generated TM, forwarded without APID rewrite |
+
+The UART links are **bidirectional**. Unsolicited endpoint events or reports can return over the same physical serial line. When UART B is down, the Pi↔FPGA Ethernet link may still function; **OBC does not infer that FPGA is healthy merely because Pi can reach its IP address**.
+
+## 8. Failure handling and recovery
+
+- **Wi-Fi loss** affects only PI-COMMS Ground-link availability and queued downlink. OBC↔Pi/FPGA UART supervision continues.
+- **PI-COMMS service crash:** Pi transport router and PI-MGMT remain independently operational, letting OBC request a service restart. Their independence is software/process-level, not physical redundancy.
+- **Pi power/OS failure:** loss of Pi UART A affects PI-CAM, PI-COMMS and PI-MGMT as a common-mode fault; recovery cannot rely on PI-MGMT if the entire Pi has failed.
+- **FPGA control UART failure:** OBC marks FPGA `STALE/OFFLINE` per configured policy even if its Ethernet port remains up.
+- **PL not configured/reconfigured:** Pmod serial control may be unavailable. A permanently available control link independent of PL would require a different verified physical interface.
+- **Automatic hard recovery:** a failed serial link cannot deliver `SOFT_REBOOT` to an unresponsive endpoint. Independent reset/power controls are **not included in this wiring profile**; without one, the OBC reports recovery `SUPPRESSED`, journals the fault and informs Ground in System HK.
+- **UART noise/resets:** malformed COBS or CRC failures must not produce TC execution. Bound buffers, report error counters, and resynchronize on `0x00`.
+- **Wi-Fi throughput competition:** bulk Service 220 transfers must not starve OBC fault/event reporting. Backpressure is reflected in transfer state; a queued TCP write is not necessarily end-to-end delivery.
+
+## 9. Commissioning and validation
+
+1. Confirm Nucleo LPUART1/USART2 connector routing and Pi GPIO pinmux/debug-console ownership; verify all UART signal levels are 3.3 V before wiring.
+2. Confirm the KV260 carrier revision and Pmod pins and create a **minimal, stable PL UART** accessible to KV260 processing software. Show explicit boot/reconfiguration and failure behavior.
+3. Connect Pi↔KV260 with one Ethernet cable, configure only the `10.77.0.0/30` link, and test ping and TCP packet round-trip at negotiated Gigabit rate.
+4. Send bounded COBS-framed PUS-C packets with CRC over each UART independently. Test disconnect, malformed frames, oversized frames and reconnect.
+5. Validate PI `exn-linkd` routes PI-CAM/PI-COMMS/PI-MGMT APIDs independently, including after PI-COMMS crash.
+6. Send GS TC through Pi Wi-Fi, Pi packet router and UART A into OBC. Verify Service 1 responses and OBC→Ground TM.
+7. Send FPGA TC and collect HK over UART B while simultaneously moving an image Pi↔KV260 through direct Ethernet, without OBC payload relay.
+8. Collect System HK with correctly reported link ages and per-endpoint recovery states; verify OBC stays alive after loss of Ground Wi-Fi.
+9. Test Pi OS failure and FPGA PL reconfiguration as explicit common-mode/fault cases; recovery without hard reset shall report `SUPPRESSED`.
+10. Measure packet sizes, UART throughput, bounded STM32 memory and maximum System HK/report delivery time. Verify control/critical-TM priority under Ethernet/Wi-Fi bulk load.
+
+**Implementation status:** this is a specified reference transport, **not** an already-wired/validated system. Drivers, Pi link routing, FPGA control UART design, Service 220 transfers, priority queues and end-to-end tests remain implementation tasks.
+
+## 10. Future interface upgrades
+
+UART control is a convenient **laboratory** substitute for spacecraft internal communication buses. A future version can replace it with CAN-FD (requires board-side physical transceivers and a matching FPGA controller), SpaceWire (requires a physical implementation), or another qualified redundant interface without changing PUS-C service IDs or OBC authority.
+
+SpWKit is available for later SpaceWire/virtual-link integration, but this reference **does not require SpWKit** and should not claim that its UDP backend somehow operates over GPIO UART without a new backend.
 
 ## Hardware references
 
-- ST UM2408 NUCLEO-H755ZI-Q Ethernet (LAN8742A, 10/100 RMII): https://www.st.com/resource/en/user_manual/um2408-stm32h7-nucleo144-boards-mb1363-stmicroelectronics.pdf
-- Raspberry Pi 5 product brief (Wi-Fi and Gigabit Ethernet): https://pip-assets.raspberrypi.com/categories/892-raspberry-pi-5/documents/RP-008348-DS-4-raspberry-pi-5-product-brief.pdf
-- AMD KV260 DS986 (one 10/100/1000 Ethernet port): https://docs.amd.com/r/en-US/ds986-kv260-starter-kit/Product-Details
+- [ST UM2408 STM32H7 Nucleo-144 board manual](https://www.st.com/resource/en/user_manual/dm00499171.pdf): extension connectors and UART pin multiplexing.
+- [Raspberry Pi configuration/UART documentation](https://www.raspberrypi.com/documentation/computers/configuration.html): Pi 5 header UART versus dedicated debug UART and 3.3 V signal level.
+- [AMD UG1089 KV260 connector guide](https://docs.amd.com/r/en-US/ug1089-kv260-starter-kit/Interfaces): J2 Pmod, J4 USB/FTDI console, J10 Gigabit Ethernet.
+- [AMD UG1089 KV260 Pmod power budget](https://docs.amd.com/r/en-US/ug1089-kv260-starter-kit/Powering-the-Starter-Kit-and-Power-Budgets): 3.3 V Pmod supply.
