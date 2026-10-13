@@ -47,7 +47,7 @@ The OBC is **spacecraft authority**: it owns mission/platform state, command aut
 
 The Pi has **two mission roles on one computer**: Camera (PI-CAM) and Antenna/Ground communications (PI-COMMS). PI-MGMT is a supporting Linux management endpoint, not a third mission role. The FPGA is a payload **processing** resource, not a second Ground-communications node.
 
-The initial **bench interconnect uses no Ethernet switch**: GS↔Pi over Wi-Fi, STM32↔Pi and STM32↔KV260 over two independent UART control links, and Pi↔KV260 over direct Gigabit Ethernet for image/result objects. See the [link ICD](docs/icd/inter-node-links.md) for connectors, framing and unresolved integration work.
+The initial **bench interconnect uses no Ethernet switch**: GS↔Pi over Wi-Fi, STM32↔Pi over 3.3 V UART and STM32↔KV260 over USB CDC-ACM (KV260 USB-A host ↔ Nucleo CN13 device), and Pi↔KV260 over direct Gigabit Ethernet for image/result objects. See the [link ICD](docs/icd/inter-node-links.md) for connectors, framing and unresolved integration work.
 
 See [system architecture](docs/architecture.md) for the physical deployment, authority model, extensibility and control/data-plane diagrams.
 
@@ -71,7 +71,7 @@ See [system architecture](docs/architecture.md) for the physical deployment, aut
 | [Common component/service contract](docs/component-services.md) | Shared behavior, states, HK/recovery, time, transfer and software lifecycle |
 | [Master ICD](docs/ICD.md) | CCSDS/PUS-C packet layout, APIDs, routing and wire rules |
 | [Endpoint ICD index](docs/icd/README.md) | Ground, OBC, Camera, Antenna/PI-MGMT and FPGA-specific interfaces |
-| [Reference inter-device links](docs/icd/inter-node-links.md) | PC↔Pi Wi-Fi, OBC dual-UART control, direct Pi↔KV260 Ethernet, serial/TCP framing and recovery |
+| [Reference inter-device links](docs/icd/inter-node-links.md) | PC↔Pi Wi-Fi, OBC Pi UART + KV260 USB CDC control, direct Pi↔KV260 Ethernet, framing and recovery |
 | [Hardware HK/sensors](docs/icd/hardware-sensors.md) | STM32H755, Raspberry Pi 5 and Kria K26/KV260 sensor IDs, units and availability |
 | [Shared interface artifacts](interfaces/) | CCSDSPack templates, JSON tooling mirrors and MCU C definitions |
 

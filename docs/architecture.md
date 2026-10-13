@@ -110,7 +110,7 @@ The selected **reference bench interconnect** is deliberately **switchless**:
 
 - PC/GS to PI-COMMS over a secured Wi-Fi AP or PC hotspot;
 - STM32 OBC to Pi 5 through an independent 3.3 V UART;
-- STM32 OBC to Kria KV260 through a second independent 3.3 V UART implemented on the KV260 **J2 Pmod via PL**;
+- STM32 OBC to Kria KV260 through the **STM32 CN13 USB Full-Speed CDC-ACM device**, with a KV260 **USB-A host** connected directly by USB-A-to-Micro-B data cable;
 - Pi 5 to KV260 directly by a single Gigabit Ethernet cable for image transfers.
 
 ```mermaid
@@ -119,21 +119,21 @@ flowchart TB
   WIFI["Secured Wi-Fi AP<br/>or PC-hosted hotspot"]
   subgraph BENCH["EXN reference bench"]
     PI5["Pi 5 · Wi-Fi / UART / Ethernet<br/>PI-CAM + PI-COMMS + PI-MGMT"]
-    MCU["STM32H755 OBC<br/>LPUART1 + USART2"]
-    FPGA["Kria KV260<br/>PL Pmod UART + Ethernet"]
+    MCU["STM32H755 OBC<br/>LPUART1 + CN13 USB FS device"]
+    FPGA["Kria KV260<br/>PS USB-A host + Ethernet"]
     MCU <-->|"UART A · 3.3 V"| PI5
-    MCU <-->|"UART B · Pmod/PL"| FPGA
+    MCU <-->|"USB FS · CDC-ACM<br/>PL-independent"| FPGA
     PI5 <-->|"Direct Gigabit Ethernet"| FPGA
   end
   GS <-->|"Wi-Fi"| WIFI
   WIFI <-->|"Wi-Fi"| PI5
 ```
 
-**No Ethernet switch, OBC TCP/IP stack or separate network adapter is required.** The Pi needs an independently supervised `exn-linkd` UART packet router so a PI-COMMS crash does not also block OBC access to PI-MGMT. The FPGA UART requires a minimal PL controller/driver and is unavailable until its controlling bitstream is configured.
+**No Ethernet switch, OBC TCP/IP stack or separate network adapter is required.** The Pi needs an independently supervised `exn-linkd` UART packet router so a PI-COMMS crash does not also block OBC access to PI-MGMT. The KV260 USB host uses the processing system and standard Linux CDC-ACM support, requiring no PL UART. The STM32 USB device firmware still needs implementing.
 
-UART serial framing uses COBS with `0x00` delimiter around complete PUS-C CCSDS packets; Pi↔KV260 Ethernet and Wi-Fi carry complete CCSDS packets over TCP. The two-host wired IP subnet is `10.77.0.0/30`; there is no Wi-Fi-to-Ethernet IP routing/NAT.
+The Pi UART and KV260 USB CDC serial streams use COBS with `0x00` delimiter around complete PUS-C CCSDS packets; Pi↔KV260 Ethernet and Wi-Fi carry complete CCSDS packets over TCP. The two-host wired IP subnet is `10.77.0.0/30`; there is no Wi-Fi-to-Ethernet IP routing/NAT.
 
-The [inter-device link ICD](icd/inter-node-links.md) defines the pin candidates, electrical verification, packet framing, deployment addresses, ownership and failure behavior. UART recovery independence and an actual reset/power-control line remain separate concerns, not assumptions about this wiring.
+The [inter-device link ICD](icd/inter-node-links.md) defines the Pi UART pins, Nucleo CN13 power precautions, KV260 USB host/device roles, packet framing, deployment addresses and failure behavior. USB control remains dependent on the KV260 PS/Linux host; an independent hardware reset/power-control path is not provided.
 
 Camera and Antenna remain **two first-class mission responsibilities of the same Raspberry Pi 5**, independently addressable through PI-CAM and PI-COMMS. PI-MGMT is their supporting platform-supervision endpoint. Physical host placement may change without changing their logical responsibility.
 

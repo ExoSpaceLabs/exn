@@ -16,7 +16,7 @@ def require(condition, message):
 
 def main():
     d = json.loads(PROFILE.read_text(encoding="utf-8"))
-    require(d["schema_version"] == 2, "expected switchless v2 topology schema")
+    require(d["schema_version"] == 3, "expected switchless USB/CDC v3 topology schema")
     require(d["packet_profile"] == "CCSDS-Space-Packet/PUS-Revision-C/CRC16", "PUS profile drift")
     budget = d["packet_budget"]
     require(1024 <= budget["max_decoded_packet_bytes"] <= 65542, "invalid packet budget")
@@ -33,14 +33,23 @@ def main():
         "pi_fpga_data": {"pi", "fpga"},
     }.items():
         require(set(links[name]["endpoints"]) == endpoints, f"wrong peers: {name}")
-    for name in ("obc_pi_control", "obc_fpga_control"):
-        lnk = links[name]
-        require("UART" in lnk["media"], f"{name} must be UART")
-        require(lnk["framing"] == "COBS-complete-CCSDS-packet-delimiter-00", f"{name} framing drift")
-        require(lnk["baud_initial"] == 115200, f"{name} initial baud drift")
-        require(lnk["baud_qualification"] == 921600, f"{name} qualification baud drift")
-        require(lnk["uart_mode"] == "8N1", f"{name} UART mode drift")
-    require(links["obc_fpga_control"]["requires_pl_firmware"], "Pmod UART must declare PL dependency")
+    pi_uart = links["obc_pi_control"]
+    require(pi_uart["media"] == "3.3V-UART", "Pi control must use 3.3V UART")
+    require(pi_uart["framing"] == "COBS-complete-CCSDS-packet-delimiter-00", "Pi UART framing drift")
+    require(pi_uart["baud_initial"] == 115200 and pi_uart["baud_qualification"] == 921600,
+            "Pi UART baud mismatch")
+    require(pi_uart["uart_mode"] == "8N1", "Pi UART mode mismatch")
+    fpga_usb = links["obc_fpga_control"]
+    require(fpga_usb["media"] == "USB2.0-FS-CDC-ACM", "FPGA control must be USB CDC-ACM")
+    require(fpga_usb["usb_host"] == "fpga" and fpga_usb["usb_device"] == "obc",
+            "USB host/device roles inverted")
+    require(fpga_usb["device_class"] == "CDC-ACM" and fpga_usb["linux_driver"] == "cdc_acm",
+            "USB CDC driver/profile mismatch")
+    require(fpga_usb["framing"] == "COBS-complete-CCSDS-packet-delimiter-00",
+            "USB CDC framing drift")
+    require(fpga_usb["requires_pl_firmware"] is False, "USB CDC must be PL-independent")
+    require(fpga_usb["max_usb_bus_bps"] == 12_000_000, "USB FS rate mismatch")
+    require(fpga_usb["needs_separate_stm32_power"] is True, "missing Nucleo power warning")
     require(links["ground"]["media"] == "Wi-Fi", "Ground must use Wi-Fi")
     require(links["pi_fpga_data"]["media"] == "direct-Gigabit-Ethernet", "data link drift")
     require(links["pi_fpga_data"]["requires_switch"] is False, "Ethernet switch introduced")
@@ -52,14 +61,18 @@ def main():
     require(hosts["obc"]["ethernet_used"] is False, "OBC must not use Ethernet")
     require((hosts["obc"]["uart_a"]["tx_pin"], hosts["obc"]["uart_a"]["rx_pin"])
             == ("PB6", "PB7"), "STM32 UART A pins drift")
-    require((hosts["obc"]["uart_b"]["tx_pin"], hosts["obc"]["uart_b"]["rx_pin"])
-            == ("PD5", "PD6"), "STM32 UART B pins drift")
+    usb_device = hosts["obc"]["usb_cdc_device"]
+    require(usb_device["connector"] == "CN13 Micro-AB" and usb_device["role"] == "USB-device",
+            "STM32 USB connector/role mismatch")
+    require(usb_device["device_class"] == "CDC-ACM", "STM32 must expose CDC-ACM")
+    require(usb_device["not_the_stlink_usb_port"] is True, "ST-LINK must not be used as USB endpoint")
     require((hosts["pi"]["header_uart"]["tx_header_pin"], hosts["pi"]["header_uart"]["rx_header_pin"])
             == (8, 10), "Pi UART header mapping drift")
-    require(hosts["fpga"]["control_uart"]["requires_pl_logic"] is True,
-            "KV260 requires a PL UART")
-    require(hosts["fpga"]["control_uart"]["connector"] == "J2 Pmod",
-            "incorrect KV260 control connector")
+    kv_usb = hosts["fpga"]["control_usb"]
+    require(kv_usb["role"] == "USB-host" and kv_usb["controller"] == "PS USB host",
+            "KV260 USB controller must be PS/host")
+    require(kv_usb["connector"] == "U44 or U46 Type-A host", "KV260 connector mismatch")
+    require(kv_usb["requires_pl_logic"] is False, "USB control must not consume PL")
 
     netcfg = d["networks"]["pi_fpga_direct"]
     net = ipaddress.ip_network(netcfg["network"])
@@ -112,12 +125,13 @@ def main():
             "Ground Wi-Fi endpoint mismatch")
     require(ground["max_active_command_sessions"] == 1, "multiple Ground command sessions")
     doc = (ROOT / "docs" / "icd" / "inter-node-links.md").read_text(encoding="utf-8")
-    for v in ("LPUART1", "USART2", "PB6", "PB7", "PD5", "PD6", "J2",
-              "COBS", "10.77.0.0/30", "10.77.0.1", "10.77.0.2",
-              "47101", "47102", "47103", "47000", "115200", "8192", "1024"):
+    for v in ("LPUART1", "PB6", "PB7", "CN13", "Micro-AB", "USB CDC-ACM",
+              "U44", "U46", "cdc_acm", "COBS", "10.77.0.0/30",
+              "10.77.0.1", "10.77.0.2", "47101", "47102", "47103",
+              "47000", "115200", "8192", "1024"):
         require(v in doc, f"normative ICD missing profile detail: {v}")
     require("No switch" in doc, "ICD must affirm no switch")
-    print("PASS: EXN switchless Wi-Fi + dual UART + direct Ethernet profile validated")
+    print("PASS: EXN Wi-Fi + Pi UART + KV260 USB CDC-ACM + direct Ethernet profile validated")
 
 
 if __name__ == "__main__":
