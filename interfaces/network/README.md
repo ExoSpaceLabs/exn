@@ -7,5 +7,5 @@ The canonical reference inter-device interface is [`docs/icd/inter-node-links.md
 - Update the normative link ICD first; update this JSON in the same change.
 - IP addresses, interface names, TCP port numbers, UART baud rates, pinmux and FPGA Pmod assignments are deployment configuration, not Service 20 parameter IDs, APIDs or PUS Source IDs.
 - No Wi-Fi credentials are stored here.
-- This allocation does not imply that the Pi Wi-Fi gateway, STM32 Ethernet/TCP endpoint, KV260 application, Ethernet switch wiring or interop tests already exist.
+- This allocation does not imply that the Pi Wi-Fi gateway, STM32 UART drivers, Pi UART packet router, KV260 PL/Pmod UART, dedicated Pi↔KV260 Ethernet application or interop tests already exist.
 - The validation script in `tools/validate_reference_topology.py` checks common structure and allocation errors.
