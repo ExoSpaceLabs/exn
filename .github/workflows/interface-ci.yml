@@ -60,6 +60,10 @@ jobs:
           find interfaces/json -type f -name '*.json' -print0 \
             | xargs -0 -r -n1 python3 -m json.tool >/dev/null
 
+      - name: Validate reference inter-device topology
+        run: |
+          python3 tools/validate_reference_topology.py
+
       - name: Compile header contract as C
         run: |
           cat >/tmp/exn_header_check.c <<'EOF'

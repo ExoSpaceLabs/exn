@@ -13,7 +13,8 @@ Refer to:
 - `../services.md` for target PUS mapping;
 - `../ICD.md` for packet/routing rules;
 - `../architecture.md` for result-routing ownership;
-- `hardware-sensors.md` for the normative K26/KV260 sensor catalogue.
+- `hardware-sensors.md` for the normative K26/KV260 sensor catalogue;
+- `inter-node-links.md` for the KV260 wired TCP/IP reference interface and direct image/result links.
 
 Private/commercial FPGA SpaceWire repositories are outside EXN scope. The EXN FPGA exists to process payload data.
 

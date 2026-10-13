@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "profile_id": "exn-bench-wifi-ground-wired-onboard-v1",
+  "status": "reference-integration-profile-not-yet-implemented",
+  "normative_icd": "docs/icd/inter-node-links.md",
+  "packet_profile": "CCSDS-Space-Packet/PUS-Revision-C/CRC16",
+  "transport": {
+    "protocol": "TCP/IPv4",
+    "framing": "raw-concatenated-CCSDS-space-packets",
+    "primary_header_bytes": 6,
+    "packet_length_formula": "6 + CCSDS_packet_data_length + 1",
+    "max_packet_bytes": 8192,
+    "object_chunk_payload_bytes": 1024
+  },
+  "networks": {
+    "onboard": {
+      "medium": "Ethernet-L2-switch",
+      "network": "10.77.0.0/24",
+      "configuration": "static",
+      "default_gateway": null,
+      "nat_to_ground": false,
+      "extra_switch_required": true
+    },
+    "ground": {
+      "medium": "Wi-Fi",
+      "topology": "PC-and-Pi-on-secured-access-point-or-PC-hotspot",
+      "ip_configuration": "AP-assigned-DHCP",
+      "wifi_interface": "wlan0",
+      "ingress_logical_endpoint": "PI-COMMS",
+      "on_board_routing": false
+    }
+  },
+  "hardware": [
+    {
+      "id": "obc",
+      "board": "NUCLEO-H755ZI-Q",
+      "physical_if": "RJ45/10-100",
+      "ip": "10.77.0.10",
+      "prefix_length": 24
+    },
+    {
+      "id": "pi",
+      "board": "Raspberry Pi 5",
+      "physical_if": "eth0/1000",
+      "ip": "10.77.0.20",
+      "prefix_length": 24
+    },
+    {
+      "id": "fpga",
+      "board": "AMD Kria KV260",
+      "physical_if": "RJ45/1000",
+      "ip": "10.77.0.30",
+      "prefix_length": 24
+    }
+  ],
+  "endpoints": [
+    {
+      "name": "OBC",
+      "apid": 256,
+      "pus_id": 1,
+      "host": "obc",
+      "tcp_port": 47100
+    },
+    {
+      "name": "PI-CAM",
+      "apid": 257,
+      "pus_id": 2,
+      "host": "pi",
+      "tcp_port": 47101
+    },
+    {
+      "name": "FPGA",
+      "apid": 258,
+      "pus_id": 3,
+      "host": "fpga",
+      "tcp_port": 47102
+    },
+    {
+      "name": "PI-COMMS",
+      "apid": 259,
+      "pus_id": 4,
+      "host": "pi",
+      "tcp_port": 47103
+    },
+    {
+      "name": "PI-MGMT",
+      "apid": 260,
+      "pus_id": 5,
+      "host": "pi",
+      "tcp_port": 47104
+    },
+    {
+      "name": "GS",
+      "apid": 240,
+      "pus_id": 16,
+      "host": "pc",
+      "tcp_port": null
+    }
+  ],
+  "ground_listener": {
+    "logical_endpoint": "PI-COMMS",
+    "binding_interface": "wlan0",
+    "bind_address": "<PI_WIFI_IP>",
+    "protocol": "TCP",
+    "port": 47000,
+    "client": "EXN-GS --port tcp://<PI_WIFI_IP>:47000",
+    "max_active_command_sessions": 1
+  },
+  "remarks": [
+    "TCP listeners are endpoint transport entry points, not spacecraft APID identifiers",
+    "Pi-COMMS bridges CCSDS messages only at application layer; it does not NAT/route IPv4",
+    "Pi local services may use Unix domain sockets or loopback without altering PUS-C contracts",
+    "No transport security or physical links are claimed implemented by this profile"
+  ]
+}

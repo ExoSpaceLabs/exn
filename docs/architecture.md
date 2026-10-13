@@ -106,24 +106,30 @@ These are **permitted logical paths**, not a separate physical wire for each edg
 
 ## 3. Physical deployment
 
-The initial intended deployment places the three Pi logical endpoints on **one Linux computer**. Inter-node transports are chosen at deployment time; Ethernet, a simulated logical link and local IPC may all carry different parts of the traffic.
+The selected **reference bench interconnect** is Wi-Fi between PC/GS and Pi 5 (through a secured AP or PC hotspot), plus a **separate switched wired Ethernet LAN** between Pi 5, STM32H755 OBC and AMD Kria KV260.
 
 ```mermaid
-flowchart LR
-  GS["Ground Station / HIL"]
-  PI5["Raspberry Pi 5<br/>PI-CAM + PI-COMMS + PI-MGMT<br/>Linux / systemd / storage"]
-  MCU["STM32H755<br/>OBC · HardRT + DAS"]
-  FPGA["FPGA processing device<br/>image / AI acceleration"]
-
-  GS <-->|"Ground-facing transport"| PI5
-  PI5 <-->|"control and telemetry transport"| MCU
-  PI5 <-->|"payload-object transport"| FPGA
-  MCU <-->|"processing control / status"| FPGA
+flowchart TB
+  GS["PC / Ground Station"]
+  WIFI["Secured Wi-Fi AP<br/>or PC-hosted hotspot"]
+  subgraph BENCH["EXN reference bench"]
+    PI5["Pi 5 · wlan0 / eth0<br/>PI-CAM + PI-COMMS + PI-MGMT"]
+    SWITCH["External Ethernet switch"]
+    MCU["STM32H755 OBC<br/>10/100 Ethernet"]
+    FPGA["Kria KV260 FPGA<br/>Gigabit Ethernet"]
+    PI5 <-->|"Gigabit Ethernet"| SWITCH
+    SWITCH <-->|"100 Mb Ethernet"| MCU
+    SWITCH <-->|"Gigabit Ethernet"| FPGA
+  end
+  GS <-->|"Wi-Fi"| WIFI
+  WIFI <-->|"Wi-Fi"| PI5
 ```
 
-The edges describe physical-host **communication relationships**, not proof that any particular carrier or peripheral is wired and working on the current bench.
+This topology **requires an external Ethernet switch**; its presence and link tests are not yet demonstrated. PI-COMMS terminates the Wi-Fi link, and only the application-level CCSDS/PUS packets are forwarded between Ground and the onboard LAN. The Pi is not an IP router/NAT gateway to OBC or FPGA.
 
-Camera and Antenna are therefore **two first-class responsibilities of the initial Raspberry Pi 5** while remaining independent logical services. The Pi is expected to do both: acquire/manage payload imagery and provide the spacecraft communications endpoint toward Ground/OBC. A later deployment may move either service to a different Linux computer without changing its mission responsibility.
+The normative reference deployment, including wired static IPv4 assignments, per-endpoint TCP listeners, CCSDS-on-TCP framing, allowed paths and failure handling, is defined in the [inter-device link ICD](icd/inter-node-links.md). A later deployment can replace this carrier without changing mission APIDs or PUS services.
+
+Camera and Antenna remain **two first-class mission responsibilities of the same Raspberry Pi 5**, independently addressable through PI-CAM and PI-COMMS. PI-MGMT is their supporting platform-supervision endpoint. The physical host placement can change later without changing logical responsibility.
 
 ## 4. Raspberry Pi dual-role payload node
 

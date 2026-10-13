@@ -18,6 +18,8 @@ Ground is an operator endpoint, not spacecraft command authority. Nominal flight
 
 ### 2.1 Flight-like profile
 
+For the **reference integration profile**, GS/PC and Raspberry Pi 5 are on a secured Wi-Fi LAN, and EXN-GS connects to PI-COMMS at `tcp://<PI_WIFI_IP>:47000`. The Pi then forwards complete Space Packets from its wired Ethernet interface to the OBC. See the [reference link ICD](inter-node-links.md); the Wi-Fi gateway has not yet been implemented.
+
 In flight-like deployments, Ground communication terminates at **PI-COMMS/Antenna**, which forwards complete Space Packets to the OBC.
 
 ### 2.2 HIL profile
