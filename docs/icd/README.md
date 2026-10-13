@@ -7,7 +7,8 @@ The normative specification hierarchy is:
 1. [`../ICD.md`](../ICD.md) — common CCSDS/PUS wire profile, APIDs, routing, CRC and shared packet rules.
 2. [`../services.md`](../services.md) — normative PUS service/subservice catalogue and mission tailoring.
 3. [`../component-services.md`](../component-services.md) — common service semantics, shared states, timing, HK, monitoring, transfer and update models.
-4. [`hardware-sensors.md`](hardware-sensors.md) — normative sensor/health profiles for selected STM32H755, Raspberry Pi 5 and AMD Kria K26/KV260 hardware.
+4. [`inter-node-links.md`](inter-node-links.md) — reference physical Ethernet/Wi-Fi network, onboard vs Ground transport, endpoint TCP listeners and link failure behavior.
+5. [`hardware-sensors.md`](hardware-sensors.md) — normative sensor/health profiles for selected STM32H755, Raspberry Pi 5 and AMD Kria K26/KV260 hardware.
 5. Endpoint ICDs in this directory — endpoint-specific commands, fields, IDs, capabilities, states and payloads.
 
 ## Endpoint ICDs
