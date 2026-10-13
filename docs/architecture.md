@@ -122,7 +122,7 @@ flowchart TB
     MCU["STM32H755 OBC<br/>LPUART1 + CN13 USB FS device"]
     FPGA["Kria KV260<br/>PS USB-A host + Ethernet"]
     MCU <-->|"UART A · 3.3 V"| PI5
-    MCU <-->|"UART B · Pmod/PL"| FPGA
+    MCU <-->|"USB FS · CDC-ACM<br/>PL-independent"| FPGA
     PI5 <-->|"Direct Gigabit Ethernet"| FPGA
   end
   GS <-->|"Wi-Fi"| WIFI
