@@ -66,20 +66,36 @@ jobs:
           #include "interfaces/mcu-rtos/exn_interfaces.h"
           int main(void) {
             unsigned char b[4] = {0};
-            be_put_u32(b, 0x12345678u);
-            return be_get_u32(b) == 0x12345678u ? 0 : 1;
+            exn_be_put_u32(b, 0x12345678u);
+            return exn_be_get_u32(b) == 0x12345678u ? 0 : 1;
           }
           EOF
           cc -std=c11 -Wall -Wextra -Werror -I. /tmp/exn_header_check.c -o /tmp/exn_header_check_c
           /tmp/exn_header_check_c
 
-      - name: Compile compatibility header as C++
+      - name: Compile central interface header as C++
         run: |
           cat >/tmp/exn_header_check.cpp <<'EOF'
-          #include "interfaces/mcu-rtos/astrai_interfaces.h"
+          #include "interfaces/mcu-rtos/exn_interfaces.h"
           int main() {
-            return APID_MCU == 0x100u && SVC_HK == 3u ? 0 : 1;
+            return APID_OBC == 0x100u
+                && SVC_HK == 3u
+                && SVC_CAMERA == 200u
+                && SUB_SYS_HK_REQUEST == 128u
+                && SUB_CAM_SET_CONFIGURATION == 3u
+              ? 0 : 1;
           }
           EOF
           c++ -std=c++17 -Wall -Wextra -Werror -I. /tmp/exn_header_check.cpp -o /tmp/exn_header_check_cpp
           /tmp/exn_header_check_cpp
+
+      - name: Reject obsolete active interface profiles
+        shell: bash
+        run: |
+          mapfile -d '' artifacts < <(
+            find interfaces -type f \( -name '*.cfg' -o -name '*.json' -o -name '*.h' \) -print0
+          )
+          if grep -InE 'PUS:revA|PUS-A|astrai_interfaces|SUB_CAM_SET_CONTROLS|SUB_CAM_GET_CONTROLS' "${artifacts[@]}"; then
+            echo "Obsolete EXN interface profile or identifier found"
+            exit 1
+          fi

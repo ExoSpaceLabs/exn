@@ -1,0 +1,28 @@
+{
+  "name": "pkt_cam_get_config_tc",
+  "packetErrorControl": "crc16",
+  "primaryHeader": {
+    "version": 0,
+    "type": "TC",
+    "apid": 257,
+    "apidPolicy": "destination",
+    "secHdrFlag": 1,
+    "seqFlags": "UNSEG"
+  },
+  "pusHeader": {
+    "selector": "PUS:revC:TC",
+    "acknowledgementFlags": 8,
+    "service": 200,
+    "subservice": 4,
+    "sourceId": 1
+  },
+  "appData": [
+    {
+      "name": "scope_mask",
+      "type": "U16",
+      "bits": 16,
+      "description": "0xFFFF=all supported Camera configuration"
+    }
+  ],
+  "notes": "Query active Camera configuration by coherent scope."
+}

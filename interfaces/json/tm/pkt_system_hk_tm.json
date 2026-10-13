@@ -1,12 +1,57 @@
 {
   "name": "pkt_system_hk_tm",
-  "primaryHeader": { "version": 0, "type": "TM", "apid": 256, "secHdrFlag": 1, "seqFlags": "UNSEG" },
-  "pusHeader": { "type": "PusA", "version": 1, "service": 3, "subservice": 100, "sourceId": 1 },
+  "packetErrorControl": "crc16",
+  "primaryHeader": {
+    "version": 0,
+    "type": "TM",
+    "apid": 256,
+    "apidPolicy": "producer",
+    "secHdrFlag": 1,
+    "seqFlags": "UNSEG"
+  },
+  "pusHeader": {
+    "selector": "PUS:revC:TM",
+    "service": 3,
+    "subservice": 129,
+    "messageTypeCounter": 0,
+    "timeReferenceStatus": 0,
+    "destinationId": 16,
+    "time": {
+      "format": "CUC",
+      "epoch": "agency-defined:unix",
+      "pField": "implicit",
+      "coarseOctets": 4,
+      "fineOctets": 2
+    }
+  },
   "appData": [
-    { "name": "transactionId", "type": "U16", "bits": 16, "description": "Echo of request; 0 if unused" },
-    { "name": "present_mask", "type": "U8", "bits": 8, "description": "Bitmask: MCU, PI, FPGA present" },
-    { "name": "status", "type": "U8", "bits": 8, "description": "0=OK,1=PARTIAL,2=TIMEOUT,3=ERROR" },
-    { "name": "reserved", "type": "U8", "bits": 8, "description": "0" },
-    { "name": "blocks", "type": "BYTES", "description": "Concatenated node HK blocks, each prefixed with U16 length" }
-  ]
+    {
+      "name": "request_id",
+      "type": "BYTES",
+      "length": 4,
+      "description": "Original System-HK TC Packet ID + Packet Sequence Control"
+    },
+    {
+      "name": "snapshot_unix_ms",
+      "type": "U64",
+      "bits": 64
+    },
+    {
+      "name": "system_status",
+      "type": "U8",
+      "bits": 8,
+      "description": "0 OK, 1 DEGRADED, 2 ERROR"
+    },
+    {
+      "name": "endpoint_count",
+      "type": "U8",
+      "bits": 8
+    },
+    {
+      "name": "endpoints",
+      "type": "BYTES",
+      "description": "Repeated producer_apid:u16, supervision_state:u8, endpoint_state:u8, recovery_state:u8, recovery_reason:u8, recovery_action:u8, recovery_flags:u8, recovery_attempts:u16, recovery_successes:u16, last_recovery_result:u8, heartbeat_age_ms:u32, health_age_ms:u32, last_recovery_unix_ms:u64, structure_count:u8; then repeated structure_id:u16, age_ms:u32, block_length:u16, block[block_length]"
+    }
+  ],
+  "notes": "Contains every OBC-registered endpoint, including stale/offline endpoints with last cached HK and compact OBC recovery-policy state. Detailed recovery journal is exported as a Service 220 diagnostic-log object."
 }
