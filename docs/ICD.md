@@ -226,10 +226,10 @@ The preamble is not part of the downstream packet. MCU removes it before re-issu
 
 Commands whose service endpoint is MCU itself do **not** use the proxy preamble. In particular:
 
-- `TC[3,128]` Request System HK is GS -> OBC and its Application Data is `{transaction_id:u16, include_mask:u8, detail_mask:u16}`.
+- `TC[3,128]` Request System HK is GS -> OBC and has **no Application Data**. It asks the OBC for its current cached spacecraft snapshot.
 - A GS request for OBC-local one-shot HK uses standard `TC[3,27]` and likewise needs no routing envelope.
 
-This avoids the previous duplicate `transactionId` definition around System HK.
+System-HK correlation uses the standard PUS request ID carried in the resulting `TM[3,129]`; no additional System-HK transaction identifier is defined.
 
 ---
 
