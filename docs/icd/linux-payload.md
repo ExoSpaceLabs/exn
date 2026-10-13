@@ -16,7 +16,8 @@ Refer to:
 - `../services.md` for the normative PUS Revision C profile;
 - `../ICD.md` for packet/routing rules;
 - `pi-cam.md` for Camera-specific behavior;
-- `hardware-sensors.md` for the normative Raspberry Pi 5 platform sensor IDs and engineering units.
+- `hardware-sensors.md` for the normative Raspberry Pi 5 platform sensor IDs and engineering units;
+- `inter-node-links.md` for the reference Pi 5 Wi-Fi/Ground gateway, onboard Ethernet and per-endpoint TCP listeners.
 
 ## 1. Logical endpoints
 
