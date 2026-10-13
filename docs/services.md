@@ -435,22 +435,27 @@ Revision A shall not be added to new tests, fixtures, templates or implementatio
 
 ## 8. Interface source of truth
 
-The long-term interface chain shall be:
+The **planned** generation/cross-validation flow is:
 
-```text
-service/profile specification
-        |
-        v
-machine-readable mission interface definitions
-        |
-        +--> CCSDSPack templates/tests
-        +--> MCU C headers
-        +--> GS constants/builders
-        +--> simulator fixtures
-        +--> documentation tables
+```mermaid
+flowchart TB
+  ICD["Central EXN specification<br/>ICD / service profile"]
+  MODEL["Machine-readable mission interface model<br/>future generation source"]
+  CFG["CCSDSPack templates / tests"]
+  HDR["MCU C interface header"]
+  GS["GS builders / constants"]
+  SIM["Simulator fixtures / golden vectors"]
+  DOC["Normative documentation tables"]
+
+  ICD -.->|"future schema extraction / validation"| MODEL
+  MODEL -.-> CFG
+  MODEL -.-> HDR
+  MODEL -.-> GS
+  MODEL -.-> SIM
+  MODEL -.-> DOC
 ```
 
-The current manually maintained `.cfg`, JSON and C-header mirrors are acceptable during migration, but the target baseline should generate or cross-validate them from one machine-readable definition.
+**Dashed edges are planned, not an implemented code-generation pipeline.** The current `.cfg`, JSON and C-header mirrors are maintained and checked against the central ICD. The longer-term goal is to generate or cross-validate them from one machine-readable definition.
 
 No new interface shall be added using a legacy-colliding assignment merely because an older EXN packet already used that number.
 
