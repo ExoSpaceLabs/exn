@@ -1,6 +1,6 @@
 {
-  "schema_version": 2,
-  "profile_id": "exn-bench-wifi-dual-uart-direct-ethernet-v2",
+  "schema_version": 3,
+  "profile_id": "exn-bench-wifi-uart-usb-cdc-direct-ethernet-v3",
   "status": "reference-integration-profile-not-yet-implemented",
   "normative_icd": "docs/icd/inter-node-links.md",
   "packet_profile": "CCSDS-Space-Packet/PUS-Revision-C/CRC16",
@@ -42,16 +42,19 @@
         "obc",
         "fpga"
       ],
-      "media": "3.3V-UART-via-PL-Pmod",
+      "media": "USB2.0-FS-CDC-ACM",
       "peripherals": [
-        "STM32:USART2",
-        "KV260:J2-Pmod-PL-UART"
+        "STM32:USB-OTG-FS-CN13-device",
+        "KV260:U44-or-U46-USB-A-host-PS"
       ],
-      "baud_initial": 115200,
-      "baud_qualification": 921600,
-      "uart_mode": "8N1",
       "framing": "COBS-complete-CCSDS-packet-delimiter-00",
-      "requires_pl_firmware": true
+      "requires_pl_firmware": false,
+      "usb_host": "fpga",
+      "usb_device": "obc",
+      "device_class": "CDC-ACM",
+      "linux_driver": "cdc_acm",
+      "max_usb_bus_bps": 12000000,
+      "needs_separate_stm32_power": true
     },
     {
       "id": "pi_fpga_data",
@@ -74,12 +77,15 @@
         "tx_pin": "PB6",
         "rx_pin": "PB7"
       },
-      "uart_b": {
-        "peripheral": "USART2",
-        "tx_pin": "PD5",
-        "rx_pin": "PD6"
-      },
-      "ethernet_used": false
+      "ethernet_used": false,
+      "usb_cdc_device": {
+        "connector": "CN13 Micro-AB",
+        "controller": "USB OTG FS",
+        "role": "USB-device",
+        "device_class": "CDC-ACM",
+        "power_source": "separate-board-power",
+        "not_the_stlink_usb_port": true
+      }
     },
     {
       "id": "pi",
@@ -98,10 +104,14 @@
       "id": "fpga",
       "board": "AMD Kria KV260",
       "data_interface": "ethernet",
-      "control_uart": {
-        "connector": "J2 Pmod",
-        "requires_pl_logic": true,
-        "exact_pl_pins": "TBD after carrier revision constraint review"
+      "control_usb": {
+        "connector": "U44 or U46 Type-A host",
+        "controller": "PS USB host",
+        "role": "USB-host",
+        "linux_driver": "cdc_acm",
+        "class_device": "STM32 CN13 USB CDC-ACM",
+        "requires_pl_logic": false,
+        "exact_usb_a_socket": "select during hardware bringup"
       }
     }
   ],
@@ -214,11 +224,13 @@
     "max_active_command_sessions": 1
   },
   "notes": [
-    "Reference topology requires zero Ethernet switches",
-    "UART paths carry only bounded CCSDS/PUS-C control/HK, not bulk image objects",
-    "Kria control UART requires FPGA PL design and is unavailable if PL is unconfigured",
+    "Reference topology requires no Ethernet switches and no OBC↔KV260 PL UART design",
+    "Pi UART and STM32 USB CDC-ACM carry bounded PUS-C control/HK, not image data",
+    "KV260 USB host requires functioning PS/Linux; independent of PL but not PS",
+    "STM32 CN13 USB FS device must be powered separately before connecting as ST UM2408 requires",
+    "KV260 J4 microUSB FTDI UART/JTAG is reserved for normal debugger/console access",
     "All IP and port allocations are deployment values, not PUS-C endpoint identity",
-    "No hard-reset/power-cycle path is wired by this profile",
-    "No Wi-Fi gateway/STM32 UART/FPGA PL implementation is claimed operational"
+    "No independent hard reset/power cycle path is provided",
+    "No USB CDC implementation, Pi gateway, or physical integration is claimed operational"
   ]
 }
