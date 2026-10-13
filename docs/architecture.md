@@ -110,7 +110,7 @@ The selected **reference bench interconnect** is deliberately **switchless**:
 
 - PC/GS to PI-COMMS over a secured Wi-Fi AP or PC hotspot;
 - STM32 OBC to Pi 5 through an independent 3.3 V UART;
-- STM32 OBC to Kria KV260 through a second independent 3.3 V UART implemented on the KV260 **J2 Pmod via PL**;
+- STM32 OBC to Kria KV260 through the **STM32 CN13 USB Full-Speed CDC-ACM device**, with a KV260 **USB-A host** connected directly by USB-A-to-Micro-B data cable;
 - Pi 5 to KV260 directly by a single Gigabit Ethernet cable for image transfers.
 
 ```mermaid
