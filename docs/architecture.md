@@ -120,7 +120,7 @@ flowchart TB
   subgraph BENCH["EXN reference bench"]
     PI5["Pi 5 · Wi-Fi / UART / Ethernet<br/>PI-CAM + PI-COMMS + PI-MGMT"]
     MCU["STM32H755 OBC<br/>LPUART1 + CN13 USB FS device"]
-    FPGA["Kria KV260<br/>PL Pmod UART + Ethernet"]
+    FPGA["Kria KV260<br/>PS USB-A host + Ethernet"]
     MCU <-->|"UART A · 3.3 V"| PI5
     MCU <-->|"UART B · Pmod/PL"| FPGA
     PI5 <-->|"Direct Gigabit Ethernet"| FPGA
