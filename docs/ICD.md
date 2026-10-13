@@ -11,7 +11,9 @@ This master document defines the common wire contract for communication between 
 - `docs/icd/mcu-rtos.md` — OBC endpoint contract;
 - `docs/icd/pi-cam.md` — Camera endpoint contract;
 - `docs/icd/linux-payload.md` — Antenna and PI-MGMT endpoint contracts;
-- `docs/icd/fpga-ai.md` — FPGA processing endpoint contract.
+- `docs/icd/fpga-ai.md` — FPGA processing endpoint contract;
+- `docs/icd/inter-node-links.md` — reference hardware/transport interface and onboard ↔ Ground connectivity;
+- `docs/icd/hardware-sensors.md` — hardware HK sensor profiles.
 
 Together, these files are the full EXN ICD. Component repositories are implementations of this contract, not additional interface authorities.
 
