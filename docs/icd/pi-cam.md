@@ -505,18 +505,15 @@ last_error:u16
 
 Service 220 transfers Camera objects.
 
-Examples:
+Examples of OBC-authorized destinations:
 
-```text
-OBC -> PI-CAM: transfer RAW object to FPGA
-PI-CAM -> FPGA
+| Object | Destination | Transfer behavior |
+|---|---|---|
+| RAW sensor image | FPGA | PI-CAM transfers input object directly to the processing node |
+| JPEG product | Ground | PI-CAM transfers the object via PI-COMMS/Antenna |
+| TIFF product | OBC | PI-CAM transfers to OBC only when explicitly requested |
 
-OBC -> PI-CAM: downlink JPEG object to Ground
-PI-CAM -> Antenna -> Ground
-
-OBC -> PI-CAM: transfer TIFF object to OBC
-PI-CAM -> OBC
-```
+For operational sequences, see [Camera product processing and downlink](../diagrams.md#3-capture---fpga-processing---camera-product---ground) and [direct Camera downlink](../diagrams.md#6-obc-controlled-direct-camera-downlink).
 
 PI-CAM never opens the Ground link directly. A Ground destination resolves through the Antenna service.
 
@@ -595,7 +592,7 @@ PI-CAM itself may provide a Service 8 reinitialize-camera function while still r
 Process-level restart is commanded:
 
 ```text
-OBC -> PI-MGMT: restart exn-camera.service
+OBC requests PI-MGMT to restart `exn-camera.service`
 ```
 
 This remains functional even when PI-CAM is unresponsive.
