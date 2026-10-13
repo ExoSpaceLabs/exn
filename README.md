@@ -47,7 +47,7 @@ The OBC is **spacecraft authority**: it owns mission/platform state, command aut
 
 The Pi has **two mission roles on one computer**: Camera (PI-CAM) and Antenna/Ground communications (PI-COMMS). PI-MGMT is a supporting Linux management endpoint, not a third mission role. The FPGA is a payload **processing** resource, not a second Ground-communications node.
 
-The initial **bench interconnect uses no Ethernet switch**: GS↔Pi over Wi-Fi, STM32↔Pi and STM32↔KV260 over two independent UART control links, and Pi↔KV260 over direct Gigabit Ethernet for image/result objects. See the [link ICD](docs/icd/inter-node-links.md) for connectors, framing and unresolved integration work.
+The initial **bench interconnect uses no Ethernet switch**: GS↔Pi over Wi-Fi, STM32↔Pi over 3.3 V UART and STM32↔KV260 over USB CDC-ACM (KV260 USB-A host ↔ Nucleo CN13 device), and Pi↔KV260 over direct Gigabit Ethernet for image/result objects. See the [link ICD](docs/icd/inter-node-links.md) for connectors, framing and unresolved integration work.
 
 See [system architecture](docs/architecture.md) for the physical deployment, authority model, extensibility and control/data-plane diagrams.
 
