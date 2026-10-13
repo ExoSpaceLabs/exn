@@ -21,7 +21,7 @@ If an implementation requires a new command, telemetry item, field, state, event
 
 Logical endpoints may be co-located on one physical computer. In particular, PI-CAM, PI-COMMS/Antenna and the PI-MGMT supervisor execute on the same Raspberry Pi while retaining independent endpoint identities. PI-MGMT is management infrastructure, not a third Pi mission purpose.
 
-The reference **physical** topology uses two UART control links from OBC, direct Pi↔KV260 Gigabit Ethernet for payload data, and Wi-Fi for PC/GS↔PI-COMMS. This is defined in [the inter-device link ICD](icd/inter-node-links.md). Transport framing differs between serial (COBS) and TCP, but every logical message remains a complete CCSDS Space Packet with PUS Revision C.
+The reference **physical** topology uses a Pi UART control link and a PL-independent OBC↔KV260 USB CDC-ACM control link, direct Pi↔KV260 Gigabit Ethernet for payload data, and Wi-Fi for PC/GS↔PI-COMMS. This is defined in [the inter-device link ICD](icd/inter-node-links.md). Transport framing differs between serial (COBS) and TCP, but every logical message remains a complete CCSDS Space Packet with PUS Revision C.
 
 ## 0. Active protocol baseline
 
