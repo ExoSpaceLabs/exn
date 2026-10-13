@@ -98,7 +98,7 @@ Re-enumeration or reconnection does not prove endpoint liveness or command compl
 
 The Pi has **one physical UART control link** and **three logical endpoints**: PI-CAM (`0x101`), PI-COMMS (`0x103`) and PI-MGMT (`0x104`).
 
-A lightweight, bounded **Pi packet-router transport daemon** (working name `exn-linkd`) terminates UART A and dispatches CCSDS packets locally by **destination APID for TCs**. Its local IPC clients are the three Pi services, which remain logically independent.
+A lightweight, bounded **Pi packet-router transport daemon** (working name `exn-linkd`) terminates Pi UART and dispatches CCSDS packets locally by **destination APID for TCs**. Its local IPC clients are the three Pi services, which remain logically independent.
 
 ```mermaid
 flowchart LR
@@ -165,43 +165,43 @@ The shared PI-COMMS Ground stream carries OBC verification/HK/events as well as 
 |---|---|---|
 | GS → Pi Wi-Fi → UART A → OBC | Ground TC to OBC APID `0x100` | Pi packet router relays; OBC authenticates/authorizes as specified by mission policy |
 | OBC → UART A → PI-CAM/PI-MGMT/PI-COMMS | endpoint TC including S3 HK, S8 recovery, S200 Camera, S230 updates | OBC issues new PUS-C TC, Source ID `0x0001` |
-| OBC → UART B → KV260 | S3 HK, S210 jobs, time, service verification | OBC TC Source ID `0x0001`; FPGA responds over same UART |
+| OBC ↔ USB CDC-ACM ↔ KV260 | S3 HK, S210 jobs, time and Service 1 verification | OBC TC Source ID `0x0001`; FPGA responds over the bidirectional USB CDC stream |
 | PI-CAM → Ethernet → FPGA | image / input objects via S220 | authorized object transfer under OBC policy |
 | FPGA → Ethernet → PI-CAM | processed product object via S220 | destination defined by processing job |
 | FPGA → Ethernet → PI-COMMS → Wi-Fi → GS | payload result object via S220 | OBC decides transfer; no OBC byte relay |
 | OBC → UART A → PI-COMMS → Wi-Fi → GS | System HK, events, spacecraft reporting | OBC-generated TM, forwarded without APID rewrite |
 
-The UART links are **bidirectional**. Unsolicited endpoint events or reports can return over the same physical serial line. When UART B is down, the Pi↔FPGA Ethernet link may still function; **OBC does not infer that FPGA is healthy merely because Pi can reach its IP address**.
+Both OBC control links are **bidirectional after link establishment**. Unsolicited endpoint events or reports return over the same control connection. A failed KV260 USB host or Linux process may leave the Pi↔KV260 Ethernet data link operational; **OBC does not infer FPGA control health merely from an Ethernet link or USB electrical attachment**.
 
 ## 8. Failure handling and recovery
 
 - **Wi-Fi loss** affects only PI-COMMS Ground-link availability and queued downlink. OBC↔Pi/FPGA UART supervision continues.
 - **PI-COMMS service crash:** Pi transport router and PI-MGMT remain independently operational, letting OBC request a service restart. Their independence is software/process-level, not physical redundancy.
 - **Pi power/OS failure:** loss of Pi UART A affects PI-CAM, PI-COMMS and PI-MGMT as a common-mode fault; recovery cannot rely on PI-MGMT if the entire Pi has failed.
-- **FPGA control UART failure:** OBC marks FPGA `STALE/OFFLINE` per configured policy even if its Ethernet port remains up.
-- **PL not configured/reconfigured:** Pmod serial control may be unavailable. A permanently available control link independent of PL would require a different verified physical interface.
-- **Automatic hard recovery:** a failed serial link cannot deliver `SOFT_REBOOT` to an unresponsive endpoint. Independent reset/power controls are **not included in this wiring profile**; without one, the OBC reports recovery `SUPPRESSED`, journals the fault and informs Ground in System HK.
-- **UART noise/resets:** malformed COBS or CRC failures must not produce TC execution. Bound buffers, report error counters, and resynchronize on `0x00`.
+- **FPGA USB/CDC control loss:** OBC marks FPGA `STALE/OFFLINE` per configured policy even if its Ethernet port remains up. USB enumerated does not necessarily mean the processing service is ready.
+- **PL unconfigured/reconfigured:** the PS USB host and OBC USB CDC link can remain available. The processing service must report its own PL capability/configuration state and must not claim processing readiness until its required acceleration image is loaded.
+- **Automatic hard recovery:** if the KV260 PS/Linux USB host is unresponsive, USB CDC alone cannot reboot it. No independent reset/power control is wired in this reference profile; the OBC reports recovery `SUPPRESSED` rather than claiming USB is an independent power-cycle path.
+- **UART/USB stream corruption or reset:** malformed COBS or CRC failures must not produce TC execution. Bound buffers, report error counters, and resynchronize on `0x00`; USB disconnect/re-enumeration must reset framing state, not mission TC sequencing.
 - **Wi-Fi throughput competition:** bulk Service 220 transfers must not starve OBC fault/event reporting. Backpressure is reflected in transfer state; a queued TCP write is not necessarily end-to-end delivery.
 
 ## 9. Commissioning and validation
 
-1. Confirm Nucleo LPUART1/USART2 connector routing and Pi GPIO pinmux/debug-console ownership; verify all UART signal levels are 3.3 V before wiring.
-2. Confirm the KV260 carrier revision and Pmod pins and create a **minimal, stable PL UART** accessible to KV260 processing software. Show explicit boot/reconfiguration and failure behavior.
+1. Confirm Nucleo LPUART1 expansion-pin routing, Pi GPIO UART pinmux/debug-console ownership and 3.3 V levels before wiring UART.
+2. Power the Nucleo independently as required by ST UM2408, then connect a USB-A-to-Micro-B data cable from KV260 USB-A host to **Nucleo CN13**. Implement STM32 USB FS CDC-ACM device enumeration and Linux `cdc_acm` host discovery with stable device matching.
 3. Connect Pi↔KV260 with one Ethernet cable, configure only the `10.77.0.0/30` link, and test ping and TCP packet round-trip at negotiated Gigabit rate.
-4. Send bounded COBS-framed PUS-C packets with CRC over each UART independently. Test disconnect, malformed frames, oversized frames and reconnect.
+4. Send bounded COBS-framed PUS-C packets with CRC over Pi UART and KV260 USB CDC independently. Test USB unplug/re-enumeration, malformed frames, oversized frames and reconnect.
 5. Validate PI `exn-linkd` routes PI-CAM/PI-COMMS/PI-MGMT APIDs independently, including after PI-COMMS crash.
 6. Send GS TC through Pi Wi-Fi, Pi packet router and UART A into OBC. Verify Service 1 responses and OBC→Ground TM.
-7. Send FPGA TC and collect HK over UART B while simultaneously moving an image Pi↔KV260 through direct Ethernet, without OBC payload relay.
+7. Send FPGA TC and collect HK over the KV260 USB CDC control link while simultaneously moving an image Pi↔KV260 through direct Ethernet, without OBC payload relay.
 8. Collect System HK with correctly reported link ages and per-endpoint recovery states; verify OBC stays alive after loss of Ground Wi-Fi.
-9. Test Pi OS failure and FPGA PL reconfiguration as explicit common-mode/fault cases; recovery without hard reset shall report `SUPPRESSED`.
+9. Test Pi OS failure, KV260 Linux USB host failure and FPGA PL reconfiguration separately: USB control must survive PL-only reconfiguration, while an unresponsive PS/host cannot claim independent recovery; without a hard-reset path recovery is `SUPPRESSED`.
 10. Measure packet sizes, UART throughput, bounded STM32 memory and maximum System HK/report delivery time. Verify control/critical-TM priority under Ethernet/Wi-Fi bulk load.
 
-**Implementation status:** this is a specified reference transport, **not** an already-wired/validated system. Drivers, Pi link routing, FPGA control UART design, Service 220 transfers, priority queues and end-to-end tests remain implementation tasks.
+**Implementation status:** this is a specified reference transport, **not** an already-wired/validated system. STM32 USB CDC device firmware, KV260 Linux USB host service, Pi serial packet routing, Service 220 transfers, priority queues and end-to-end tests remain implementation tasks.
 
 ## 10. Future interface upgrades
 
-UART control is a convenient **laboratory** substitute for spacecraft internal communication buses. A future version can replace it with CAN-FD (requires board-side physical transceivers and a matching FPGA controller), SpaceWire (requires a physical implementation), or another qualified redundant interface without changing PUS-C service IDs or OBC authority.
+UART and USB CDC control are convenient **laboratory** substitutes for spacecraft internal communication buses. A future version can replace either with CAN-FD (with hardware transceivers), SpaceWire (with a physical implementation), or another qualified/redundant interface without changing PUS-C service IDs or OBC authority.
 
 SpWKit is available for later SpaceWire/virtual-link integration, but this reference **does not require SpWKit** and should not claim that its UDP backend somehow operates over GPIO UART without a new backend.
 
@@ -209,5 +209,6 @@ SpWKit is available for later SpaceWire/virtual-link integration, but this refer
 
 - [ST UM2408 STM32H7 Nucleo-144 board manual](https://www.st.com/resource/en/user_manual/dm00499171.pdf): extension connectors and UART pin multiplexing.
 - [Raspberry Pi configuration/UART documentation](https://www.raspberrypi.com/documentation/computers/configuration.html): Pi 5 header UART versus dedicated debug UART and 3.3 V signal level.
-- [AMD UG1089 KV260 connector guide](https://docs.amd.com/r/en-US/ug1089-kv260-starter-kit/Interfaces): J2 Pmod, J4 USB/FTDI console, J10 Gigabit Ethernet.
-- [AMD UG1089 KV260 Pmod power budget](https://docs.amd.com/r/en-US/ug1089-kv260-starter-kit/Powering-the-Starter-Kit-and-Power-Budgets): 3.3 V Pmod supply.
+- [AMD UG1089 KV260 connector guide](https://docs.amd.com/r/en-US/ug1089-kv260-starter-kit/Interfaces): U44/U46 USB-A host connectors, J4 FTDI UART/JTAG console and J10 Gigabit Ethernet.
+- [AMD UG1089 KV260 USB port power budget](https://docs.amd.com/r/en-US/ug1089-kv260-starter-kit/Powering-the-Starter-Kit-and-Power-Budgets): USB-A peripheral VBUS provision.
+- [ST UM2408 NUCLEO-H755ZI-Q USB CN13 requirements](https://www.st.com/resource/en/user_manual/dm00499171.pdf): Micro-AB USB FS device/OTG port and independent-power sequencing caution.
