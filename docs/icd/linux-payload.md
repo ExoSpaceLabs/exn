@@ -17,7 +17,7 @@ Refer to:
 - `../ICD.md` for packet/routing rules;
 - `pi-cam.md` for Camera-specific behavior;
 - `hardware-sensors.md` for the normative Raspberry Pi 5 platform sensor IDs and engineering units;
-- `inter-node-links.md` for the reference Pi 5 Wi-Fi/Ground gateway, onboard Ethernet and per-endpoint TCP listeners.
+- `inter-node-links.md` for the reference Pi 5 Wi-Fi/Ground gateway, OBC-facing UART packet router and direct KV260 Ethernet data link.
 
 ## 1. Logical endpoints
 
