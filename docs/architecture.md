@@ -40,58 +40,88 @@ A subsystem may autonomously protect itself locally, but it shall not independen
 
 The current EXN stage focuses on the payload/data-handling subset: Camera, Antenna, FPGA processing and Pi management. AOCS/ADCS, EPS, thermal and other platform subsystems are future scope and therefore intentionally lack detailed service ICDs today.
 
-## 2. Logical system
-
 ```mermaid
-graph LR
-  GS[Ground Station]
-  OBC[STM32 OBC / Control Node]
-  CAM[Camera Payload Service]
-  ANT[Antenna Service]
-  PM[PI-MGMT / Platform Supervisor]
-  FPGA[FPGA AI / Processing Node]
+flowchart TB
+  OBC["STM32 OBC<br/>spacecraft authority<br/>mode · commands · FDIR · time"]
 
-  GS <--> ANT
-  ANT <--> OBC
-  OBC <--> CAM
-  OBC <--> PM
-  OBC <--> FPGA
-  PM --- CAM
-  PM --- ANT
-  CAM <--> FPGA
-  CAM <--> ANT
-  FPGA <--> ANT
+  subgraph FUTURE["Future platform domain · not implemented yet"]
+    ADCS["AOCS / ADCS<br/>attitude control loops"]
+    EPS["EPS<br/>power switching and protection"]
+    THERM["Thermal<br/>local thermal control"]
+  end
+
+  subgraph CURRENT["Current payload / data-handling domain"]
+    CAMERA["Camera<br/>image acquisition"]
+    PROC["FPGA / HPC<br/>payload processing"]
+    COMMS["Antenna<br/>Ground link"]
+  end
+
+  OBC -.->|"future platform control"| ADCS
+  OBC -.->|"future power policy"| EPS
+  OBC -.->|"future thermal policy"| THERM
+  OBC -->|"authorized operations"| CAMERA
+  OBC -->|"authorized jobs"| PROC
+  OBC -->|"Ground-link policy"| COMMS
 ```
 
-The arrows above represent **permitted logical paths**, not a requirement that every deployment instantiate every path or transport.
+**Dashed connections** indicate planned platform subsystems, not deployed hardware. Even when a subordinate controller closes its own fast loop or performs independent local protection, spacecraft mission/safety authority remains with the OBC.
 
-The control architecture remains centered on the OBC, but the data plane is intentionally more flexible.
+## 2. Logical system
+
+The [README](../README.md#logical-system) introduces the primary endpoints. This more detailed view distinguishes **command authority and supervision (solid links)** from **payload/data handoffs and platform supervision (dashed links)**.
+
+```mermaid
+flowchart LR
+  GS["Ground / HIL"]
+
+  subgraph STM["STM32H755"]
+    OBC["OBC · 0x100<br/>spacecraft authority"]
+  end
+
+  subgraph PI["Raspberry Pi 5"]
+    CAM["PI-CAM · 0x101<br/>Camera"]
+    ANT["PI-COMMS · 0x103<br/>Antenna"]
+    PM["PI-MGMT · 0x104<br/>Linux supervisor"]
+  end
+
+  subgraph ACC["FPGA node"]
+    FPGA["FPGA · 0x102<br/>Processing"]
+  end
+
+  GS <-->|"Ground link"| ANT
+  ANT <-->|"TC / OBC TM"| OBC
+  OBC -->|"acquire / transfer"| CAM
+  OBC -->|"process / transfer"| FPGA
+  OBC -->|"recover / update"| PM
+  CAM -.->|"input objects"| FPGA
+  FPGA -.->|"result objects"| CAM
+  CAM -.->|"bulk payload"| ANT
+  FPGA -.->|"bulk payload"| ANT
+  FPGA -.->|"small result / status"| OBC
+  PM -.->|"host supervision"| CAM
+  PM -.->|"host supervision"| ANT
+```
+
+These are **permitted logical paths**, not a separate physical wire for each edge and not a mandatory fixed mission-processing pipeline.
 
 ## 3. Physical deployment
 
-The initial intended deployment is:
+The initial intended deployment places the three Pi logical endpoints on **one Linux computer**. Inter-node transports are chosen at deployment time; Ethernet, a simulated logical link and local IPC may all carry different parts of the traffic.
 
-```text
-Ground Station
-      |
-      | RF / Wi-Fi / network link as deployed
-      v
-+------------------------------------------------+
-| Raspberry Pi 5 - Embedded Linux Payload Node   |
-|                                                |
-|  Camera Service       Antenna Service          |
-|        |                        |               |
-|        +-------- PI-MGMT -------+               |
-|          watchdog / restart / health / update  |
-+----------------------+-------------------------+
-                       |
-                 Ethernet / other carrier
-              +--------+---------+
-              |                  |
-              v                  v
-       STM32 Control Node     FPGA Processing Node
-       HardRT + DAS           Image/AI acceleration
+```mermaid
+flowchart LR
+  GS["Ground Station / HIL"]
+  PI5["Raspberry Pi 5<br/>PI-CAM + PI-COMMS + PI-MGMT<br/>Linux / systemd / storage"]
+  MCU["STM32H755<br/>OBC · HardRT + DAS"]
+  FPGA["FPGA processing device<br/>image / AI acceleration"]
+
+  GS <-->|"Ground-facing transport"| PI5
+  PI5 <-->|"control and telemetry transport"| MCU
+  PI5 <-->|"payload-object transport"| FPGA
+  MCU <-->|"processing control / status"| FPGA
 ```
+
+The edges describe physical-host **communication relationships**, not proof that any particular carrier or peripheral is wired and working on the current bench.
 
 Camera and Antenna are therefore **two first-class responsibilities of the initial Raspberry Pi 5** while remaining independent logical services. The Pi is expected to do both: acquire/manage payload imagery and provide the spacecraft communications endpoint toward Ground/OBC. A later deployment may move either service to a different Linux computer without changing its mission responsibility.
 
@@ -104,18 +134,24 @@ The Raspberry Pi shall be treated as one physical spacecraft payload computer wi
 
 Linux platform management supervises both functions but is not itself a third primary mission role. It is exposed as supporting endpoint **PI-MGMT (`0x104`)** so the OBC can restart/update Camera or Antenna even when the target mission process is not responsive.
 
-A representative service layout is:
+A representative host-service layout is:
 
-```text
-Linux
- |
- +-- exn-camera.service
- +-- exn-antenna.service
- +-- exn-platform.service      PI-MGMT / 0x104
- +-- system watchdog
- +-- journald / telemetry collection
- +-- persistent payload storage
+```mermaid
+flowchart TB
+  subgraph PI5["Raspberry Pi 5 · Linux host"]
+    HOST["Linux / systemd<br/>watchdog · journald · persistent storage"]
+    CAM["exn-camera.service<br/>PI-CAM · 0x101"]
+    ANT["exn-antenna.service<br/>PI-COMMS · 0x103"]
+    PM["exn-platform.service<br/>PI-MGMT · 0x104"]
+    HOST --> CAM
+    HOST --> ANT
+    HOST --> PM
+    PM -.->|"monitor / restart"| CAM
+    PM -.->|"monitor / restart"| ANT
+  end
 ```
+
+PI-MGMT interfaces with Linux supervision facilities; it does not replace `systemd` or become the sole watchdog itself.
 
 ### 4.1 Camera service
 
