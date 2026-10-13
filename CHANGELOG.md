@@ -4,9 +4,10 @@ This document records system, structural, interface-definition, and architecture
 
 ## 2026-10-13
 
-- Define a reference EXN physical/inter-device ICD: a secured Pi-COMMS Wi-Fi link to PC/GS and a switched onboard Ethernet LAN connecting STM32H755, Pi 5 and Kria KV260.
-- Assign deployment-only wired IPv4 addresses and one TCP listener per logical endpoint; use complete CCSDS/PUS-C packets over TCP with primary-header framing and bounded packet sizes.
+- Define a reference EXN physical/inter-device ICD: a secured Pi-COMMS Wi-Fi link to PC/GS and independent STM32↔Pi and STM32↔KV260 3.3 V UART control links plus a direct, switchless Pi↔KV260 Gigabit Ethernet data connection.
+- Assign only Pi↔KV260 deployment IPv4/TCP data listeners; encode full CCSDS/PUS-C packets on UART using bounded COBS frames, while Wi-Fi and Ethernet retain CCSDS primary-header-based TCP framing.
 - Define OBC-centered command authorization, direct payload transfers, strict Wi-Fi/onboard IP isolation, failure-handling requirements and qualification criteria.
+- Use the Pi's local, independently supervised UART packet router for OBC access to PI-CAM/PI-COMMS/PI-MGMT, and KV260 J2 Pmod PL UART for OBC↔FPGA commands/HK. Record FPGA PL control-link dependency and explicit recovery limitations.
 - Add a machine-readable reference network allocation that must agree with the inter-node link ICD; reference transport software and physical integration remain future implementation work.
 
 ## 2026-10-12
