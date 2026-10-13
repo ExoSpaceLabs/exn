@@ -2,11 +2,11 @@
 
 This document is the **normative EXN PUS service catalogue and tailoring specification** for CCSDS/PUS application traffic.
 
-It separates three things that were previously mixed together:
+It separates three things that must remain distinct:
 
-1. the **current transitional wire profile**, which is already used by EXN-GS and the shared packet templates;
-2. the **ECSS PUS service catalogue**, whose standardized service and message identifiers have fixed meanings;
-3. the **target EXN mission profile**, which selects standard PUS services where they fit and uses mission-specific identifiers where EXN genuinely needs mission-specific behavior.
+1. the **ECSS PUS service catalogue**, whose standardized service and message identifiers have fixed meanings;
+2. the **active EXN PUS-C mission profile**, which selects standard PUS services where they fit and mission-specific identifiers where EXN genuinely needs custom behavior;
+3. the endpoint-specific operational payloads and state models defined by the central EXN ICD.
 
 The exact common packet/header rules remain controlled by [ICD.md](ICD.md); endpoint-specific payloads and IDs are frozen in [component-services.md](component-services.md) and `docs/icd/`. Component repositories consume these definitions and shall not maintain independent service-number or payload-layout specifications.
 
@@ -143,7 +143,7 @@ uncertainty_ms:uint16
 sequence:uint16
 ```
 
-The OBC is the time authority and distributes this command to PI-CAM, Antenna, PI-MGMT and FPGA. Endpoint application clocks derive synchronized Unix time from a monotonic clock plus offset. The target PUS-C **telemetry timestamp** remains the mission CUC representation defined in `component-services.md`.
+The OBC is the time authority and distributes this command to PI-CAM, Antenna, PI-MGMT and FPGA. Endpoint application clocks derive synchronized Unix time from a monotonic clock plus offset. The PUS-C **telemetry timestamp** is the mission CUC representation defined in `ICD.md` and `component-services.md`.
 
 Verification is provided through Service 1.
 
@@ -276,7 +276,7 @@ Service 210 reports supported processing capabilities because the concrete FPGA 
 
 Small results may be returned directly through Service 210. Large results become Service 220 objects.
 
-Service 1 provides command verification. The legacy FPGA 210/5 ACK/NACK message is therefore transitional.
+Service 1 provides command verification. Service 210 does not define a parallel FPGA-specific ACK/NACK packet.
 
 ### 4.10 Service 220: Payload Object Transfer
 
