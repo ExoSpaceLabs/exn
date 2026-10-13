@@ -658,13 +658,7 @@ Mission interfaces use object IDs rather than exposing Linux filesystem paths.
 
 The Antenna (PI-COMMS) has no custom mission service in the first baseline.
 
-It performs three routing functions:
-
-```text
-Ground TC -> Antenna -> OBC
-OBC TM    -> Antenna -> Ground
-payload   -> Antenna -> Ground
-```
+It forwards **Ground telecommands to the OBC**, **OBC telemetry to Ground**, and **OBC-authorized payload objects from their producers to Ground**. The [system control/data diagrams](architecture.md#5-control-plane-and-data-plane) define those directions.
 
 Payload sources are PI-CAM, FPGA, or OBC itself.
 
@@ -926,13 +920,7 @@ Defaults are integration defaults and may be changed after measurement.
 
 The OBC maintains the latest valid HEARTBEAT, HEALTH, SENSORS and LINKS structures received from every registered endpoint.
 
-This cache is populated by normal spacecraft supervision, independently of Ground requests:
-
-```text
-OBC -> endpoint: TC[3,27]
-endpoint -> OBC: TM[3,25]
-OBC -> cache: update sample + supervision state
-```
+This cache is populated by normal spacecraft supervision independently of Ground requests. The OBC requests endpoint HK with `TC[3,27]`, consumes `TM[3,25]`, and updates each endpoint's cached sample and supervision state. See the [System-HK sequence](diagrams.md#1-system-housekeeping-snapshot).
 
 The OBC may use periodic endpoint-generated HK instead where configured, but the ownership rule is unchanged: the OBC decides the supervision cadence and owns the authoritative cache.
 
@@ -940,17 +928,7 @@ A Ground `TC[3,128]` does **not** select components and does not normally cause 
 
 If a subordinate endpoint is stale or offline, its entry remains in the snapshot with the corresponding OBC supervision state and its last valid sample time. Missing data is therefore itself telemetry rather than a reason for the complete System-HK response to fail.
 
-Typical flow:
-
-```text
-Ground -> Antenna -> OBC
-OBC -> Camera: acquire
-Camera -> OBC: acquisition/product status
-OBC -> FPGA: process object
-FPGA -> OBC: classification result
-OBC -> Camera/FPGA: transfer selected object to Ground
-Camera/FPGA -> Antenna -> Ground
-```
+A typical operation is **Ground request → OBC-authorized Camera acquisition → FPGA processing → OBC decision → selected producer's direct downlink through Antenna**. This is an example, not a compulsory processing pipeline. See the [capture, processing and result-routing sequences](diagrams.md#3-capture---fpga-processing---camera-product---ground).
 
 ### 13.3 PI-MGMT platform parameters
 
