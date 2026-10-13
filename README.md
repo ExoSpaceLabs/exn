@@ -57,7 +57,7 @@ See [system architecture](docs/architecture.md) for the physical deployment, aut
 
 **Housekeeping is spacecraft-wide.** The OBC maintains a cache of its own and subordinate endpoints' heartbeat, health and sensor telemetry, supervises missing devices, and records recovery decisions. Ground requests one System-HK snapshot with `TC[3,128]` and receives `TM[3,129]`; detailed operational flows are in [sequence diagrams](docs/diagrams.md).
 
-**Mission interfaces use PUS Revision C.** Standard services handle verification, HK, events, time, monitoring and runtime parameters. Mission-specific services handle Camera configuration/acquisition, processing jobs, payload objects and software management. The [service profile](docs/services.md) defines their meaning and where they run. Its [high-level service map](docs/services.md#service-deployment-map) provides the service-by-endpoint view without crowding this introduction.
+**Mission interfaces use PUS Revision C.** Standard services handle verification, HK, events, time, monitoring and runtime parameters. Mission-specific services handle Camera configuration/acquisition, processing jobs, payload objects and software management. The [service profile](docs/services.md) defines their meaning and where they run. Its [high-level service map](docs/services.md#6-service-deployment-map) provides the service-by-endpoint view without crowding this introduction.
 
 ## Documentation guide
 
