@@ -5,7 +5,7 @@ This document records system, structural, interface-definition, and architecture
 ## 2026-10-13
 
 - Define a switchless inter-device topology: secured PC/GS Wi-Fi via PI-COMMS, STM32↔Pi 3.3 V UART, STM32 CN13 USB CDC device ↔ KV260 PS USB-A host, and direct Pi↔KV260 Gigabit Ethernet for image objects.
-- Assign only Pi↔KV260 deployment IPv4/TCP data listeners; encode full CCSDS/PUS-C packets on UART using bounded COBS frames, while Wi-Fi and Ethernet retain CCSDS primary-header-based TCP framing.
+- Assign only Pi↔KV260 deployment IPv4/TCP data listeners; encode complete CCSDS/PUS-C packets in bounded COBS frames over Pi UART and KV260 USB CDC, with CCSDS primary-header TCP framing on Wi-Fi/Ethernet.
 - Define OBC-centered command authorization, direct payload transfers, strict Wi-Fi/onboard IP isolation, failure-handling requirements and qualification criteria.
 - Use the Pi's local, independently supervised UART packet router for OBC access to PI-CAM/PI-COMMS/PI-MGMT, and KV260 J2 Pmod PL UART for OBC↔FPGA commands/HK. Record FPGA PL control-link dependency and explicit recovery limitations.
 - Add a machine-readable reference network allocation that must agree with the inter-node link ICD; reference transport software and physical integration remain future implementation work.
