@@ -2,7 +2,7 @@
 
 This document is the normative EXN ICD for the STM32 OBC endpoint.
 
-Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../services.md`, shared component behavior in `../component-services.md`, and the physical reference Ethernet/TCP link in [`inter-node-links.md`](inter-node-links.md). The OBC TCP/IP transport and the corresponding fixed-memory network stack remain integration work, not an already-qualified MCU feature.
+Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../services.md`, shared component behavior in `../component-services.md`, and the two independent OBC UART control links in [`inter-node-links.md`](inter-node-links.md). LPUART1 serves the Pi 5 and USART2 serves the KV260 Pmod-based FPGA control endpoint; bounded COBS framing/CRC validation and actual pin-level bring-up remain implementation work. The OBC does **not** need a TCP/IP stack or wired Ethernet in this reference topology.
 
 ## 1. Identity and role
 
