@@ -731,14 +731,7 @@ A large result becomes a new Service 220 object and may be routed to:
 - Antenna for Ground downlink;
 - more than one destination when explicitly requested.
 
-The OBC may command:
-
-```text
-OBC -> FPGA: send result object Y to Ground
-FPGA -> Antenna -> Ground
-```
-
-without relaying Y through the MCU.
+The OBC may command FPGA to send result object Y to Ground via Antenna **without relaying Y through the MCU**. The sequence is illustrated in [OBC-controlled direct FPGA downlink](diagrams.md#5-obc-controlled-direct-fpga-result-downlink).
 
 ### 11.3 Common payload object types and formats
 
@@ -868,13 +861,7 @@ Chunking is application-level. CCSDS packets remain unsegmented unless a future 
 
 The OBC never commands Camera/FPGA to open a Ground transport themselves.
 
-A Ground transfer means:
-
-```text
-OBC -> producer: Start Object Transfer(objectId, destination=GROUND)
-producer -> Antenna: Service 220 object
-Antenna -> Ground: forward object packets
-```
+A Ground transfer means the OBC commands the producer with `Start Object Transfer(objectId, destination=GROUND)`. The producer then sends the Service 220 object through Antenna to Ground. See the [data-plane architecture](architecture.md#52-data-plane).
 
 Routing resolves logical GROUND through the Antenna endpoint.
 
