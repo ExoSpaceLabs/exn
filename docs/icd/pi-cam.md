@@ -213,7 +213,7 @@ An explicit AF trigger is therefore not part of the Camera **configuration** tra
 
 Storage retention and minimum-free-space policy are **not Camera image controls**. They are PI-CAM Service 20 runtime configuration parameters.
 
-## 6.6 Stable control IDs and encoding
+### 6.6 Stable control IDs and encoding
 
 Camera control IDs are 16-bit and stable across implementations. Capability reports declare whether an ID is supported by the active Camera Module/libcamera stack.
 
@@ -286,7 +286,7 @@ The wire format is bounded:
 
 These limits permit fixed-size parsing/storage; dynamic allocation is not required.
 
-### 6.8 Set Camera Configuration payload
+### 6.9 Set Camera Configuration payload
 
 `TC[200,3]`:
 
@@ -330,7 +330,7 @@ TC[200,3]
 
 One Service 1 acceptance/completion sequence verifies the whole transaction.
 
-### 6.9 Get/Report Camera Configuration
+### 6.10 Get/Report Camera Configuration
 
 `TC[200,4]`:
 
@@ -366,7 +366,7 @@ Entry status:
 
 A report for `scope_mask=0xFFFF` is the complete active image configuration snapshot.
 
-### 6.10 Capabilities report
+### 6.11 Capabilities report
 
 `TM[200,7]` contains:
 
@@ -385,7 +385,7 @@ A report for `scope_mask=0xFFFF` is the complete active image configuration snap
 
 Variable-size strings/arrays shall have explicit bounded lengths. No Camera implementation may require unbounded dynamic packet fields.
 
-## 6.11 PI-CAM Service 20 policy parameters
+### 6.12 PI-CAM Service 20 policy parameters
 
 Service 20 is used only for Camera-service runtime/persistent **policy**, not image settings.
 
