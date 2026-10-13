@@ -34,7 +34,7 @@ EXN uses one normative packet profile for all new and maintained components:
 - six-octet CUC timestamps in PUS-C telemetry;
 - Unix epoch as the EXN mission-defined CUC epoch.
 
-There is no active PUS-A mission profile. Historical PUS-A traffic belongs only to repository history and migration notes. Components still using it, including the existing GS/HIL implementation, shall be migrated to this PUS-C contract rather than extended.
+There is no active PUS-A mission profile. Historical PUS-A traffic belongs only to repository history and migration notes. The current EXN-GS/HIL packet implementation has migrated to PUS-C. Remaining component implementations shall consume this PUS-C contract instead of extending legacy identifiers.
 
 ### 0.1 Normative endpoint identities
 
