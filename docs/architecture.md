@@ -119,7 +119,7 @@ flowchart TB
   WIFI["Secured Wi-Fi AP<br/>or PC-hosted hotspot"]
   subgraph BENCH["EXN reference bench"]
     PI5["Pi 5 · Wi-Fi / UART / Ethernet<br/>PI-CAM + PI-COMMS + PI-MGMT"]
-    MCU["STM32H755 OBC<br/>LPUART1 + USART2"]
+    MCU["STM32H755 OBC<br/>LPUART1 + CN13 USB FS device"]
     FPGA["Kria KV260<br/>PL Pmod UART + Ethernet"]
     MCU <-->|"UART A · 3.3 V"| PI5
     MCU <-->|"UART B · Pmod/PL"| FPGA
