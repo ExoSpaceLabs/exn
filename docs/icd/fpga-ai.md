@@ -99,13 +99,7 @@ The command never hard-codes one pipeline or result destination.
 
 Large input imagery/products use Service 220.
 
-Typical flow:
-
-```text
-OBC -> PI-CAM: transfer object X to FPGA
-PI-CAM -> FPGA: Service 220 object X
-OBC -> FPGA: Submit Job(inputObjectId=X)
-```
+The OBC instructs PI-CAM to transfer input object X directly to FPGA using Service 220, then submits `TC[210,1]` with `inputObjectId=X`. See the [processing-data sequence](../diagrams.md#3-capture---fpga-processing---camera-product---ground).
 
 The implementation may support streaming input later, but the first baseline is object-oriented and bounded.
 
@@ -122,26 +116,13 @@ Small decision data such as:
 
 may be delivered through `TM[210,7]` directly to the requested endpoint.
 
-Example:
-
-```text
-FPGA -> OBC: classification result
-OBC: make mission decision
-```
+For example, FPGA sends a compact classification result to OBC, which evaluates it against mission policy. See the [classification sequence](../diagrams.md#4-classification-result-routed-to-obc).
 
 ### 7.2 Large result
 
 A large output becomes a Service 220 object with its own `objectId`.
 
-Examples:
-
-```text
-OBC -> FPGA: downlink result Y
-FPGA -> Antenna -> Ground
-
-OBC -> FPGA: return result Y to Camera
-FPGA -> PI-CAM
-```
+The OBC can direct a result object to **Ground via Antenna**, to **PI-CAM** for storage/association, or to another configured endpoint. See [direct FPGA downlink](../diagrams.md#5-obc-controlled-direct-fpga-result-downlink).
 
 The FPGA does not own the Ground link. "Route to Ground" resolves to the Antenna endpoint.
 

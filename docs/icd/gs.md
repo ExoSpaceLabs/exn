@@ -18,19 +18,25 @@ Ground is an operator endpoint, not spacecraft command authority. Nominal flight
 
 ### 2.1 Flight-like profile
 
-```text
-Ground -> Antenna -> OBC
-```
-
-The Ground-facing physical/network transport terminates at PI-COMMS/Antenna. Complete EXN Space Packets are forwarded toward the spacecraft-side destination.
+In flight-like deployments, Ground communication terminates at **PI-COMMS/Antenna**, which forwards complete Space Packets to the OBC.
 
 ### 2.2 HIL profile
 
-```text
-Ground -> OBC simulator / physical OBC
+For hardware-in-the-loop tests, Ground may connect directly to an OBC simulator or a physical OBC. The logical command authority, APIDs and PUS-C packet semantics are unchanged.
+
+```mermaid
+flowchart LR
+  GS["Ground Station"]
+  ANT["PI-COMMS / Antenna"]
+  OBC["STM32 OBC"]
+  HIL["OBC simulator / physical OBC"]
+
+  GS -->|"flight-like transport"| ANT
+  ANT -->|"complete TC packets"| OBC
+  GS -.->|"direct HIL transport"| HIL
 ```
 
-Direct HIL connection changes only the transport topology. Packet/APID/PUS semantics remain identical to the flight-like profile.
+The dashed path is a **test topology alternative**, not an extra Ground ingress route on the flight-like spacecraft.
 
 ## 3. Ground software responsibility split
 
@@ -64,18 +70,20 @@ The GS -> OBC Application Data begins with this EXN routing envelope before the 
 | `target` | uint8 | 1=PI-CAM, 2=FPGA, 3=Antenna, 4=PI-MGMT |
 | `options` | uint8 | bit0 mirror target response to Ground; other bits reserved |
 
-Wire path:
+The OBC terminates the incoming Ground TC, verifies/authorizes it, removes the routing envelope, and emits a **new** target TC with the OBC source identity.
 
-```text
-GS TC: APID 0x100, Source ID 0x0010
-        routing envelope + target payload
-                     |
-                     v
-OBC validates / authorizes / removes envelope
-                     |
-                     v
-new TC: target APID, Source ID 0x0001
-        target-service payload only
+```mermaid
+sequenceDiagram
+  participant GS as Ground
+  participant ANT as Antenna
+  participant OBC as STM32 OBC
+  participant EP as Target endpoint
+
+  GS->>ANT: PUS-C TC · APID 0x100 · Source 0x0010
+  ANT->>OBC: routing envelope + target payload
+  OBC->>OBC: validate / authorize / remove envelope
+  OBC->>EP: new PUS-C TC · target APID · Source 0x0001
+  EP-->>OBC: PUS Service 1 verification / result
 ```
 
 The OBC tracks the relationship between the original Ground request and the downstream request. PUS Service 1 verifies each actual TC hop; `transaction_id` exists only for the OBC's end-to-end routed-operation bookkeeping.

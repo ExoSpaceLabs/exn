@@ -357,7 +357,7 @@ An update is complete only after post-activation heartbeat/HK validation succeed
 
 ## 5. Endpoint service matrix
 
-The target service ownership is:
+Service ownership in the active EXN PUS-C profile:
 
 | Service | GS/HIL | OBC | Camera | FPGA processing | Antenna | PI-MGMT |
 |---|---|---|---|---|---|---|
@@ -375,7 +375,50 @@ The target service ownership is:
 
 "Route" does not mean that the OBC must carry bulk object bytes. The architecture continues to permit direct payload data paths.
 
-## 6. PUS-C wire profile requirement
+## 6. Service deployment map
+
+This diagram shows **where EXN PUS services are implemented or coordinated**, grouped by their current physical host. It is intentionally more detailed than the [README logical system diagram](../README.md#logical-system); the [matrix above](#5-endpoint-service-matrix) remains the authoritative at-a-glance service ownership list.
+
+```mermaid
+flowchart LR
+  subgraph GROUND["Ground / HIL"]
+    GS["Ground Station<br/>operator TCs · TM/HK display<br/>payload and diagnostic download"]
+  end
+
+  subgraph STM["STM32H755 · spacecraft control"]
+    OBC["OBC · APID 0x100<br/>S3 spacecraft HK and supervision<br/>S8 recovery · S9 time master<br/>S12 monitoring · S20 policy<br/>S220 transfer / S230 update coordination"]
+  end
+
+  subgraph PI["Raspberry Pi 5 · Embedded Linux"]
+    CAM["PI-CAM · APID 0x101<br/>S200 configuration / acquisition / products<br/>S220 object transfer<br/>S3 / S5 / S9 / S12 / S20"]
+    ANT["PI-COMMS · APID 0x103<br/>Antenna · Ground link<br/>TC/TM forwarding · S220 downlink<br/>S3 / S5 / S9 / S12 / S20"]
+    PM["PI-MGMT · APID 0x104<br/>S8 service recovery / reboot<br/>S230 Pi software lifecycle<br/>S3 platform HK · S5 / S9 / S12 / S20"]
+  end
+
+  subgraph PROCESSING["FPGA payload node"]
+    FPGA["FPGA · APID 0x102<br/>S210 capabilities / jobs / results<br/>S220 input and result objects<br/>S3 / S5 / S8 / S9 / S12 / S20<br/>S230 where supported"]
+  end
+
+  GS <-->|"Ground link"| ANT
+  ANT <-->|"TC / OBC TM"| OBC
+  OBC -->|"Camera control"| CAM
+  OBC -->|"Processing control"| FPGA
+  OBC -->|"Platform management"| PM
+  PM -.->|"supervise / restart"| CAM
+  PM -.->|"supervise / restart"| ANT
+  CAM -.->|"input objects"| FPGA
+  FPGA -.->|"products / results"| CAM
+  CAM -.->|"bulk downlink"| ANT
+  FPGA -.->|"bulk downlink"| ANT
+```
+
+**Common services:** S1 = request verification; S3 = HK/heartbeat; S5 = events; S8 = function/recovery management; S9 = time; S12 = monitoring/alarms; S20 = runtime configuration. S1 verification applies to spacecraft TC processing even where it is omitted from individual node labels for readability.
+
+**Mission-specific services:** S200 = Camera; S210 = FPGA processing; S220 = payload-object transfer; S230 = software management. The OBC authorizes and coordinates spacecraft operations; the Pi Antenna owns the Ground link and transports bulk downlink bytes.
+
+The service map does **not** imply that a software service lives on a separate computer for each logical APID. PI-CAM, PI-COMMS and PI-MGMT all execute on the same Raspberry Pi 5 in the reference deployment.
+
+## 7. PUS-C wire profile requirement
 
 All active EXN interface artifacts and component implementations use the PUS-C profile defined in `ICD.md`.
 
@@ -390,28 +433,33 @@ Required properties include:
 
 Revision A shall not be added to new tests, fixtures, templates or implementation paths.
 
-## 7. Interface source of truth
+## 8. Interface source of truth
 
-The long-term interface chain shall be:
+The **planned** generation/cross-validation flow is:
 
-```text
-service/profile specification
-        |
-        v
-machine-readable mission interface definitions
-        |
-        +--> CCSDSPack templates/tests
-        +--> MCU C headers
-        +--> GS constants/builders
-        +--> simulator fixtures
-        +--> documentation tables
+```mermaid
+flowchart TB
+  ICD["Central EXN specification<br/>ICD / service profile"]
+  MODEL["Machine-readable mission interface model<br/>future generation source"]
+  CFG["CCSDSPack templates / tests"]
+  HDR["MCU C interface header"]
+  GS["GS builders / constants"]
+  SIM["Simulator fixtures / golden vectors"]
+  DOC["Normative documentation tables"]
+
+  ICD -.->|"future schema extraction / validation"| MODEL
+  MODEL -.-> CFG
+  MODEL -.-> HDR
+  MODEL -.-> GS
+  MODEL -.-> SIM
+  MODEL -.-> DOC
 ```
 
-The current manually maintained `.cfg`, JSON and C-header mirrors are acceptable during migration, but the target baseline should generate or cross-validate them from one machine-readable definition.
+**Dashed edges are planned, not an implemented code-generation pipeline.** The current `.cfg`, JSON and C-header mirrors are maintained and checked against the central ICD. The longer-term goal is to generate or cross-validate them from one machine-readable definition.
 
 No new interface shall be added using a legacy-colliding assignment merely because an older EXN packet already used that number.
 
-## 8. Implementation order
+## 9. Implementation order
 
 1. Maintain the full normative interface in this repository.
 2. Keep CCSDSPack templates, JSON/tooling artifacts and MCU headers synchronized with the PUS-C ICD.
@@ -422,7 +470,7 @@ No new interface shall be added using a legacy-colliding assignment merely becau
 7. Add cross-repository golden-vector and interoperability tests.
 8. Reject any implementation-local protocol extension that has not first been defined here.
 
-## 9. Release gate
+## 10. Release gate
 
 EXN shall not declare a coherent integration baseline until:
 

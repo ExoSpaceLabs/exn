@@ -1,6 +1,6 @@
 # EXN — Sequence Diagrams
 
-This page collects representative EXN interactions among Ground Station (GS), STM32/OBC, Linux payload services, and FPGA processing.
+This page collects representative **sequence and interaction diagrams** among Ground Station (GS), STM32/OBC, Linux payload services, and FPGA processing. For static system structure, see [system architecture](architecture.md); for services by endpoint, see the [service deployment map](services.md#6-service-deployment-map).
 
 The diagrams show **valid flows**, not one mandatory pipeline. EXN separates control authority from payload-data routing, and FPGA processing results may be routed differently depending on the request and mission policy.
 
@@ -61,7 +61,7 @@ sequenceDiagram
   GS->>ANT: uplink TC
   ANT->>MCU: deliver TC
   MCU->>CAM: routed camera command
-  CAM-->>MCU: ACK / report
+  CAM-->>MCU: Service 1 verification / report
   MCU-->>ANT: downlinkable TM
   ANT-->>GS: TM
 ```

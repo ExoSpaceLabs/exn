@@ -13,7 +13,7 @@ Refer to:
 
 - `../architecture.md` for system architecture;
 - `../component-services.md` for common component behavior;
-- `../services.md` for the target PUS profile;
+- `../services.md` for the normative PUS Revision C profile;
 - `../ICD.md` for packet/routing rules;
 - `pi-cam.md` for Camera-specific behavior;
 - `hardware-sensors.md` for the normative Raspberry Pi 5 platform sensor IDs and engineering units.
@@ -30,16 +30,21 @@ PI-CAM and PI-COMMS are the two mission endpoints. PI-MGMT is management infrast
 
 ## 2. Linux service model
 
-The target process layout is:
+The reference Pi runs three independently addressable EXN services under Linux:
 
-```text
-Raspberry Pi OS / Linux
- |
- +-- exn-camera.service       PI-CAM / 0x101
- +-- exn-antenna.service      PI-COMMS / 0x103
- +-- exn-platform.service     PI-MGMT / 0x104
- +-- persistent payload/update storage
- +-- journald / diagnostics
+```mermaid
+flowchart TB
+  subgraph HOST["Raspberry Pi 5 · Embedded Linux"]
+    OS["Linux / systemd<br/>watchdog · journald · storage"]
+    CAM["exn-camera.service<br/>PI-CAM · 0x101"]
+    ANT["exn-antenna.service<br/>PI-COMMS · 0x103"]
+    PM["exn-platform.service<br/>PI-MGMT · 0x104"]
+    OS --> CAM
+    OS --> ANT
+    OS --> PM
+    PM -.->|"supervise / restart"| CAM
+    PM -.->|"supervise / restart"| ANT
+  end
 ```
 
 `systemd` may provide process supervision, watchdog integration, dependency ordering and restart execution, while EXN mission-visible control/health is exposed through PI-MGMT.
@@ -65,37 +70,15 @@ The Antenna is not command authority. The OBC decides what the spacecraft does a
 
 ### 4.1 Ground uplink
 
-Nominal path:
-
-```text
-Ground -> Antenna -> OBC
-```
-
-Ground control traffic is delivered to the OBC logical destination. The Antenna does not independently execute Camera or FPGA commands.
+The nominal uplink is **Ground → Antenna → OBC**. Ground control traffic is delivered to the OBC logical destination; the Antenna does not independently execute Camera or FPGA commands.
 
 ### 4.2 OBC telemetry downlink
 
-Nominal path:
-
-```text
-OBC -> Antenna -> Ground
-```
-
-The Antenna forwards valid OBC reporting packets and preserves packet identity as defined by the deployed transport.
+The nominal downlink is **OBC → Antenna → Ground**. The Antenna forwards valid OBC reporting packets and preserves packet identity as defined by the deployed transport.
 
 ### 4.3 Direct payload downlink
 
-For bulk data:
-
-```text
-OBC -> PI-CAM: downlink object X
-PI-CAM -> Antenna -> Ground
-
-OBC -> FPGA: downlink result Y
-FPGA -> Antenna -> Ground
-```
-
-"Direct" means the payload bytes bypass the OBC as a router. They do **not** bypass the Antenna.
+For bulk data, the OBC instructs **PI-CAM** or **FPGA** to transfer an object to Ground; the producing endpoint delivers the bytes **via Antenna**. This path bypasses the OBC as a bulk router, not the Ground-link service. See the [data-plane diagram](../architecture.md#52-data-plane) and [direct-downlink sequences](../diagrams.md#5-obc-controlled-direct-fpga-result-downlink).
 
 The Antenna shall accept Service 220 object transfers addressed to Ground/downlink policy and forward them to the active Ground session.
 
@@ -253,17 +236,7 @@ PI-MGMT owns Software Management for:
 - PI-MGMT itself;
 - Pi-level supporting packages/configuration explicitly included in an EXN update bundle.
 
-Workflow:
-
-```text
-OBC/GS -> Service 220 update package -> PI-MGMT
-OBC -> PI-MGMT: Stage Update
-PI-MGMT: verify size/hash/compatibility/signature policy
-OBC -> PI-MGMT: Activate Update
-PI-MGMT: restart only affected service(s)
-PI-MGMT: verify heartbeat/HK
-PI-MGMT -> OBC: completion / status
-```
+The software-update sequence is defined in [OBC-controlled Pi software update](../diagrams.md#12-software-update-of-pi-camera-service). In brief, Service 220 transfers the update package, Service 230 stages and activates it, PI-MGMT restarts only affected services and verifies post-update heartbeat/HK, and Service 1 reports the result.
 
 Camera and Antenna service updates shall not require a full Pi reboot unless the package explicitly changes shared platform dependencies.
 

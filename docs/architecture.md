@@ -2,7 +2,7 @@
 
 This document defines the logical EXN system architecture and the ownership boundaries between the control computer, Linux payload services, FPGA processing, ground communications, and reusable platform libraries.
 
-The master wire-level contract remains [`docs/ICD.md`](ICD.md), [`docs/services.md`](services.md) defines the mission PUS service tailoring, and [`docs/component-services.md`](component-services.md) defines the complete endpoint behavior. This document describes how EXN components are intended to be composed and how control/data may flow between them without forcing one fixed mission pipeline.
+The master wire-level contract remains [`docs/ICD.md`](ICD.md), [`docs/services.md`](services.md) defines the mission PUS service tailoring, and [`docs/component-services.md`](component-services.md) defines the complete endpoint behavior. This document describes how EXN components are intended to be composed and how control/data may flow between them without forcing one fixed mission pipeline. Representative time-ordered interactions live in [sequence diagrams](diagrams.md), while the detailed PUS-by-endpoint view is the [service deployment map](services.md#6-service-deployment-map).
 
 ## 1. Architectural principles
 
@@ -40,58 +40,88 @@ A subsystem may autonomously protect itself locally, but it shall not independen
 
 The current EXN stage focuses on the payload/data-handling subset: Camera, Antenna, FPGA processing and Pi management. AOCS/ADCS, EPS, thermal and other platform subsystems are future scope and therefore intentionally lack detailed service ICDs today.
 
-## 2. Logical system
-
 ```mermaid
-graph LR
-  GS[Ground Station]
-  OBC[STM32 OBC / Control Node]
-  CAM[Camera Payload Service]
-  ANT[Antenna Service]
-  PM[PI-MGMT / Platform Supervisor]
-  FPGA[FPGA AI / Processing Node]
+flowchart TB
+  OBC["STM32 OBC<br/>spacecraft authority<br/>mode · commands · FDIR · time"]
 
-  GS <--> ANT
-  ANT <--> OBC
-  OBC <--> CAM
-  OBC <--> PM
-  OBC <--> FPGA
-  PM --- CAM
-  PM --- ANT
-  CAM <--> FPGA
-  CAM <--> ANT
-  FPGA <--> ANT
+  subgraph FUTURE["Future platform domain · not implemented yet"]
+    ADCS["AOCS / ADCS<br/>attitude control loops"]
+    EPS["EPS<br/>power switching and protection"]
+    THERM["Thermal<br/>local thermal control"]
+  end
+
+  subgraph CURRENT["Current payload / data-handling domain"]
+    CAMERA["Camera<br/>image acquisition"]
+    PROC["FPGA / HPC<br/>payload processing"]
+    COMMS["Antenna<br/>Ground link"]
+  end
+
+  OBC -.->|"future platform control"| ADCS
+  OBC -.->|"future power policy"| EPS
+  OBC -.->|"future thermal policy"| THERM
+  OBC -->|"authorized operations"| CAMERA
+  OBC -->|"authorized jobs"| PROC
+  OBC -->|"Ground-link policy"| COMMS
 ```
 
-The arrows above represent **permitted logical paths**, not a requirement that every deployment instantiate every path or transport.
+**Dashed connections** indicate planned platform subsystems, not deployed hardware. Even when a subordinate controller closes its own fast loop or performs independent local protection, spacecraft mission/safety authority remains with the OBC.
 
-The control architecture remains centered on the OBC, but the data plane is intentionally more flexible.
+## 2. Logical system
+
+The [README](../README.md#logical-system) introduces the primary endpoints. This more detailed view distinguishes **command authority and supervision (solid links)** from **payload/data handoffs and platform supervision (dashed links)**.
+
+```mermaid
+flowchart LR
+  GS["Ground / HIL"]
+
+  subgraph STM["STM32H755"]
+    OBC["OBC · 0x100<br/>spacecraft authority"]
+  end
+
+  subgraph PI["Raspberry Pi 5"]
+    CAM["PI-CAM · 0x101<br/>Camera"]
+    ANT["PI-COMMS · 0x103<br/>Antenna"]
+    PM["PI-MGMT · 0x104<br/>Linux supervisor"]
+  end
+
+  subgraph ACC["FPGA node"]
+    FPGA["FPGA · 0x102<br/>Processing"]
+  end
+
+  GS <-->|"Ground link"| ANT
+  ANT <-->|"TC / OBC TM"| OBC
+  OBC -->|"acquire / transfer"| CAM
+  OBC -->|"process / transfer"| FPGA
+  OBC -->|"recover / update"| PM
+  CAM -.->|"input objects"| FPGA
+  FPGA -.->|"result objects"| CAM
+  CAM -.->|"bulk payload"| ANT
+  FPGA -.->|"bulk payload"| ANT
+  FPGA -.->|"small result / status"| OBC
+  PM -.->|"host supervision"| CAM
+  PM -.->|"host supervision"| ANT
+```
+
+These are **permitted logical paths**, not a separate physical wire for each edge and not a mandatory fixed mission-processing pipeline.
 
 ## 3. Physical deployment
 
-The initial intended deployment is:
+The initial intended deployment places the three Pi logical endpoints on **one Linux computer**. Inter-node transports are chosen at deployment time; Ethernet, a simulated logical link and local IPC may all carry different parts of the traffic.
 
-```text
-Ground Station
-      |
-      | RF / Wi-Fi / network link as deployed
-      v
-+------------------------------------------------+
-| Raspberry Pi 5 - Embedded Linux Payload Node   |
-|                                                |
-|  Camera Service       Antenna Service          |
-|        |                        |               |
-|        +-------- PI-MGMT -------+               |
-|          watchdog / restart / health / update  |
-+----------------------+-------------------------+
-                       |
-                 Ethernet / other carrier
-              +--------+---------+
-              |                  |
-              v                  v
-       STM32 Control Node     FPGA Processing Node
-       HardRT + DAS           Image/AI acceleration
+```mermaid
+flowchart LR
+  GS["Ground Station / HIL"]
+  PI5["Raspberry Pi 5<br/>PI-CAM + PI-COMMS + PI-MGMT<br/>Linux / systemd / storage"]
+  MCU["STM32H755<br/>OBC · HardRT + DAS"]
+  FPGA["FPGA processing device<br/>image / AI acceleration"]
+
+  GS <-->|"Ground-facing transport"| PI5
+  PI5 <-->|"control and telemetry transport"| MCU
+  PI5 <-->|"payload-object transport"| FPGA
+  MCU <-->|"processing control / status"| FPGA
 ```
+
+The edges describe physical-host **communication relationships**, not proof that any particular carrier or peripheral is wired and working on the current bench.
 
 Camera and Antenna are therefore **two first-class responsibilities of the initial Raspberry Pi 5** while remaining independent logical services. The Pi is expected to do both: acquire/manage payload imagery and provide the spacecraft communications endpoint toward Ground/OBC. A later deployment may move either service to a different Linux computer without changing its mission responsibility.
 
@@ -104,18 +134,24 @@ The Raspberry Pi shall be treated as one physical spacecraft payload computer wi
 
 Linux platform management supervises both functions but is not itself a third primary mission role. It is exposed as supporting endpoint **PI-MGMT (`0x104`)** so the OBC can restart/update Camera or Antenna even when the target mission process is not responsive.
 
-A representative service layout is:
+A representative host-service layout is:
 
-```text
-Linux
- |
- +-- exn-camera.service
- +-- exn-antenna.service
- +-- exn-platform.service      PI-MGMT / 0x104
- +-- system watchdog
- +-- journald / telemetry collection
- +-- persistent payload storage
+```mermaid
+flowchart TB
+  subgraph PI5["Raspberry Pi 5 · Linux host"]
+    HOST["Linux / systemd<br/>watchdog · journald · persistent storage"]
+    CAM["exn-camera.service<br/>PI-CAM · 0x101"]
+    ANT["exn-antenna.service<br/>PI-COMMS · 0x103"]
+    PM["exn-platform.service<br/>PI-MGMT · 0x104"]
+    HOST --> CAM
+    HOST --> ANT
+    HOST --> PM
+    PM -.->|"monitor / restart"| CAM
+    PM -.->|"monitor / restart"| ANT
+  end
 ```
+
+PI-MGMT interfaces with Linux supervision facilities; it does not replace `systemd` or become the sole watchdog itself.
 
 ### 4.1 Camera service
 
@@ -165,46 +201,49 @@ EXN deliberately distinguishes the control plane from the bulk data plane.
 
 ### 5.1 Control plane
 
-The nominal flight-like command path is:
+The OBC authorizes downstream operations even when the executor runs on a different processor or operating system.
 
-```text
-Ground
-  -> Antenna Service
-  -> STM32 OBC
-  -> selected payload endpoint
+```mermaid
+flowchart LR
+  GS["Ground"]
+  ANT["PI-COMMS<br/>Antenna"]
+  OBC["STM32 OBC<br/>command authority"]
+  CAM["PI-CAM"]
+  FPGA["FPGA"]
+  PM["PI-MGMT"]
+
+  GS -->|"uplink TC"| ANT
+  ANT -->|"forward TC"| OBC
+  OBC -->|"capture / configure"| CAM
+  OBC -->|"process / transfer"| FPGA
+  OBC -->|"restart / update"| PM
 ```
 
-For example:
-
-```text
-Ground -> Antenna -> OBC -> Camera
-Ground -> Antenna -> OBC -> FPGA
-```
-
-The existing HIL/ground implementation may still connect GS directly to the MCU. That is a deployment profile, not a change in control ownership.
+The HIL deployment may connect the Ground tooling directly to a physical OBC or simulator. This changes transport topology, not command authority.
 
 ### 5.2 Data plane
 
-Payload data may bypass the MCU as a **bulk-data router** while the OBC still controls what is downlinked.
+Payload bytes may bypass the MCU as a **bulk-data router**, while the OBC still controls what may be transferred.
 
-Typical commanded flow:
+```mermaid
+flowchart LR
+  OBC["STM32 OBC<br/>authorizes transfers"]
+  CAM["PI-CAM<br/>image products"]
+  FPGA["FPGA<br/>processed products"]
+  ANT["PI-COMMS<br/>Antenna"]
+  GS["Ground"]
 
-```text
-OBC -> Camera: downlink object X
-Camera -> Antenna -> Ground
-
-OBC -> FPGA: downlink result Y
-FPGA -> Antenna -> Ground
+  OBC -.->|"transfer instruction"| CAM
+  OBC -.->|"transfer instruction"| FPGA
+  CAM -->|"input object"| FPGA
+  FPGA -->|"result to Camera"| CAM
+  CAM ==>|"bulk product"| ANT
+  FPGA ==>|"bulk result"| ANT
+  ANT ==>|"downlink"| GS
+  FPGA -.->|"small result / metadata"| OBC
 ```
 
-Other valid data paths include:
-
-```text
-Camera -> FPGA -> Camera -> Antenna -> Ground
-FPGA -> OBC                         decision metadata / small result
-```
-
-The architectural rule is therefore **OBC-controlled, source-to-Antenna data delivery**. The producer sends the bulk bytes directly to the Antenna service, and the Antenna transmits them to Ground. The OBC may still receive metadata, classification results, status, or completion events without forwarding the payload itself.
+**Thick arrows** represent bulk payload delivery, **thin solid arrows** represent product handoffs, and **dashed arrows** represent control/metadata. The OBC owns the transfer decision, but it does not have to relay image bytes. Antenna remains the Ground-link endpoint.
 
 ## 6. FPGA processing and result routing
 
@@ -284,35 +323,13 @@ Direct downlink is conditional on Antenna link availability and mission policy. 
 
 SpWKit may be used as a logical SpaceWire-style interconnect and simulation layer between EXN endpoints.
 
-A useful deployment can expose several independent logical links over one real Ethernet carrier, for example:
-
-```text
-Physical Ethernet
-      |
-      +-- Camera <-> OBC
-      +-- Antenna <-> OBC
-      +-- Camera <-> FPGA
-      +-- Camera <-> Antenna
-      +-- FPGA <-> Antenna
-```
+A useful deployment can expose Camera–OBC, Antenna–OBC, Camera–FPGA, Camera–Antenna and FPGA–Antenna logical links over one real Ethernet carrier. See the [shared-Ethernet logical-link diagram](diagrams.md#7-logical-links-over-shared-ethernet).
 
 This lets EXN model multiple spacecraft communication relationships without requiring one physical cable per logical link.
 
 SpWKit remains a reusable independent project. EXN should consume only the public transport/link behavior that it needs. **Commercial/private FPGA SpaceWire implementation repositories are outside EXN scope.** The EXN FPGA node is defined by its payload-processing role, not by any separate SpaceWire FPGA product.
 
-On STM32, any future SpWKit-over-Ethernet binding should preserve the library boundaries:
-
-```text
-EXN application
-      |
-   SpWKit
-      |
-transport-provider boundary
-      |
-     DAS
-      |
-STM32 Ethernet hardware
-```
+On STM32, any future SpWKit-over-Ethernet binding should preserve the application-owned transport-provider boundary. That layering is shown in the software-composition diagram below.
 
 SpWKit must not require DAS directly, and DAS must not know about SpWKit. HardRT provides scheduling, synchronization, timing, IRQ-to-task signalling, and timeout/retry execution around the application and transport integration.
 
@@ -322,50 +339,42 @@ EXN treats the PUS service catalogue as an application-interface layer above CCS
 
 The normative EXN wire profile is **PUS Revision C** as defined in [`ICD.md`](ICD.md) and [`services.md`](services.md). Any remaining PUS-A code in component repositories is migration debt and shall be replaced rather than extended.
 
-The target service split is:
+The active service split is:
 
-- standard Service 1 for request verification;
-- standard Service 3 for housekeeping, with EXN System HK using mission-specific subtypes;
-- standard Service 5 for event reporting;
-- standard Service 9 for time management, with a mission-specific time-set request if required;
-- standard Service 20 for parameter management;
-- mission-specific Service 200 for Camera control;
-- mission-specific Service 210 for payload/AI processing;
-- mission-specific Service 220 for payload-object transfer;
-- standard Service 23 reserved for its PUS file-management meaning.
+- standard Services **1, 3, 5, 8, 9, 12 and 20** for request verification, HK, events, function management, time, monitoring and runtime parameters;
+- mission-specific Services **200, 210, 220 and 230** for Camera, processing, payload-object transfer and software management;
+- standard Service **23** reserved for its PUS File Management meaning, not repurposed for image transfer.
+
+The [service deployment map](services.md#6-service-deployment-map) contains the complete endpoint-by-service view.
 
 This distinction is architectural, not cosmetic. A transport implementation such as SpWKit carries complete packet bytes and does not redefine PUS services; likewise, FPGA image-processing logic does not acquire communications-service ownership merely because it can physically emit results.
 
-The service profile shall be frozen before the placeholder MCU and FPGA repositories become implementation baselines, so those components do not encode the current legacy collisions into new APIs.
+The central PUS-C service profile is the normative baseline for current and future endpoint implementations.
 
-## 9. Reusable software stack
+## 9. Reusable software composition
 
-```text
-EXN mission applications / services
-      |
-      +-- CCSDSPack      CCSDS/PUS packet model
-      +-- SpWKit         optional logical SpaceWire/interconnect layer
-      +-- HardRT         STM32 RTOS/synchronization/runtime
-      +-- DAS            MCU/device/board abstraction
+Reusable libraries are **peer dependencies consumed by an EXN application**, not one vertical framework that owns every layer below it. The diagram shows an STM32 integration with an **optional** SpWKit transport provider implemented by the application.
+
+```mermaid
+flowchart TB
+  APP["exn-mcu-rtos<br/>OBC application"]
+  CCSDS["CCSDSPack<br/>CCSDS / PUS packets"]
+  RT["HardRT<br/>tasks / timing / synchronization"]
+  SPW["SpWKit<br/>optional logical-link API"]
+  PROVIDER["EXN transport provider<br/>application adapter"]
+  DAS["DAS<br/>STM32 device abstraction"]
+  HW["STM32H755<br/>hardware"]
+
+  APP -->|"packet API"| CCSDS
+  APP -->|"runtime API"| RT
+  APP -->|"device API"| DAS
+  APP -.->|"optional link API"| SPW
+  SPW -.->|"transport callbacks"| PROVIDER
+  PROVIDER -->|"device operations"| DAS
+  DAS --> HW
 ```
 
-The dependencies are composed by the EXN component application. They are not one vertical framework that owns the layer below it.
-
-For the STM32 control node in particular:
-
-```text
-                 exn-mcu-rtos
-                      |
-        +-------------+-------------+
-        |             |             |
-    CCSDSPack      HardRT         SpWKit
-                                    |
-                             transport provider
-                                    |
-                                   DAS
-                                    |
-                                STM32H755
-```
+Dashed edges are optional integration relationships. SpWKit and HardRT do not directly depend on DAS. This diagram explains application composition; it is not a claim about the libraries' internal linker dependencies.
 
 ## 10. Interface ownership
 

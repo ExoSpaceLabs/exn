@@ -89,39 +89,39 @@ Per endpoint the OBC tracks:
 
 Normative default supervision parameters are defined in `../component-services.md` and exposed through Service 20.
 
-Default integration policy is:
+Default integration policy (all values are configurable with OBC Service 20):
 
-```text
-HEARTBEAT request period       2 s
-HEALTH request period         10 s
-3 missed heartbeats           -> STALE
-15 s unavailable              -> OFFLINE
-60 s unavailable              -> automatic recovery eligible
-120 s recovery cooldown       -> default retry spacing
-3 automatic recoveries        -> default retry limit
-```
+| Policy | Integration default |
+|---|---:|
+| HEARTBEAT request interval | 2 s |
+| HEALTH request interval | 10 s |
+| Transition to STALE | 3 missed heartbeats |
+| Transition to OFFLINE | 15 s unavailable |
+| Automatic recovery eligible | 60 s unavailable |
+| Recovery cooldown | 120 s |
+| Automatic recovery attempt limit | 3 |
 
-All values are configurable through OBC Service 20.
+Example for a non-responsive FPGA:
 
-Example:
+```mermaid
+sequenceDiagram
+  participant FPGA as FPGA endpoint
+  participant OBC as STM32 OBC
+  participant RESET as Independent reset/power controller
 
-```text
-FPGA last heartbeat at t=0
-
-t=6 s    OBC: FPGA supervision = STALE
-t=15 s   OBC: FPGA supervision = OFFLINE
-t=60 s   OBC: recovery policy triggers
-          -> configured recovery action
-          -> recovery state = ACTION_SENT / WAITING_FOR_HEALTH
-
-FPGA returns heartbeat:
-          -> supervision = OK
-          -> recovery = RECOVERED
-          -> updated uptime/restart count cached
-
-or no independent reset path exists:
-          -> recovery = SUPPRESSED
-          -> Ground sees this in System HK
+  FPGA-->>OBC: Last valid HEARTBEAT at t=0
+  Note over OBC: t≈6 s · supervision = STALE
+  Note over OBC: t≈15 s · supervision = OFFLINE
+  Note over OBC: t≈60 s · recovery policy eligible
+  alt independent reset/power path available and enabled
+    OBC->>RESET: Apply configured recovery action
+    Note over OBC: recovery = WAITING_FOR_HEALTH
+    FPGA-->>OBC: New HEARTBEAT (if recovered)
+    Note over OBC: supervision = OK / recovery = RECOVERED
+  else no usable independent reset path
+    Note over OBC: recovery = SUPPRESSED
+    Note over OBC: Record reason and outcome in System HK / journal
+  end
 ```
 
 A software reboot is only possible while a management path remains responsive. Recovery of a totally unreachable Pi/FPGA requires an independent reset or power-control path, which belongs to future platform/EPS integration.
@@ -179,15 +179,16 @@ Event payload format is the common Service 5 model in `../component-services.md`
 
 ## 7. Service 8 component management
 
-The OBC may perform/route Service 8 functions including:
+Representative Service 8 operations are:
 
-```text
-OBC -> PI-MGMT: restart Camera
-OBC -> PI-MGMT: restart Antenna
-OBC -> PI-MGMT: reboot Pi
-OBC -> FPGA: reinitialize processing endpoint
-Ground -> OBC: reboot OBC
-```
+| Requesting authority | Target endpoint | Operation |
+|---|---|---|
+| OBC | PI-MGMT | Restart Camera or Antenna service |
+| OBC | PI-MGMT | Reboot Raspberry Pi |
+| OBC | FPGA | Reinitialize processing service, if responsive |
+| Ground via Antenna | OBC | Authorized OBC reboot |
+
+See the [Camera recovery sequence](../diagrams.md#9-restart-failed-camera-service).
 
 A Pi mission-service restart is addressed to PI-MGMT, not to the failing service itself.
 
@@ -223,7 +224,7 @@ Initial OBC parameters are defined in `../component-services.md`, including:
 - heartbeat period;
 - health-report period;
 - missed-heartbeat limit;
-- automatic-restart enable;
+- automatic-recovery enable;
 - time resynchronization period;
 - maximum accepted synchronization age;
 - default transfer chunk size.
@@ -235,7 +236,7 @@ Restarting a component, synchronizing time, starting Camera acquisition, or subm
 The OBC shall be able to:
 
 - query Camera capabilities;
-- set/get Service 200 Camera controls;
+- set/get the batched Service 200 Camera configuration;
 - start/stop acquisition;
 - inspect acquisition status;
 - list Camera products;
@@ -270,12 +271,7 @@ state
 result
 ```
 
-Ground downlink is OBC-controlled but source-to-Antenna:
-
-```text
-OBC -> Camera/FPGA: transfer object to Ground
-Camera/FPGA -> Antenna -> Ground
-```
+Ground downlink is OBC-controlled but source-to-Antenna: the OBC instructs Camera or FPGA to transfer a specific object, then its producer delivers the bulk bytes through Antenna to Ground. See [data-plane routing](../architecture.md#52-data-plane).
 
 ## 14. Software management
 
