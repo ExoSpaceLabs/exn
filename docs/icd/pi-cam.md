@@ -588,12 +588,7 @@ Each product records capture time from the EXN mission clock independently from 
 ## 12. Recovery
 
 PI-CAM itself may provide a Service 8 reinitialize-camera function while still responsive.
-
-Process-level restart is commanded:
-
-```text
-OBC requests PI-MGMT to restart `exn-camera.service`
-```
+Process-level restart is commanded by the **OBC through PI-MGMT**, which restarts `exn-camera.service` using the Linux service supervisor.
 
 This remains functional even when PI-CAM is unresponsive.
 
