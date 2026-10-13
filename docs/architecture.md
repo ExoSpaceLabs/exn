@@ -106,30 +106,36 @@ These are **permitted logical paths**, not a separate physical wire for each edg
 
 ## 3. Physical deployment
 
-The selected **reference bench interconnect** is Wi-Fi between PC/GS and Pi 5 (through a secured AP or PC hotspot), plus a **separate switched wired Ethernet LAN** between Pi 5, STM32H755 OBC and AMD Kria KV260.
+The selected **reference bench interconnect** is deliberately **switchless**:
+
+- PC/GS to PI-COMMS over a secured Wi-Fi AP or PC hotspot;
+- STM32 OBC to Pi 5 through an independent 3.3 V UART;
+- STM32 OBC to Kria KV260 through a second independent 3.3 V UART implemented on the KV260 **J2 Pmod via PL**;
+- Pi 5 to KV260 directly by a single Gigabit Ethernet cable for image transfers.
 
 ```mermaid
 flowchart TB
   GS["PC / Ground Station"]
   WIFI["Secured Wi-Fi AP<br/>or PC-hosted hotspot"]
   subgraph BENCH["EXN reference bench"]
-    PI5["Pi 5 · wlan0 / eth0<br/>PI-CAM + PI-COMMS + PI-MGMT"]
-    SWITCH["External Ethernet switch"]
-    MCU["STM32H755 OBC<br/>10/100 Ethernet"]
-    FPGA["Kria KV260 FPGA<br/>Gigabit Ethernet"]
-    PI5 <-->|"Gigabit Ethernet"| SWITCH
-    SWITCH <-->|"100 Mb Ethernet"| MCU
-    SWITCH <-->|"Gigabit Ethernet"| FPGA
+    PI5["Pi 5 · Wi-Fi / UART / Ethernet<br/>PI-CAM + PI-COMMS + PI-MGMT"]
+    MCU["STM32H755 OBC<br/>LPUART1 + USART2"]
+    FPGA["Kria KV260<br/>PL Pmod UART + Ethernet"]
+    MCU <-->|"UART A · 3.3 V"| PI5
+    MCU <-->|"UART B · Pmod/PL"| FPGA
+    PI5 <-->|"Direct Gigabit Ethernet"| FPGA
   end
   GS <-->|"Wi-Fi"| WIFI
   WIFI <-->|"Wi-Fi"| PI5
 ```
 
-This topology **requires an external Ethernet switch**; its presence and link tests are not yet demonstrated. PI-COMMS terminates the Wi-Fi link, and only the application-level CCSDS/PUS packets are forwarded between Ground and the onboard LAN. The Pi is not an IP router/NAT gateway to OBC or FPGA.
+**No Ethernet switch, OBC TCP/IP stack or separate network adapter is required.** The Pi needs an independently supervised `exn-linkd` UART packet router so a PI-COMMS crash does not also block OBC access to PI-MGMT. The FPGA UART requires a minimal PL controller/driver and is unavailable until its controlling bitstream is configured.
 
-The normative reference deployment, including wired static IPv4 assignments, per-endpoint TCP listeners, CCSDS-on-TCP framing, allowed paths and failure handling, is defined in the [inter-device link ICD](icd/inter-node-links.md). A later deployment can replace this carrier without changing mission APIDs or PUS services.
+UART serial framing uses COBS with `0x00` delimiter around complete PUS-C CCSDS packets; Pi↔KV260 Ethernet and Wi-Fi carry complete CCSDS packets over TCP. The two-host wired IP subnet is `10.77.0.0/30`; there is no Wi-Fi-to-Ethernet IP routing/NAT.
 
-Camera and Antenna remain **two first-class mission responsibilities of the same Raspberry Pi 5**, independently addressable through PI-CAM and PI-COMMS. PI-MGMT is their supporting platform-supervision endpoint. The physical host placement can change later without changing logical responsibility.
+The [inter-device link ICD](icd/inter-node-links.md) defines the pin candidates, electrical verification, packet framing, deployment addresses, ownership and failure behavior. UART recovery independence and an actual reset/power-control line remain separate concerns, not assumptions about this wiring.
+
+Camera and Antenna remain **two first-class mission responsibilities of the same Raspberry Pi 5**, independently addressable through PI-CAM and PI-COMMS. PI-MGMT is their supporting platform-supervision endpoint. Physical host placement may change without changing their logical responsibility.
 
 ## 4. Raspberry Pi dual-role payload node
 
