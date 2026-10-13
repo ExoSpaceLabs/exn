@@ -264,7 +264,7 @@ The architecture is ahead of the component implementations, deliberately:
 
 The current integration direction is:
 
-1. use **PUS Revision C everywhere**; migrate the existing GS/HIL and simulator now rather than maintaining a PUS-A compatibility branch;
+1. use **PUS Revision C everywhere**; EXN-GS/HIL and the simulator have already been migrated and no PUS-A compatibility branch is maintained;
 2. keep released CCSDSPack v2.0.0 as the reproducible dependency until a newer release is actually published and adopted;
 3. keep the central ICD, CCSDSPack templates, JSON/tooling artifacts, MCU header and component implementations synchronized to the same PUS-C service catalogue;
 4. bring the MCU application up on **HardRT 0.5.1 + DAS v0.1.0** against the central EXN ICD;
