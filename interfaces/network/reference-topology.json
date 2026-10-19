@@ -233,6 +233,50 @@
     "KV260 J4 microUSB FTDI UART/JTAG is reserved for normal debugger/console access",
     "All IP and port allocations are deployment values, not PUS-C endpoint identity",
     "No independent hard reset/power cycle path is provided",
-    "No USB CDC implementation, Pi gateway, or physical integration is claimed operational"
-  ]
+    "No USB CDC implementation, Pi gateway, or physical integration is claimed operational",
+    "Declared full reference links do not imply required installation in the P0 OBC+PI Ground deployment"
+  ],
+  "deployment_profiles": {
+    "obc_pi_ground_mvp": {
+      "priority": "P0",
+      "required_links": [
+        "ground",
+        "obc_pi_control"
+      ],
+      "required_endpoints": [
+        "OBC",
+        "PI-COMMS"
+      ],
+      "optional_endpoints_not_required": [
+        "PI-CAM",
+        "PI-MGMT",
+        "FPGA"
+      ],
+      "required_pi_transport_process": "exn-linkd",
+      "requires_das_usb_device_controller": false,
+      "requires_kv260": false,
+      "acceptance": "GS-Pi-COMMS-exn-linkd-UART-OBC-PUS-C-Service1-HK-round-trip"
+    },
+    "full_reference": {
+      "priority": "later",
+      "required_links": [
+        "ground",
+        "obc_pi_control",
+        "obc_fpga_control",
+        "pi_fpga_data"
+      ],
+      "required_endpoints": [
+        "OBC",
+        "PI-CAM",
+        "FPGA",
+        "PI-COMMS",
+        "PI-MGMT"
+      ],
+      "optional_endpoints_not_required": [],
+      "required_pi_transport_process": "exn-linkd",
+      "requires_das_usb_device_controller": true,
+      "requires_kv260": true,
+      "acceptance": "Full-KV260-USB-and-Ethernet-integration"
+    }
+  }
 }

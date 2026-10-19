@@ -37,6 +37,31 @@ class ReferenceUARTMappingTests(unittest.TestCase):
     def test_reference_contract(self):
         self.check_valid()
 
+    def test_p0_does_not_depend_on_usb_or_fpga(self):
+        file = self.root / "interfaces/network/reference-topology.json"
+        profile = json.loads(file.read_text(encoding="utf-8"))
+        p0 = profile["deployment_profiles"]["obc_pi_ground_mvp"]
+        self.assertEqual(set(p0["required_links"]), {"ground", "obc_pi_control"})
+        self.assertEqual(set(p0["required_endpoints"]), {"OBC", "PI-COMMS"})
+        self.assertFalse(p0["requires_das_usb_device_controller"])
+        self.check_valid()
+
+    def test_reject_usb_made_mandatory_for_p0(self):
+        file = self.root / "interfaces/network/reference-topology.json"
+        profile = json.loads(file.read_text(encoding="utf-8"))
+        profile["deployment_profiles"]["obc_pi_ground_mvp"]["required_links"].append("obc_fpga_control")
+        file.write_text(json.dumps(profile), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "P0 must not require USB"):
+            self.check_valid()
+
+    def test_reject_fpga_required_for_p0(self):
+        file = self.root / "interfaces/network/reference-topology.json"
+        profile = json.loads(file.read_text(encoding="utf-8"))
+        profile["deployment_profiles"]["obc_pi_ground_mvp"]["required_endpoints"].append("FPGA")
+        file.write_text(json.dumps(profile), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "P0 must require only"):
+            self.check_valid()
+
     def test_reject_unqualified_uart_peripheral_in_json(self):
         file = self.root / "interfaces/network/reference-topology.json"
         profile = json.loads(file.read_text(encoding="utf-8"))

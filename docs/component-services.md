@@ -201,6 +201,8 @@ Each endpoint exposes predeclared HK structure IDs.
 
 The OBC may poll or enable periodic heartbeat reports. Recommended integration defaults are **1 s heartbeat** and **10 s full health**, but these are runtime policy rather than wire constants.
 
+Endpoint installation/enablement is a **deployment configuration dimension**, not another value of the on-wire supervision state below. An endpoint that is deliberately absent (for example FPGA in the `obc_pi_ground_mvp` UART-only deployment) is not registered and is not polled, marked OFFLINE, recovered or counted as a heartbeat failure. A **configured/registered** endpoint that loses its link remains registered and is reported STALE/OFFLINE using the existing enum; firmware must never silently treat a runtime disconnect as de-provisioning. This distinction preserves the existing PUS-C identifiers and wire layouts. Absent-endpoint commands receive existing Service 1 failure semantics rather than indefinite waiting or fabricated success.
+
 The OBC maintains its own **supervision state** for every registered endpoint. This state is authoritative from the spacecraft point of view and is deliberately separate from the endpoint's last self-reported operational state.
 
 | Value | Supervision state | Meaning |
@@ -926,7 +928,7 @@ The OBC may use periodic endpoint-generated HK instead where configured, but the
 
 A Ground `TC[3,128]` does **not** select components and does not normally cause immediate downstream polling. It asks the OBC to serialize its current spacecraft snapshot into `TM[3,129]`.
 
-If a subordinate endpoint is stale or offline, its entry remains in the snapshot with the corresponding OBC supervision state and its last valid sample time. Missing data is therefore itself telemetry rather than a reason for the complete System-HK response to fail.
+If a **registered/configured** subordinate endpoint is stale or offline, its entry remains in the snapshot with the corresponding OBC supervision state and its last valid sample time. Optional endpoints not installed in the chosen deployment have no registered entry; the configuration/capability manifest explicitly records which optional features are disabled. Missing data is therefore itself telemetry rather than a reason for the complete System-HK response to fail.
 
 A typical operation is **Ground request → OBC-authorized Camera acquisition → FPGA processing → OBC decision → selected producer's direct downlink through Antenna**. This is an example, not a compulsory processing pipeline. See the [capture, processing and result-routing sequences](diagrams.md#3-capture---fpga-processing---camera-product---ground).
 
