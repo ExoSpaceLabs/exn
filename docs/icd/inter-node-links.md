@@ -44,7 +44,8 @@ Neither OBC nor a network switch carries Pi↔KV260 bulk traffic. The STM32 Ethe
 
 Reference connector allocation, subject to bench pinout verification:
 
-- STM32H755: `LPUART1` on `PB6 TX`, `PB7 RX` via board expansion connectors.
+- STM32H755: **`USART1` with `AF7`**, on `PB6 TX` / `PB7 RX` (NUCLEO Arduino D1/D0, exposed on expansion headers). Use the released DAS `DAS_BOARD_UART_ARDUINO` board route; do not select a second peripheral for the same pins.
+- The STM32H755 silicon also permits `LPUART1` on PB6/PB7 via `AF8`, but **that is not this deployment's selected firmware route**. The choice of USART1/AF7 reuses the DAS v0.1.0 qualified STM32H755 Nucleo API. See [STM32H755 datasheet Table 9](https://www.st.com/resource/en/datasheet/dm00600522.pdf) and [DAS UART board routing](https://github.com/Inczert/device-abstraction-stack/blob/main/docs/uart.md).
 - Pi 5: UART0 remapped to GPIO14 TX (40-pin header pin 8), GPIO15 RX (pin 10), plus a header GND.
 - Cross TX/RX and connect GND. Both are 3.3 V logic; do not connect 5 V UART.
 - Explicitly enable the Pi's header UART and ensure no console/login shell uses it. Pi 5's normal primary debug UART may use its separate debug header rather than GPIO14/15.
@@ -186,7 +187,7 @@ Both OBC control links are **bidirectional after link establishment**. Unsolicit
 
 ## 9. Commissioning and validation
 
-1. Confirm Nucleo LPUART1 expansion-pin routing, Pi GPIO UART pinmux/debug-console ownership and 3.3 V levels before wiring UART.
+1. Confirm Nucleo **USART1 / AF7** board routing on PB6 TX / PB7 RX (Arduino D1/D0 and expansion-header access), Pi GPIO14/15 UART0 pinmux/debug-console ownership and 3.3 V/common ground before wiring UART. Record the tested DAS board-resource mapping, board solder bridges and connector pins.
 2. Power the Nucleo independently as required by ST UM2408, then connect a USB-A-to-Micro-B data cable from KV260 USB-A host to **Nucleo CN13**. Implement STM32 USB FS CDC-ACM device enumeration and Linux `cdc_acm` host discovery with stable device matching.
 3. Connect Pi↔KV260 with one Ethernet cable, configure only the `10.77.0.0/30` link, and test ping and TCP packet round-trip at negotiated Gigabit rate.
 4. Send bounded COBS-framed PUS-C packets with CRC over Pi UART and KV260 USB CDC independently. Test USB unplug/re-enumeration, malformed frames, oversized frames and reconnect.

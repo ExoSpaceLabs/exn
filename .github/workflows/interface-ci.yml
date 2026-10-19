@@ -63,6 +63,7 @@ jobs:
       - name: Validate reference inter-device topology
         run: |
           python3 tools/validate_reference_topology.py
+          python3 -m unittest discover -s tools -p 'test_reference_topology.py' -v
 
       - name: Compile header contract as C
         run: |

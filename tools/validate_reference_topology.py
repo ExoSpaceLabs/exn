@@ -14,8 +14,10 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def main():
-    d = json.loads(PROFILE.read_text(encoding="utf-8"))
+def validate(root=ROOT):
+    """Validate topology JSON and normative ICD consistency for the selected hardware."""
+    profile = root / "interfaces" / "network" / "reference-topology.json"
+    d = json.loads(profile.read_text(encoding="utf-8"))
     require(d["schema_version"] == 3, "expected switchless USB/CDC v3 topology schema")
     require(d["packet_profile"] == "CCSDS-Space-Packet/PUS-Revision-C/CRC16", "PUS profile drift")
     budget = d["packet_budget"]
@@ -39,6 +41,8 @@ def main():
     require(pi_uart["baud_initial"] == 115200 and pi_uart["baud_qualification"] == 921600,
             "Pi UART baud mismatch")
     require(pi_uart["uart_mode"] == "8N1", "Pi UART mode mismatch")
+    require(pi_uart["peripherals"] == ["STM32:USART1", "Pi:UART0-GPIO14/15"],
+            "STM32 UART peripheral / Pi UART identity drift")
     fpga_usb = links["obc_fpga_control"]
     require(fpga_usb["media"] == "USB2.0-FS-CDC-ACM", "FPGA control must be USB CDC-ACM")
     require(fpga_usb["usb_host"] == "fpga" and fpga_usb["usb_device"] == "obc",
@@ -59,8 +63,13 @@ def main():
     hosts = {x["id"]: x for x in d["physical_hosts"]}
     require(set(hosts) == {"obc", "pi", "fpga"}, "expected three hardware hosts")
     require(hosts["obc"]["ethernet_used"] is False, "OBC must not use Ethernet")
-    require((hosts["obc"]["uart_a"]["tx_pin"], hosts["obc"]["uart_a"]["rx_pin"])
-            == ("PB6", "PB7"), "STM32 UART A pins drift")
+    obc_uart = hosts["obc"]["uart_a"]
+    require((obc_uart["tx_pin"], obc_uart["rx_pin"]) == ("PB6", "PB7"),
+            "STM32 UART A pins drift")
+    require(obc_uart["peripheral"] == "USART1" and obc_uart["alternate_function"] == "AF7",
+            "STM32 UART peripheral/alternate function drift")
+    require(obc_uart["das_board_resource"] == "DAS_BOARD_UART_ARDUINO",
+            "selected UART no longer matches the released DAS board resource")
     usb_device = hosts["obc"]["usb_cdc_device"]
     require(usb_device["connector"] == "CN13 Micro-AB" and usb_device["role"] == "USB-device",
             "STM32 USB connector/role mismatch")
@@ -124,14 +133,25 @@ def main():
              ground["protocol"], ground["port"]) == ("PI-COMMS", "wlan0", "TCP", 47000),
             "Ground Wi-Fi endpoint mismatch")
     require(ground["max_active_command_sessions"] == 1, "multiple Ground command sessions")
-    doc = (ROOT / "docs" / "icd" / "inter-node-links.md").read_text(encoding="utf-8")
-    for v in ("LPUART1", "PB6", "PB7", "CN13", "Micro-AB", "USB CDC-ACM",
+    doc = (root / "docs" / "icd" / "inter-node-links.md").read_text(encoding="utf-8")
+    for v in ("USART1", "AF7", "DAS_BOARD_UART_ARDUINO", "PB6", "PB7", "CN13", "Micro-AB", "USB CDC-ACM",
               "U44", "U46", "cdc_acm", "COBS", "10.77.0.0/30",
               "10.77.0.1", "10.77.0.2", "47101", "47102", "47103",
               "47000", "115200", "8192", "1024"):
         require(v in doc, f"normative ICD missing profile detail: {v}")
     require("No switch" in doc, "ICD must affirm no switch")
-    print("PASS: EXN Wi-Fi + Pi UART + KV260 USB CDC-ACM + direct Ethernet profile validated")
+    # All published reference ICD and architecture descriptions must select
+    # the same peripheral and AF as the machine-readable deployment profile.
+    for relpath in ("docs/icd/mcu-rtos.md", "docs/architecture.md"):
+        companion = (root / relpath).read_text(encoding="utf-8")
+        require("USART1" in companion and "AF7" in companion
+                and "PB6" in companion and "PB7" in companion,
+                f"reference UART route not reflected in {relpath}")
+    print("PASS: EXN Wi-Fi + USART1/AF7 Pi UART + KV260 USB CDC-ACM + direct Ethernet profile validated")
+
+
+def main():
+    validate(ROOT)
 
 
 if __name__ == "__main__":

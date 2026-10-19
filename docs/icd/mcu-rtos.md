@@ -2,7 +2,7 @@
 
 This document is the normative EXN ICD for the STM32 OBC endpoint.
 
-Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../services.md`, shared component behavior in `../component-services.md`, and the Pi UART and KV260 USB CDC-ACM control links in [`inter-node-links.md`](inter-node-links.md). STM32 LPUART1 serves the Pi 5; **CN13 USB OTG FS in device mode** serves the KV260's PS USB-A Linux host. Bounded COBS framing, USB device enumeration/stream queues, CRC validation and bench qualification remain implementation work. The OBC does **not** need a TCP/IP stack, wired Ethernet or an FPGA PL UART for this reference topology.
+Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../services.md`, shared component behavior in `../component-services.md`, and the Pi UART and KV260 USB CDC-ACM control links in [`inter-node-links.md`](inter-node-links.md). STM32 **USART1 / AF7 on PB6 TX / PB7 RX** serves the Pi 5 through the qualified DAS board route; **CN13 USB OTG FS in device mode** serves the KV260's PS USB-A Linux host. Bounded COBS framing, USB device enumeration/stream queues, CRC validation and bench qualification remain implementation work. The OBC does **not** need a TCP/IP stack, wired Ethernet or an FPGA PL UART for this reference topology.
 
 ## 1. Identity and role
 
