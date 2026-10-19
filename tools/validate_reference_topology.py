@@ -28,6 +28,22 @@ def validate(root=ROOT):
     links = {x["id"]: x for x in d["physical_links"]}
     require(set(links) == {"ground", "obc_pi_control", "obc_fpga_control", "pi_fpga_data"},
             "unexpected physical links (no switch or OBC Ethernet)")
+    profiles = d.get("deployment_profiles")
+    require(isinstance(profiles, dict) and set(profiles) == {"obc_pi_ground_mvp", "full_reference"},
+            "missing initial UART-only and full reference deployment profiles")
+    minimal, full = profiles["obc_pi_ground_mvp"], profiles["full_reference"]
+    require(minimal["priority"] == "P0", "OBC+Pi Ground must be P0 milestone")
+    require(set(minimal["required_links"]) == {"ground", "obc_pi_control"},
+            "P0 must not require USB, FPGA or Ethernet links")
+    require(set(full["required_links"]) == set(links), "full profile must retain selected link ICD")
+    require(minimal["required_pi_transport_process"] == "exn-linkd"
+            and full["required_pi_transport_process"] == "exn-linkd", "Pi UART packet router required")
+    require(minimal["requires_das_usb_device_controller"] is False
+            and minimal["requires_kv260"] is False,
+            "USB or KV260 incorrectly gates OBC+Pi ground profile")
+    require(full["requires_das_usb_device_controller"] is True
+            and full["requires_kv260"] is True,
+            "full FPGA profile lost mandatory USB/processor dependencies")
     for name, endpoints in {
         "ground": {"gs", "pi"},
         "obc_pi_control": {"obc", "pi"},
@@ -107,6 +123,20 @@ def validate(root=ROOT):
     }
     eps = d["endpoints"]
     require(len(eps) == len(expected), "endpoint count mismatch")
+    minimal_endpoints = set(minimal["required_endpoints"])
+    full_endpoints = set(full["required_endpoints"])
+    require(minimal_endpoints == {"OBC", "PI-COMMS"},
+            "P0 must require only OBC and Antenna mission endpoints")
+    require(full_endpoints == (set(expected) - {"GS"}),
+            "full reference endpoint catalogue drift")
+    require(set(minimal["optional_endpoints_not_required"]) == (full_endpoints - minimal_endpoints),
+            "P0 optional endpoint catalogue drift")
+    for deployment in (minimal, full):
+        require(set(deployment["required_links"]).issubset(links), "profile requires unknown link")
+        require(set(deployment["required_endpoints"]).issubset(expected),
+                "profile requires unknown endpoint")
+        require(not (set(deployment["optional_endpoints_not_required"])
+                     & set(deployment["required_endpoints"])), "optional and required overlap")
     names, apids, pusids, sockets = set(), set(), set(), set()
     for ep in eps:
         name = ep["name"]
@@ -140,6 +170,10 @@ def validate(root=ROOT):
               "47000", "115200", "8192", "1024"):
         require(v in doc, f"normative ICD missing profile detail: {v}")
     require("No switch" in doc, "ICD must affirm no switch")
+    require("obc_pi_ground_mvp" in doc and "full_reference" in doc,
+            "normative link ICD missing staged deployment profiles")
+    require("not registered" in doc and "Service 1" in doc,
+            "normative ICD missing absent-vs-offline handling")
     # All published reference ICD and architecture descriptions must select
     # the same peripheral and AF as the machine-readable deployment profile.
     for relpath in ("docs/icd/mcu-rtos.md", "docs/architecture.md"):

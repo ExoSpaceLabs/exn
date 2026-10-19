@@ -4,6 +4,26 @@
 
 See [system architecture](../architecture.md), [master PUS-C packet ICD](../ICD.md), [Ground ICD](gs.md), [OBC ICD](mcu-rtos.md), [Pi ICD](linux-payload.md), [FPGA ICD](fpga-ai.md), and the matching [machine-readable reference profile](../../interfaces/network/reference-topology.json).
 
+## Integration deployment profiles and priorities
+
+**The full reference ICD defines interfaces when installed; it does not require every endpoint, cable, driver or transport to exist in every OBC build.** The reference pinouts/APIDs and wire framing remain fixed when those features are enabled.
+
+| Profile | Installed endpoints for acceptance | Required operational path | Deferred features |
+|---|---|---|---|
+| **P0 — OBC + Antenna / Ground** (`obc_pi_ground_mvp`) | OBC `0x100`, PI-COMMS/Antenna `0x103` | PC/GS ↔ Pi Wi-Fi/TCP ↔ PI-COMMS ↔ independently supervised `exn-linkd` ↔ USART1/AF7 3.3 V UART ↔ STM32 OBC | FPGA, KV260 USB CDC, Pi↔KV260 Ethernet, PI-CAM and PI-MGMT are *not* prerequisites for P0; PI-MGMT is the next resilience increment |
+| **Full reference** (`full_reference`) | OBC, PI-CAM, FPGA, PI-COMMS, PI-MGMT | P0 path plus the specified FPGA USB control, direct Pi↔KV260 Ethernet and local services | None of these additional interfaces may be silently substituted with PL UART or OBC Ethernet |
+
+For **P0**, HardRT + DAS UART and the selected C11 CCSDS/PUS-C codec are required, but **DAS USB device-controller #37, OBC CDC-ACM, KV260/FPGA code, ADC, watchdog and reset-cause hardware support do not gate boot or the Ground-to-OBC communication milestone**. USB becomes mandatory *only for a configuration that enables the FPGA control endpoint over the selected reference carrier*. The other features retain their own acceptance milestones.
+
+Deployment presence is explicit and **separate from supervision liveness**:
+
+- **Not installed, disabled, or compiled out:** do not register the optional endpoint for periodic HK/supervision; do not emit missed-heartbeat/OFFLINE alarms or attempt recovery for it. The absence of FPGA/USB is a supported P0 configuration, not a hardware fault. The system must expose its **configured feature set** in its deployment/diagnostic manifest so operators can distinguish a deliberately absent endpoint from a failure. No new PUS wire-field allocation is implied.
+- **Configured and expected but unresponsive:** keep the endpoint registered, apply the existing `UNKNOWN → STALE/OFFLINE/ERROR` supervision rules where applicable, retain its cached last-valid HK and report recovery limitations. A disconnected USB cable in a **full_reference** deployment is a real fault, not evidence the FPGA is optional at runtime.
+- **Commands requiring an absent endpoint:** reject through the existing EXN Service 1 validation/verification failure contract for unavailable targets; never silently enqueue, fabricate success or wait forever. No alternative route to an absent FPGA is implied.
+- **Local OBC continuity:** CM7 scheduling, local time, safety and watchdog policy continue if the Pi/UART/Ground link fails. Without PI-COMMS and a live UART/Wi-Fi path, **Ground cannot reach the OBC**, but that loss must not itself stop the MCU.
+
+**P0 acceptance** is a real bidirectional Ground TC → PI-COMMS → `exn-linkd` → STM32 OBC → Service 1 verification/HK/event TM → Pi → Ground loop, with malformed-frame rejection, no FPGA/USB requirement, and reboot/crash/reconnect tests. [OBC implementation](https://github.com/ExoSpaceLabs/exn-mcu-rtos) and [Pi transport](https://github.com/ExoSpaceLabs/exn-pi-cam) own software delivery. The [JSON reference profiles](../../interfaces/network/reference-topology.json) mirror the staged endpoint/link selections.
+
 ## 1. Physical connection baseline
 
 ```mermaid
@@ -28,8 +48,8 @@ flowchart TB
 |---|---|---|---|
 | PC/GS ↔ Pi | Wi-Fi, via secured AP/hotspot | Ground PUS TCs, spacecraft TM and payload downloads | selected lab assumption |
 | OBC ↔ Pi | 3.3 V UART, crossed TX/RX and common GND | Ground command gateway and Pi HK/management | to be wired/implemented |
-| OBC ↔ KV260 | **KV260 USB-A host ↔ STM32 CN13 Micro-AB USB FS device** | FPGA job commands, HK, time, recovery verification, through USB CDC-ACM | selected, not yet implemented or validated |
-| Pi ↔ KV260 | Direct Gigabit Ethernet cable | image inputs, processed products and bulk downlink | to be configured/validated |
+| OBC ↔ KV260 | **KV260 USB-A host ↔ STM32 CN13 Micro-AB USB FS device** | FPGA job commands, HK, time, recovery verification, through USB CDC-ACM | **full-reference FPGA profile only**; selected, not yet implemented or validated |
+| Pi ↔ KV260 | Direct Gigabit Ethernet cable | image inputs, processed products and bulk downlink | **full-reference FPGA profile only**; to be configured/validated |
 | PI-CAM ↔ PI-COMMS ↔ PI-MGMT | Pi Linux local IPC | same-host service dispatch and object handoff | to be implemented |
 
 The OBC↔KV260 control path uses the KV260 **processing system (PS) USB host**, not programmable logic (PL). No FPGA UART/PL IP, Pmod pinout or custom board modification is required for this link. Both the KV260's **J4 micro-USB FTDI UART/JTAG debug connection** and its **J2 Pmod** remain free for development.
@@ -179,13 +199,16 @@ Both OBC control links are **bidirectional after link establishment**. Unsolicit
 - **Wi-Fi loss** affects only PI-COMMS Ground-link availability and queued downlink. OBC↔Pi/FPGA UART supervision continues.
 - **PI-COMMS service crash:** Pi transport router and PI-MGMT remain independently operational, letting OBC request a service restart. Their independence is software/process-level, not physical redundancy.
 - **Pi power/OS failure:** loss of Pi UART A affects PI-CAM, PI-COMMS and PI-MGMT as a common-mode fault; recovery cannot rely on PI-MGMT if the entire Pi has failed.
-- **FPGA USB/CDC control loss:** OBC marks FPGA `STALE/OFFLINE` per configured policy even if its Ethernet port remains up. USB enumerated does not necessarily mean the processing service is ready.
+- **FPGA not installed/enabled in deployment:** no FPGA registration, heartbeat, USB initialization, OFFLINE alarm or recovery attempt. A build without the USB driver remains a supported P0 OBC.
+- **FPGA USB/CDC control loss (when configured/enabled):** OBC marks FPGA `STALE/OFFLINE` per configured policy even if its Ethernet port remains up. USB enumerated does not necessarily mean the processing service is ready.
 - **PL unconfigured/reconfigured:** the PS USB host and OBC USB CDC link can remain available. The processing service must report its own PL capability/configuration state and must not claim processing readiness until its required acceleration image is loaded.
 - **Automatic hard recovery:** if the KV260 PS/Linux USB host is unresponsive, USB CDC alone cannot reboot it. No independent reset/power control is wired in this reference profile; the OBC reports recovery `SUPPRESSED` rather than claiming USB is an independent power-cycle path.
 - **UART/USB stream corruption or reset:** malformed COBS or CRC failures must not produce TC execution. Bound buffers, report error counters, and resynchronize on `0x00`; USB disconnect/re-enumeration must reset framing state, not mission TC sequencing.
 - **Wi-Fi throughput competition:** bulk Service 220 transfers must not starve OBC fault/event reporting. Backpressure is reflected in transfer state; a queued TCP write is not necessarily end-to-end delivery.
 
 ## 9. Commissioning and validation
+
+**P0 commissioning executes items 1, 5 (PI-COMMS routing), 6, the OBC/antenna portion of 8 and the Pi-link fault cases of 9/10 first.** Only the full-reference FPGA milestone requires items 2, 3, 4 (USB branch) and 7. Do not label the P0 milestone blocked because CN13/USB, FPGA or Pi↔KV260 Ethernet is not installed.
 
 1. Confirm Nucleo **USART1 / AF7** board routing on PB6 TX / PB7 RX (Arduino D1/D0 and expansion-header access), Pi GPIO14/15 UART0 pinmux/debug-console ownership and 3.3 V/common ground before wiring UART. Record the tested DAS board-resource mapping, board solder bridges and connector pins.
 2. Power the Nucleo independently as required by ST UM2408, then connect a USB-A-to-Micro-B data cable from KV260 USB-A host to **Nucleo CN13**. Implement STM32 USB FS CDC-ACM device enumeration and Linux `cdc_acm` host discovery with stable device matching.

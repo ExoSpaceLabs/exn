@@ -19,6 +19,14 @@ The main rules are:
 7. **Reusable libraries remain independent projects.** EXN consumes CCSDSPack, HardRT, DAS, and optionally SpWKit. Their internal implementation scope is not part of the EXN mission architecture.
 8. **PUS services are explicitly tailored.** CCSDSPack supplies the packet/header mechanisms; EXN defines which standard PUS services it realizes and which mission-specific services it adds. Service identifiers shall not be repurposed with unrelated semantics.
 
+## Initial operating priority: OBC ↔ Pi Antenna / Ground
+
+The reference hardware topology describes the **full** EXN constellation of components, not a mandatory all-devices-at-boot dependency. The first integrated operational milestone is **P0: PC/GS → Pi PI-COMMS (Antenna) → independently supervised Pi `exn-linkd` → STM32 OBC (HardRT CM7)**, with verification, HK and TM returning to Ground. PI-COMMS is the **highest implementation priority** because it is the spacecraft's sole initial Ground gateway; this is a delivery priority, not a new APID or a change to HardRT task-priority numbering.
+
+The OBC kernel and its local safety/time/health mechanisms must boot even if Pi, USB or FPGA is missing. Ground commandability requires the configured Antenna/Wi-Fi/UART path to be present. The FPGA and USB CDC controller are modular **feature dependencies** of the later FPGA-enabled deployment only; neither DAS USB #37 nor KV260 firmware is a prerequisite for P0. PI-CAM and PI-MGMT are added independently after basic Antenna↔OBC communication, with PI-MGMT needed for later independent service-restart acceptance. Optional endpoints are explicitly configured; a deliberate omission is not an OFFLINE fault, while a configured endpoint that disconnects remains a fault.
+
+See [staged profiles and presence rules](icd/inter-node-links.md#integration-deployment-profiles-and-priorities).
+
 ## 1.1 Centralized authority, distributed execution
 
 EXN distinguishes **authority** from **execution location**.

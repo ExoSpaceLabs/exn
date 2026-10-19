@@ -68,12 +68,14 @@ The OBC shall not forward malformed or unauthorized requests merely because the 
 
 ## 4. Endpoint registry and supervision
 
-The OBC tracks:
+The OBC's **potential** subordinate endpoint catalogue is:
 
 - PI-CAM;
 - FPGA;
-- Antenna;
+- Antenna / PI-COMMS;
 - PI-MGMT.
+
+**Only endpoints enabled/installed in the selected deployment are registered for liveness supervision.** The P0 OBC+Pi Ground profile requires PI-COMMS `0x103`; PI-CAM, FPGA `0x102` and PI-MGMT may be absent at this milestone. FPGA absence shall not stop CM7 boot, UART, local OBC HK or Ground communication. A configured/expected endpoint that disappears remains registered and is supervised as a failure; disabling a failed endpoint must be an explicit configuration/operational action, never an automatic masking of faults. This uses the existing endpoint registry and PUS wire profile, with no new supervision enum. See [deployment profiles](inter-node-links.md#integration-deployment-profiles-and-priorities).
 
 Per endpoint the OBC tracks:
 
@@ -141,7 +143,7 @@ System HK is OBC-owned:
 - `TC[3,128]` Request System HK — **empty Application Data**;
 - `TM[3,129]` System HK Report — complete current spacecraft snapshot.
 
-The OBC continuously maintains the latest required HK structures for every registered endpoint as part of normal supervision. A Ground System-HK request serializes that cache; it does not normally initiate a fresh request fan-out.
+The OBC continuously maintains the latest required HK structures for every **configured/registered** endpoint as part of normal supervision. An absent optional FPGA is not an OFFLINE record in the P0 profile; a previously responsive, still-configured FPGA that disconnects must remain visible. A Ground System-HK request serializes that cache; it does not normally initiate a fresh request fan-out.
 
 The OBC includes itself plus every registered subordinate endpoint, even when an endpoint is stale or offline. For each endpoint it reports:
 
