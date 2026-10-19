@@ -28,7 +28,7 @@
       ],
       "media": "3.3V-UART",
       "peripherals": [
-        "STM32:LPUART1",
+        "STM32:USART1",
         "Pi:UART0-GPIO14/15"
       ],
       "baud_initial": 115200,
@@ -73,7 +73,9 @@
       "id": "obc",
       "board": "NUCLEO-H755ZI-Q",
       "uart_a": {
-        "peripheral": "LPUART1",
+        "peripheral": "USART1",
+        "alternate_function": "AF7",
+        "das_board_resource": "DAS_BOARD_UART_ARDUINO",
         "tx_pin": "PB6",
         "rx_pin": "PB7"
       },
