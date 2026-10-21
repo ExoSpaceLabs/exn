@@ -14,7 +14,7 @@ Common PUS-C packet rules are defined in `../ICD.md`, service semantics in `../s
 
 The OBC is the **spacecraft platform authority**: spacecraft-mode owner, command authority, component/subsystem orchestrator, System-HK aggregator, time authority and health/FDIR supervisor.
 
-The intended implementation baseline is HardRT 0.5.1 + DAS v0.1.0 on STM32H755 / NUCLEO-H755ZI-Q.
+The intended implementation baseline is HardRT 0.5.1 + DAS v0.1.0 on STM32H755 / NUCLEO-H755ZI-Q. **CM7 is the authoritative HardRT OBC core.** A later **optional CM4 asynchronous computation worker** may execute explicitly delegated noncritical jobs using bounded internal shared-memory IPC. CM7 retains command admission, PUS-C verification, time, HK, mission state and acceptance of computed results. **CM4 is internal to OBC APID `0x100`**, not a new PUS endpoint or spacecraft controller. The OBC P0 build and Ground↔Pi Antenna path shall boot and operate with CM4 disabled/unavailable; CM4 boot/HSEM/shared-memory support is an independent feature gate. No new mission-visible fields, service codes or verification rules are allocated by this internal execution decision. See the [EXN architecture](../architecture.md#optional-internal-stm32-cm4-worker).
 
 The STM32H755 is used to model the **OBC architectural role**, not to claim a flight-qualified OBC implementation. Its dual-core Cortex-M7/M4 resources are more than sufficient for the current EXN command/data-handling demonstrator and for representative distributed-subsystem orchestration. Flight deployment would additionally depend on mission-specific radiation tolerance, redundancy, memory protection, watchdog/recovery, interface, qualification and availability requirements.
 

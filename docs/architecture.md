@@ -27,6 +27,18 @@ The OBC kernel and its local safety/time/health mechanisms must boot even if Pi,
 
 See [staged profiles and presence rules](icd/inter-node-links.md#integration-deployment-profiles-and-priorities).
 
+## Optional internal STM32 CM4 worker
+
+The STM32H755 **CM7 remains the sole OBC spacecraft authority** and runs HardRT. The second Cortex-M4 core may later be enabled as a **bounded asynchronous local processing worker** inside that same OBC, without changing the first `obc_pi_ground_mvp` deployment, external links, APID `0x100` or PUS-C identity.
+
+- CM7 owns incoming TC admission, mission state, scheduling policy, time, HK, failure reporting and decisions based on results. CM4 receives only admitted, explicitly designated noncritical computation jobs through a private shared-memory job/result transport. It cannot issue independent spacecraft commands or directly commit CM7-owned state.
+- Jobs use bounded buffers, identity/generation and deadline correlation, nonblocking submission and asynchronous completion. The OBC still schedules local time/HK and services Ground while CM4 computes. Completion verification follows the **existing** EXN Service 1 command lifecycle; accepting a queued job does not mean its computation succeeded.
+- The initial OBC **boots and runs without CM4**. A CM4-enabled build requires two separately linked/qualified firmware images, defined inter-core memory/cache/peripheral ownership, boot/release/HSEM hardware primitives and a tested fault/timeout policy. Absence of the optional worker is not an OFFLINE spacecraft endpoint.
+- CM4 is **not** another PUS endpoint and has no new APID, PUS source/destination ID or independently defined mission service. Its capability and health may be exposed only through existing OBC-supported fields or through a separately reviewed central ICD extension when an actual mission-visible need arises.
+- Inter-core messages are OBC-private, **not CCSDS/PUS**. They are distinct from the optional KV260 processing endpoint `0x102`, which remains an independently supervised external device.
+
+Implementation design and staged qualification belong in [exn-mcu-rtos](https://github.com/ExoSpaceLabs/exn-mcu-rtos); any future change to OBC-visible capabilities, telemetry, events or service behavior must first be allocated here.
+
 ## 1.1 Centralized authority, distributed execution
 
 EXN distinguishes **authority** from **execution location**.
