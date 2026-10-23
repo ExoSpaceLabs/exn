@@ -505,8 +505,7 @@ Each endpoint supervision record stores:
 
 ### 8.5 Recovery journal and diagnostic logs
 
-The OBC maintains a bounded persistent or retained **recovery journal** containing at minimum:
-
+The OBC shall make recovery history externally retrievable as a Service 220 `DIAGNOSTIC_LOG` object. The **exported recovery record contract** contains at least the following fields; whether the OBC stores them in RAM, retained memory, persistent flash or another format is private to the OBC implementation:
 ```text
 record_id:u32
 event_unix_ms:u64
@@ -865,7 +864,7 @@ The Antenna preserves the original producer identity when forwarding complete EX
 
 ### 12.4 OBC transfer registry
 
-For every OBC-commanded transfer, the OBC records:
+For every OBC-commanded transfer, the OBC shall be able to report or reconcile the following **externally meaningful transfer metadata** (the internal registry representation belongs to the OBC):
 
 - transfer ID;
 - source endpoint;
