@@ -6,7 +6,7 @@
 
 **EXN** is an ExoSpaceLabs project for building and validating a modular Earth-observation spacecraft architecture. It connects a spacecraft **on-board computer (OBC)**, Linux-based payload services, FPGA image/AI processing, and a Ground Station/HIL environment through a common **CCSDS Space Packet / ECSS PUS Revision C** interface.
 
-EXN is both a practical integration demonstrator and the **single source of truth for its system architecture and Interface Control Documents (ICDs)**. This repository defines the system and its mission-visible interfaces; the [component repositories](#implementation-repositories) implement them.
+EXN is both a practical integration demonstrator and the **single source of truth for its system architecture and inter-device/externally visible Interface Control Documents (ICDs)**. Internal CM7/CM4 IPC, PS/PL implementation, Linux process layouts and Ground daemon/UI design are owned in their respective component repositories; they are not separate EXN ICD contracts. See [interface ownership](docs/architecture.md#10-interface-ownership-and-change-control). This repository defines the system and its mission-visible interfaces; the [component repositories](#implementation-repositories) implement them.
 
 ## Logical system
 
