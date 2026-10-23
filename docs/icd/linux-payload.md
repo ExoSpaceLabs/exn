@@ -29,28 +29,11 @@ Refer to:
 
 PI-CAM and PI-COMMS are the two mission endpoints. PI-MGMT is management infrastructure only.
 
-## 2. Linux service model
+## 2. Logical endpoint separation
 
-The reference Pi runs three independently addressable EXN services under Linux:
+PI-CAM (`0x101`), PI-COMMS (`0x103`) and PI-MGMT (`0x104`) are separate service identities even while co-located on a single Raspberry Pi. They must preserve the externally specified routing, HK, event, command and recovery behavior independently of how Linux services are implemented.
 
-```mermaid
-flowchart TB
-  subgraph HOST["Raspberry Pi 5 · Embedded Linux"]
-    OS["Linux / systemd<br/>watchdog · journald · storage"]
-    CAM["exn-camera.service<br/>PI-CAM · 0x101"]
-    ANT["exn-antenna.service<br/>PI-COMMS · 0x103"]
-    PM["exn-platform.service<br/>PI-MGMT · 0x104"]
-    OS --> CAM
-    OS --> ANT
-    OS --> PM
-    PM -.->|"supervise / restart"| CAM
-    PM -.->|"supervise / restart"| ANT
-  end
-```
-
-`systemd` may provide process supervision, watchdog integration, dependency ordering and restart execution, while EXN mission-visible control/health is exposed through PI-MGMT.
-
-The two mission services shall be independently restartable.
+Process names, `systemd` configuration, watchdog implementation, local IPC and service restart mechanics belong in [exn-pi-cam](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md); they are **not** normative EXN ICD allocations.
 
 ## 3. Antenna endpoint, PI-COMMS
 
@@ -249,17 +232,9 @@ PI-CAM, PI-COMMS and PI-MGMT consume OBC `TC[9,128] Set Mission Time`.
 
 PI-MGMT may also synchronize the Linux wall clock as an implementation convenience, but EXN mission timestamps shall use the synchronized mission-time abstraction rather than assuming Linux wall clock is authoritative.
 
-## 12. Local Camera -> Antenna data path
+## 12. Camera ↔ Antenna logical data path
 
-Because Camera and Antenna are co-located, the local implementation should avoid needless copying.
-
-Permitted implementation mechanisms include:
-
-- file/object references into the payload object store;
-- Unix-domain sockets for metadata/control;
-- shared memory for bounded streaming buffers.
-
-The logical Service 220 semantics remain the same. A future deployment can split Camera and Antenna across nodes without changing the mission contract.
+PI-CAM and PI-COMMS retain distinct identities and the agreed Service 220 transfer semantics whether co-located or separated onto future devices. **EXN does not prescribe files, Unix-domain sockets, shared memory or copying strategies for their current same-host implementation.** That private data path is specified by [the Pi implementation architecture](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md).
 
 ## 13. SpWKit deployment option
 

@@ -27,17 +27,9 @@ The OBC kernel and its local safety/time/health mechanisms must boot even if Pi,
 
 See [staged profiles and presence rules](icd/inter-node-links.md#integration-deployment-profiles-and-priorities).
 
-## Optional internal STM32 CM4 worker
+## OBC internal processing boundary
 
-The STM32H755 **CM7 remains the sole OBC spacecraft authority** and runs HardRT. The second Cortex-M4 core may later be enabled as a **bounded asynchronous local processing worker** inside that same OBC, without changing the first `obc_pi_ground_mvp` deployment, external links, APID `0x100` or PUS-C identity.
-
-- CM7 owns incoming TC admission, mission state, scheduling policy, time, HK, failure reporting and decisions based on results. CM4 receives only admitted, explicitly designated noncritical computation jobs through a private shared-memory job/result transport. It cannot issue independent spacecraft commands or directly commit CM7-owned state.
-- Jobs use bounded buffers, identity/generation and deadline correlation, nonblocking submission and asynchronous completion. The OBC still schedules local time/HK and services Ground while CM4 computes. Completion verification follows the **existing** EXN Service 1 command lifecycle; accepting a queued job does not mean its computation succeeded.
-- The initial OBC **boots and runs without CM4**. A CM4-enabled build requires two separately linked/qualified firmware images, defined inter-core memory/cache/peripheral ownership, boot/release/HSEM hardware primitives and a tested fault/timeout policy. Absence of the optional worker is not an OFFLINE spacecraft endpoint.
-- CM4 is **not** another PUS endpoint and has no new APID, PUS source/destination ID or independently defined mission service. Its capability and health may be exposed only through existing OBC-supported fields or through a separately reviewed central ICD extension when an actual mission-visible need arises.
-- Inter-core messages are OBC-private, **not CCSDS/PUS**. They are distinct from the optional KV260 processing endpoint `0x102`, which remains an independently supervised external device.
-
-Implementation design and staged qualification belong in [exn-mcu-rtos](https://github.com/ExoSpaceLabs/exn-mcu-rtos); any future change to OBC-visible capabilities, telemetry, events or service behavior must first be allocated here.
+The STM32H755 implements **one OBC endpoint** (`0x100`) under CM7 spacecraft authority. Optional CM4 processing does not create an independently addressable EXN endpoint, command route or PUS identity. EXN defines only the OBC's externally observable services and behavior; **CM7↔CM4 job IPC, boot, HSEM, memory/cache allocation, scheduling and failure containment are private OBC contracts** documented in [exn-mcu-rtos's CM4 worker design](https://github.com/ExoSpaceLabs/exn-mcu-rtos/blob/main/docs/CM4_WORKER.md). Any change to externally visible OBC packets or behavior must be specified in EXN first.
 
 ## 1.1 Centralized authority, distributed execution
 
@@ -157,75 +149,11 @@ The [inter-device link ICD](icd/inter-node-links.md) defines the Pi UART pins, N
 
 Camera and Antenna remain **two first-class mission responsibilities of the same Raspberry Pi 5**, independently addressable through PI-CAM and PI-COMMS. PI-MGMT is their supporting platform-supervision endpoint. Physical host placement may change without changing their logical responsibility.
 
-## 4. Raspberry Pi dual-role payload node
+## 4. Raspberry Pi endpoint placement
 
-The Raspberry Pi shall be treated as one physical spacecraft payload computer with two mission-facing functions rather than as one camera executable with optional extras:
+The reference Pi hosts two mission-visible roles, **PI-CAM** (`0x101`, acquisition/product owner) and **PI-COMMS** (`0x103`, Antenna/Ground gateway), plus **PI-MGMT** (`0x104`, remotely addressable platform-management endpoint). These are separate **logical identities** on the same initial physical computer. The OBC remains command authority; payload bytes may transit directly between producers and PI-COMMS without passing through the OBC.
 
-1. **PI-CAM** acquires and owns payload imagery/products.
-2. **PI-COMMS is the Antenna service.** It owns the Ground-facing link, exchanges TCs/TMs with the OBC, and transmits payload products from Camera or FPGA to Ground.
-
-Linux platform management supervises both functions but is not itself a third primary mission role. It is exposed as supporting endpoint **PI-MGMT (`0x104`)** so the OBC can restart/update Camera or Antenna even when the target mission process is not responsive.
-
-A representative host-service layout is:
-
-```mermaid
-flowchart TB
-  subgraph PI5["Raspberry Pi 5 · Linux host"]
-    HOST["Linux / systemd<br/>watchdog · journald · persistent storage"]
-    CAM["exn-camera.service<br/>PI-CAM · 0x101"]
-    ANT["exn-antenna.service<br/>PI-COMMS · 0x103"]
-    PM["exn-platform.service<br/>PI-MGMT · 0x104"]
-    HOST --> CAM
-    HOST --> ANT
-    HOST --> PM
-    PM -.->|"monitor / restart"| CAM
-    PM -.->|"monitor / restart"| ANT
-  end
-```
-
-PI-MGMT interfaces with Linux supervision facilities; it does not replace `systemd` or become the sole watchdog itself.
-
-### 4.1 Camera service
-
-Responsibilities include:
-
-- sensor acquisition;
-- image metadata and product ownership;
-- capture configuration;
-- local buffering/storage;
-- compression or host-side preparation;
-- transfer to FPGA for processing;
-- reception/association of processed products;
-- direct handoff to the Antenna service when appropriate.
-
-The Camera service remains the natural owner of captured payload products even when computation is delegated to FPGA.
-
-### 4.2 Antenna service
-
-Responsibilities include:
-
-- own the Ground-facing RF/Wi-Fi/network link;
-- receive Ground TCs and forward them to the OBC;
-- receive OBC TMs and forward them to Ground;
-- accept payload data directly from PI-CAM or FPGA and downlink it to Ground when commanded/policy permits;
-- report link/session health and status.
-
-The Antenna service is **not** the spacecraft command authority. The OBC remains the authority. Ground TCs pass `Ground -> Antenna -> OBC`; OBC TMs pass `OBC -> Antenna -> Ground`. For bulk data, the OBC may command PI-CAM or FPGA to send an object to the Antenna service, which then transmits it to Ground. This bypasses the OBC as a bulk-data router while preserving OBC control.
-
-### 4.3 Platform management / PI-MGMT
-
-The Linux platform-management layer should provide or aggregate:
-
-- hardware/system watchdog integration;
-- service restart/supervision state;
-- CPU load and temperature;
-- memory and storage state;
-- process/service health;
-- network/link state;
-- restart/error counters;
-- uptime and system-level events.
-
-`systemd` may provide process supervision and watchdog integration. PI-MGMT turns those host capabilities into an OBC-addressable management endpoint for service restart, Pi reboot, platform HK/alarms and software activation.
+Their external service, telemetry, failure, supervision and object-transfer behavior is normative in [the endpoint ICDs](icd/README.md) and [the inter-device link ICD](icd/inter-node-links.md). **Linux processes, `systemd` units, restart machinery, local IPC, storage layout and data-copy strategy are Pi implementation details**, maintained in [exn-pi-cam's Pi node architecture](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md). EXN requires the externally observable services and failure behavior, not particular process names or IPC mechanisms.
 
 ## 5. Control plane and data plane
 
@@ -361,9 +289,7 @@ This lets EXN model multiple spacecraft communication relationships without requ
 
 SpWKit remains a reusable independent project. EXN should consume only the public transport/link behavior that it needs. **Commercial/private FPGA SpaceWire implementation repositories are outside EXN scope.** The EXN FPGA node is defined by its payload-processing role, not by any separate SpaceWire FPGA product.
 
-On STM32, any future SpWKit-over-Ethernet binding should preserve the application-owned transport-provider boundary. That layering is shown in the software-composition diagram below.
-
-SpWKit must not require DAS directly, and DAS must not know about SpWKit. HardRT provides scheduling, synchronization, timing, IRQ-to-task signalling, and timeout/retry execution around the application and transport integration.
+How SpWKit is bound to DAS, HardRT or an endpoint-specific driver is **component implementation design**, not an EXN inter-device ICD requirement. See [OBC integration](https://github.com/ExoSpaceLabs/exn-mcu-rtos/blob/main/docs/INTEGRATION.md) and the respective library repositories.
 
 ## 8. PUS service architecture
 
@@ -383,41 +309,23 @@ This distinction is architectural, not cosmetic. A transport implementation such
 
 The central PUS-C service profile is the normative baseline for current and future endpoint implementations.
 
-## 9. Reusable software composition
+## 9. Implementation composition belongs to components
 
-Reusable libraries are **peer dependencies consumed by an EXN application**, not one vertical framework that owns every layer below it. The diagram shows an STM32 integration with an **optional** SpWKit transport provider implemented by the application.
+The EXN ICD describes **what devices exchange**, not how applications link DAS, HardRT, CCSDSPack or SpWKit, nor their thread/task/driver composition. Those reusable libraries remain independent of one another. The concrete library adapters, dependency graph, build flags, scheduling and firmware startup contracts belong in [OBC implementation](https://github.com/ExoSpaceLabs/exn-mcu-rtos/blob/main/docs/ARCHITECTURE.md), [Pi implementation](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md), [FPGA implementation](https://github.com/ExoSpaceLabs/exn-fpga-ai), and [Ground implementation](https://github.com/ExoSpaceLabs/exn-gs/blob/main/docs/architecture.md).
 
-```mermaid
-flowchart TB
-  APP["exn-mcu-rtos<br/>OBC application"]
-  CCSDS["CCSDSPack<br/>CCSDS / PUS packets"]
-  RT["HardRT<br/>tasks / timing / synchronization"]
-  SPW["SpWKit<br/>optional logical-link API"]
-  PROVIDER["EXN transport provider<br/>application adapter"]
-  DAS["DAS<br/>STM32 device abstraction"]
-  HW["STM32H755<br/>hardware"]
+## 10. Interface ownership and change control
 
-  APP -->|"packet API"| CCSDS
-  APP -->|"runtime API"| RT
-  APP -->|"device API"| DAS
-  APP -.->|"optional link API"| SPW
-  SPW -.->|"transport callbacks"| PROVIDER
-  PROVIDER -->|"device operations"| DAS
-  DAS --> HW
-```
+**This repository is the single normative home for system architecture and every inter-device or inter-endpoint interface.** It owns endpoint/APID identities, CCSDS/PUS wire layouts, physical link allocation and framing, routing and authority, command/telemetry semantics, shared parameter/event/sensor IDs, time/health/supervision and externally observable update/data-transfer behavior.
 
-Dashed edges are optional integration relationships. SpWKit and HardRT do not directly depend on DAS. This diagram explains application composition; it is not a claim about the libraries' internal linker dependencies.
+| Owner | Documentation responsibility |
+|---|---|
+| `exn` | Inter-device contracts, including endpoints' externally visible service and wire profiles; machine-readable `interfaces/` artifacts |
+| `exn-mcu-rtos` | Internal CM7/CM4 contract, HardRT tasks/queues, firmware startup, memory, drivers, transport implementations |
+| `exn-pi-cam` | Linux process model, Camera/Antenna/management implementation, local IPC, storage, supervision implementation |
+| `exn-fpga-ai` | PS/PL partition, acceleration pipelines, DMA/memory/job scheduling, bitstream activation implementation |
+| `exn-gs` | Daemon/UI/simulator design, Ground-local IPC, operator software, data retention and test harness |
+| DAS, HardRT, CCSDSPack, SpWKit | Their respective reusable APIs, hardware/runtime/protocol implementations and qualification |
 
-## 10. Interface ownership
+**Boundary test:** if a separately implemented endpoint needs the definition to exchange bytes or interpret externally observable behavior, define it in EXN. If the definition can change without altering what another endpoint sends, receives or observes, define it only in its component repository. Shared physical topology and link pinouts are EXN; MCU peripheral-driver details are DAS/OBC. The CM7↔CM4 link and PI-CAM↔PI-COMMS *local implementation* are not new inter-device protocols.
 
-The documentation boundary is:
-
-- **`docs/architecture.md`**: logical nodes, responsibilities, control/data paths, routing policy, and reusable-stack composition;
-- **`docs/component-services.md`**: complete endpoint functions, management, heartbeat, time, acquisition, processing, transfer and update behavior;
-- **`docs/services.md`**: PUS service tailoring, standard/mission-specific allocation, and migration policy;
-- **`docs/ICD.md`**: exact CCSDS/PUS wire contract and routing fields;
-- **`docs/icd/`**: endpoint-specific service behavior and payload layouts;
-- **component repositories**: implementation details;
-- **CCSDSPack / HardRT / DAS / SpWKit repositories**: reusable library APIs and implementation-specific qualification.
-
-This separation allows EXN to change deployment topology without rewriting mission semantics and allows reusable libraries to evolve without becoming EXN-specific.
+When a component needs an interface change, update the central ICD/registry first, review its consumers and then update component code/docs. Components may quote or link to the ICD but must not maintain competing normative protocol definitions. Track integration conformance separately from component implementation readiness. See [ICD index and boundary](icd/README.md).
