@@ -6,7 +6,7 @@
 
 **EXN** is an ExoSpaceLabs project for building and validating a modular Earth-observation spacecraft architecture. It connects a spacecraft **on-board computer (OBC)**, Linux-based payload services, FPGA image/AI processing, and a Ground Station/HIL environment through a common **CCSDS Space Packet / ECSS PUS Revision C** interface.
 
-EXN is both a practical integration demonstrator and the **single source of truth for its system architecture and inter-device/externally visible Interface Control Documents (ICDs)**. Internal CM7/CM4 IPC, PS/PL implementation, Linux process layouts and Ground daemon/UI design are owned in their respective component repositories; they are not separate EXN ICD contracts. See [interface ownership](docs/architecture.md#10-interface-ownership-and-change-control). This repository defines the system and its mission-visible interfaces; the [component repositories](#implementation-repositories) implement them.
+EXN is both a practical integration demonstrator and the **single source of truth for its system architecture and component-to-component Interface Control Documents (ICDs)**. A component boundary is logical: PI-CAM and PI-COMMS have separate EXN interfaces even when deployed on the same Raspberry Pi. Internal CM7/CM4 IPC, PS/PL implementation, Linux process layouts and Ground daemon/UI design are owned in their respective component repositories; they are not separate EXN ICD contracts. See [interface ownership](docs/architecture.md#10-interface-ownership-and-change-control). This repository defines the system and its mission-visible interfaces; the [component repositories](#implementation-repositories) implement them.
 
 ## Logical system
 
@@ -45,7 +45,7 @@ flowchart LR
 
 The OBC is **spacecraft authority**: it owns mission/platform state, command authorization, time, health supervision, fault detection/isolation/recovery (FDIR), and payload orchestration. Subordinate devices execute assigned work. This extends to future AOCS/ADCS, EPS and thermal controllers, even though those subsystems are not implemented in the current EXN stage.
 
-The Pi has **two mission roles on one computer**: Camera (PI-CAM) and Antenna/Ground communications (PI-COMMS). PI-MGMT is a supporting Linux management endpoint, not a third mission role. The FPGA is a payload **processing** resource, not a second Ground-communications node.
+The Pi hosts **two separately identified EXN mission components** on one computer: Camera (PI-CAM) and Antenna/Ground communications (PI-COMMS). Their object-transfer interface is an **EXN-owned component-to-component contract**, even if implemented with local IPC. PI-MGMT is an additional addressable supporting component, not a third primary mission role. The FPGA is a payload **processing** resource, not a second Ground-communications node.
 
 The initial **bench interconnect uses no Ethernet switch**: GS↔Pi over Wi-Fi, STM32↔Pi over 3.3 V UART and STM32↔KV260 over USB CDC-ACM (KV260 USB-A host ↔ Nucleo CN13 device), and Pi↔KV260 over direct Gigabit Ethernet for image/result objects. See the [link ICD](docs/icd/inter-node-links.md) for connectors, framing and unresolved integration work.
 
@@ -71,6 +71,7 @@ See [system architecture](docs/architecture.md) for the physical deployment, aut
 | [Common component/service contract](docs/component-services.md) | Shared behavior, states, HK/recovery, time, transfer and software lifecycle |
 | [Master ICD](docs/ICD.md) | CCSDS/PUS-C packet layout, APIDs, routing and wire rules |
 | [Endpoint ICD index](docs/icd/README.md) | Ground, OBC, Camera, Antenna/PI-MGMT and FPGA-specific interfaces |
+| [Component-to-component ICD](docs/icd/component-links.md) | Interfaces among logical components, including PI-CAM ↔ PI-COMMS Service 220 handoff on the same Pi |
 | [Reference inter-device links](docs/icd/inter-node-links.md) | PC↔Pi Wi-Fi, OBC Pi UART + KV260 USB CDC control, direct Pi↔KV260 Ethernet, framing and recovery |
 | [Hardware HK/sensors](docs/icd/hardware-sensors.md) | STM32H755, Raspberry Pi 5 and Kria K26/KV260 sensor IDs, units and availability |
 | [Shared interface artifacts](interfaces/) | CCSDSPack templates, JSON tooling mirrors and MCU C definitions |
