@@ -315,7 +315,7 @@ The EXN ICD describes **what devices exchange**, not how applications link DAS, 
 
 ## 10. Interface ownership and change control
 
-**This repository is the single normative home for system architecture and every **component-to-component** interface, regardless of whether the components share hardware.** It owns endpoint/APID identities, CCSDS/PUS wire layouts, physical link allocation and framing, logical message/data contracts, routing and authority, command/telemetry semantics, shared parameter/event/sensor IDs, time/health/supervision and externally observable update/data-transfer behavior. See [component interaction ICD](icd/component-links.md).
+**This repository is the single normative home for system architecture and component-to-component interfaces, regardless of whether the components share hardware.** It owns endpoint/APID identities, CCSDS/PUS wire layouts, physical link allocation and framing, logical message/data contracts, routing and authority, command/telemetry semantics, shared parameter/event/sensor IDs, time/health/supervision and externally observable update/data-transfer behavior. See [component interaction ICD](icd/component-links.md).
 
 | Owner | Documentation responsibility |
 |---|---|
