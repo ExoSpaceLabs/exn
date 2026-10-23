@@ -25,7 +25,7 @@ The normative specification hierarchy is:
 
 ## Ownership rule: inter-device vs component-internal
 
-**EXN is a system-level **component-to-component ICD**, not a collection of component internal design documents.** The normative contract applies to distinct logical components **irrespective of physical co-location**: what they request, send, receive, acknowledge, interpret or observe, including endpoint identities, packet/PUS fields, shared services, routing/authorization, HK/time/FDIR, object transfers and updates.
+**EXN is the system-level component-to-component ICD, not a collection of component internal design documents.** The normative contract applies to distinct logical components **irrespective of physical co-location**: what they request, send, receive, acknowledge, interpret or observe, including endpoint identities, packet/PUS fields, shared services, routing/authorization, HK/time/FDIR, object transfers and updates.
 
 | Component repository | Examples of documentation owned locally, not here |
 |---|---|
