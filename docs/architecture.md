@@ -151,9 +151,9 @@ Camera and Antenna remain **two first-class mission responsibilities of the same
 
 ## 4. Raspberry Pi endpoint placement
 
-The reference Pi hosts two mission-visible roles, **PI-CAM** (`0x101`, acquisition/product owner) and **PI-COMMS** (`0x103`, Antenna/Ground gateway), plus **PI-MGMT** (`0x104`, remotely addressable platform-management endpoint). These are separate **logical identities** on the same initial physical computer. The OBC remains command authority; payload bytes may transit directly between producers and PI-COMMS without passing through the OBC.
+The reference Pi hosts two **separate EXN mission components**, **PI-CAM** (`0x101`, acquisition/product owner) and **PI-COMMS** (`0x103`, Antenna/Ground gateway), plus **PI-MGMT** (`0x104`, an independently addressable supporting component). Physical co-location does **not** merge components or make their interaction an ungoverned private interface. The OBC remains command authority; payload bytes may transit directly between producers and PI-COMMS without passing through the OBC.
 
-Their external service, telemetry, failure, supervision and object-transfer behavior is normative in [the endpoint ICDs](icd/README.md) and [the inter-device link ICD](icd/inter-node-links.md). **Linux processes, `systemd` units, restart machinery, local IPC, storage layout and data-copy strategy are Pi implementation details**, maintained in [exn-pi-cam's Pi node architecture](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md). EXN requires the externally observable services and failure behavior, not particular process names or IPC mechanisms.
+The **PI-CAM ↔ PI-COMMS component-to-component contract** is normative in [EXN component links](icd/component-links.md), including the Service 220 object handoff, identities, authorization and transfer outcomes, irrespective of their shared Linux host. The endpoint ICDs and link ICD define the remaining external interfaces. **Linux processes, `systemd` units, IPC encoding/transport, storage layout and data-copy optimization** are Pi-specific implementation decisions, documented in [exn-pi-cam](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md).
 
 ## 5. Control plane and data plane
 
@@ -315,17 +315,17 @@ The EXN ICD describes **what devices exchange**, not how applications link DAS, 
 
 ## 10. Interface ownership and change control
 
-**This repository is the single normative home for system architecture and every inter-device or inter-endpoint interface.** It owns endpoint/APID identities, CCSDS/PUS wire layouts, physical link allocation and framing, routing and authority, command/telemetry semantics, shared parameter/event/sensor IDs, time/health/supervision and externally observable update/data-transfer behavior.
+**This repository is the single normative home for system architecture and every **component-to-component** interface, regardless of whether the components share hardware.** It owns endpoint/APID identities, CCSDS/PUS wire layouts, physical link allocation and framing, logical message/data contracts, routing and authority, command/telemetry semantics, shared parameter/event/sensor IDs, time/health/supervision and externally observable update/data-transfer behavior. See [component interaction ICD](icd/component-links.md).
 
 | Owner | Documentation responsibility |
 |---|---|
-| `exn` | Inter-device contracts, including endpoints' externally visible service and wire profiles; machine-readable `interfaces/` artifacts |
+| `exn` | **Component-to-component** ICD, including co-located PI-CAM ↔ PI-COMMS, endpoint service and wire profiles, machine-readable `interfaces/` artifacts |
 | `exn-mcu-rtos` | Internal CM7/CM4 contract, HardRT tasks/queues, firmware startup, memory, drivers, transport implementations |
-| `exn-pi-cam` | Linux process model, Camera/Antenna/management implementation, local IPC, storage, supervision implementation |
+| `exn-pi-cam` | Linux processes, Camera/Antenna/management implementations, **local IPC transport/encoding** (not component-level semantics), storage, drivers and supervision |
 | `exn-fpga-ai` | PS/PL partition, acceleration pipelines, DMA/memory/job scheduling, bitstream activation implementation |
 | `exn-gs` | Daemon/UI/simulator design, Ground-local IPC, operator software, data retention and test harness |
 | DAS, HardRT, CCSDSPack, SpWKit | Their respective reusable APIs, hardware/runtime/protocol implementations and qualification |
 
-**Boundary test:** if a separately implemented endpoint needs the definition to exchange bytes or interpret externally observable behavior, define it in EXN. If the definition can change without altering what another endpoint sends, receives or observes, define it only in its component repository. Shared physical topology and link pinouts are EXN; MCU peripheral-driver details are DAS/OBC. The CM7↔CM4 link and PI-CAM↔PI-COMMS *local implementation* are not new inter-device protocols.
+**Boundary test:** if **one EXN component** needs a definition to request, send, receive, interpret or acknowledge something from **another EXN component**, define the contract in EXN, even on the same Pi. If a change affects only the internals of one component (e.g. CM7↔CM4, PS↔PL) or the mechanics of implementing the central Pi handoff, keep it in its own repository. Physical topology and link allocations are EXN; underlying driver or Unix-socket mechanics are not. **PI-CAM ↔ PI-COMMS is an EXN component interface, not just an undocumented local IPC design.**
 
 When a component needs an interface change, update the central ICD/registry first, review its consumers and then update component code/docs. Components may quote or link to the ICD but must not maintain competing normative protocol definitions. Track integration conformance separately from component implementation readiness. See [ICD index and boundary](icd/README.md).
