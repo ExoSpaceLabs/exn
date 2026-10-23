@@ -663,7 +663,7 @@ It forwards **Ground telecommands to the OBC**, **OBC telemetry to Ground**, and
 
 Payload sources are PI-CAM, FPGA, or OBC itself.
 
-The OBC controls the downlink decision. The payload producer sends the bytes directly to Antenna using Service 220; the OBC does not relay the bulk object.
+The OBC controls the downlink decision. The payload producer sends the bytes directly to Antenna using Service 220; the OBC does not relay the bulk object. **PI-CAM and Antenna are separate EXN components even when co-located**; their producer-to-gateway handoff is governed by the [component-to-component ICD](icd/component-links.md), not privately invented by the Pi implementation.
 
 Antenna Service 20 parameters are:
 
@@ -860,7 +860,7 @@ A Ground transfer means the OBC commands the producer with `Start Object Transfe
 
 Routing resolves logical GROUND through the Antenna endpoint.
 
-The Antenna preserves the original producer identity when forwarding complete EXN packets where the deployed link permits it.
+The Antenna preserves the original producer identity when forwarding complete EXN packets where the deployed link permits it. **PI-CAM ↔ PI-COMMS is a normative EXN component interface** irrespective of whether the implementation physically transfers Service 220 chunks, local file handles or immutable object references. Its authorization, identity, transfer status and error/completion semantics must follow [the central component-link contract](icd/component-links.md#3-pi-cam--pi-comms-camera-to-antenna-contract).
 
 ### 12.4 OBC transfer registry
 
