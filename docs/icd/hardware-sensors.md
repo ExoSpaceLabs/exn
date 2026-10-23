@@ -100,7 +100,7 @@ PI-MGMT owns Pi board telemetry. Camera and Antenna shall not duplicate host-wid
 | `0x1102` | `pi5.ext5v` | U32 mV | required | PMIC ADC `EXT5V_V` |
 | `0x1103` | `pi5.core_voltage` | U32 mV | optional capability | PMIC ADC core-voltage channel when exposed by the installed PMIC/firmware |
 
-The Pi 5 implementation should read SoC temperature from the kernel thermal interface where possible. PMIC ADC values may be obtained through the platform firmware interface; the EXN interface is independent of that acquisition mechanism.
+Driver/interface selection for SoC temperature and PMIC measurements belongs in [the Pi implementation architecture](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md). This ICD defines the IDs, units and required reporting, independent of acquisition mechanism.
 
 ### 5.2 PI-MGMT HEALTH extension
 
@@ -132,7 +132,7 @@ antenna_service_state:u8
 | 18 | thermal throttling occurred since boot |
 | 19 | soft temperature limit occurred since boot |
 
-The implementation may obtain this information from Raspberry Pi firmware/kernel mechanisms such as `vcgencmd get_throttled`, but the mission-visible definition is the EXN bitfield above.
+The Pi implementation maps native firmware/kernel status into the **EXN bitfield above**; acquisition commands and raw platform encodings are owned in the Pi repository.
 
 `reset_reason` values:
 
@@ -178,7 +178,7 @@ The EXN FPGA endpoint owns these measurements even if Linux on the A53 reads the
 | `0x2121` | `k26.pl_1v80` | U32 mV | required | VCCAUX |
 | `0x2122` | `k26.pl_0v85` | U32 mV | required | VCCBRAM |
 
-The implementation should use the AMD AMS/System Monitor driver on Linux or the corresponding bare-metal System Monitor API. Raw ADC codes are never transmitted as the mission value.
+The local [FPGA implementation architecture](https://github.com/ExoSpaceLabs/exn-fpga-ai/blob/main/docs/IMPLEMENTATION_ARCHITECTURE.md) owns AMD monitoring driver selection and raw-value conversion; **the mission interface always transports the engineering values defined above**, not raw ADC codes.
 
 If both PS and PL temperature channels are available, `k26.junction_temp` reports the higher valid junction-temperature measurement. An implementation may later expose the individual raw-domain temperatures using additional IDs if operationally useful.
 
@@ -206,7 +206,7 @@ These sensors are required for the KV260 reference profile:
 
 The K26 sensors from Section 6 remain present.
 
-The implementation may access these values directly through the Linux I2C/hwmon stack or AMD's platform telemetry utilities. The PUS interface does not depend on which software path is used.
+The [FPGA implementation](https://github.com/ExoSpaceLabs/exn-fpga-ai/blob/main/docs/IMPLEMENTATION_ARCHITECTURE.md) owns Linux/I2C monitoring acquisition details. Neither a driver path nor a vendor monitoring utility is normative to the PUS interface.
 
 ## 8. FPGA/Kria HEALTH extension
 
