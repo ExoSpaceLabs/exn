@@ -15,7 +15,7 @@ This master document defines the common wire contract for communication between 
 - `docs/icd/inter-node-links.md` — reference hardware/transport interface and onboard ↔ Ground connectivity;
 - `docs/icd/hardware-sensors.md` — hardware HK sensor profiles.
 
-Together, these files are the full EXN ICD. Component repositories are implementations of this contract, not additional interface authorities.
+Together, these files are the full EXN ICD. Component repositories are implementations of this contract, not additional interface authorities. **The boundary is between separately identified EXN components, not necessarily between physical devices:** PI-CAM and PI-COMMS are separate components even on one Pi, and their logical interface belongs to [the component-to-component ICD](icd/component-links.md). Only the local implementation mechanisms belong in the Pi repository.
 
 If an implementation requires a new command, telemetry item, field, state, event, parameter, sensor, routing behavior, or error code, the normative definition shall be added to this ICD set before the implementation depends on it.
 

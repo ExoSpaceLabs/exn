@@ -27,7 +27,7 @@ Refer to:
 | PI-COMMS | `0x103` | `0x04` | Antenna / Ground link |
 | PI-MGMT | `0x104` | `0x05` | Pi platform supervision and software lifecycle |
 
-PI-CAM and PI-COMMS are the two mission endpoints. PI-MGMT is management infrastructure only.
+PI-CAM and PI-COMMS are **two separate mission components** despite sharing Raspberry Pi hardware. PI-MGMT is a separately addressable **supporting EXN component**, not a third primary payload function. All interfaces between these components, including Camera ↔ Antenna object handoff, are governed by the [central component-to-component ICD](component-links.md).
 
 ## 2. Logical endpoint separation
 
@@ -234,7 +234,9 @@ PI-MGMT may also synchronize the Linux wall clock as an implementation convenien
 
 ## 12. Camera ↔ Antenna logical data path
 
-PI-CAM and PI-COMMS retain distinct identities and the agreed Service 220 transfer semantics whether co-located or separated onto future devices. **EXN does not prescribe files, Unix-domain sockets, shared memory or copying strategies for their current same-host implementation.** That private data path is specified by [the Pi implementation architecture](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md).
+**PI-CAM ↔ PI-COMMS is an EXN component-to-component interface**, not merely a private local data path. The [component-to-component ICD](component-links.md#3-pi-cam--pi-comms-camera-to-antenna-contract) and [Service 220](../component-services.md#12-payload-object-transfer-service-220) centrally define authorization, producer/gateway identities, object/transfer metadata, transfer status/completion, error/backpressure semantics and Ground downlink behavior. These contracts apply **unchanged** when the two components are placed on different hosts.
+
+The Pi repository may optimize the **implementation** using file/object references, Unix sockets or shared memory, provided it implements the same normative logical transfer and externally visible result. Local IPC framing, storage and data-copy strategy belong in [exn-pi-cam](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PLATFORM.md), but the two components may not privately redefine mission transfer semantics.
 
 ## 13. SpWKit deployment option
 

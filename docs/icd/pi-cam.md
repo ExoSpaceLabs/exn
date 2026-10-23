@@ -517,7 +517,7 @@ For operational sequences, see [Camera product processing and downlink](../diagr
 
 PI-CAM never opens the Ground link directly. A Ground destination resolves through the Antenna service.
 
-Because Camera and Antenna are co-located, the local Pi implementation may optimize the PI-CAM -> Antenna bulk path with file/object references, shared memory or local IPC while preserving Service 220 semantics externally.
+**PI-CAM → PI-COMMS is a distinct EXN component-to-component interface** governed by the [central component-link contract](component-links.md#3-pi-cam--pi-comms-camera-to-antenna-contract) and Service 220. The Pi implementation may optimize its **carrier** with immutable object references, shared memory or local IPC, but the same producer identity, OBC authorization, metadata, transfer status/completion and failure semantics apply as when the components reside on different hardware.
 
 ## 9. Housekeeping
 

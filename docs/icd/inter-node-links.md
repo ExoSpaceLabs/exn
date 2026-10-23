@@ -50,7 +50,7 @@ flowchart TB
 | OBC ↔ Pi | 3.3 V UART, crossed TX/RX and common GND | Ground command gateway and Pi HK/management | to be wired/implemented |
 | OBC ↔ KV260 | **KV260 USB-A host ↔ STM32 CN13 Micro-AB USB FS device** | FPGA job commands, HK, time, recovery verification, through USB CDC-ACM | **full-reference FPGA profile only**; selected, not yet implemented or validated |
 | Pi ↔ KV260 | Direct Gigabit Ethernet cable | image inputs, processed products and bulk downlink | **full-reference FPGA profile only**; to be configured/validated |
-| PI-CAM ↔ PI-COMMS ↔ PI-MGMT | Pi Linux local IPC | same-host service dispatch and object handoff | to be implemented |
+| **PI-CAM ↔ PI-COMMS**, PI-MGMT interactions | Pi Linux local carrier/IPC | **EXN-defined component interactions** (Service 220 object handoff, management/control) using a Pi-owned local transport | logical ICD defined; local transport to be implemented |
 
 The OBC↔KV260 control path uses the KV260 **processing system (PS) USB host**, not programmable logic (PL). No FPGA UART/PL IP, Pmod pinout or custom board modification is required for this link. Both the KV260's **J4 micro-USB FTDI UART/JTAG debug connection** and its **J2 Pmod** remain free for development.
 
@@ -114,6 +114,10 @@ The **initial maximum decoded CCSDS Space Packet** on both control links is **81
 Service 220 image/object chunks on the direct Ethernet data path initially carry up to **1024 payload-object bytes** per packet. Neither UART nor USB CDC is the bulk image path.
 
 Re-enumeration or reconnection does not prove endpoint liveness or command completion. Service 1 verification and normal OBC HEARTBEAT/HK supervision remain authoritative. Endpoint reports and packet retransmission must not result in silent duplicate execution of state-changing TCs.
+
+## Logical component contracts versus physical links
+
+The links below are physical carriers. **EXN owns every component-to-component interface**, including **PI-CAM ↔ PI-COMMS on the same Pi**. Their [logical contract](component-links.md) applies across a local IPC implementation just as it would across Ethernet; the Pi repository chooses only the local carrier, buffering and serialization. A same-host file reference does not bypass Service 220 authorization/status semantics or merge endpoint identities.
 
 ## 4. Pi UART link and logical endpoint routing
 
