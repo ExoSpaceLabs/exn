@@ -40,25 +40,11 @@ flowchart LR
 
 The dashed path is a **test topology alternative**, not an extra Ground ingress route on the flight-like spacecraft.
 
-## 3. Ground software responsibility split
+## 3. External Ground interface boundary
 
-The transport daemon/router owns:
+EXN-GS shall construct and consume the shared CCSDS/PUS-C packets according to this ICD and use the [selected Ground transport profile](inter-node-links.md#6-ground-wi-fi-interface). Flight-like ingress via PI-COMMS and direct HIL ingress shall not change endpoint APIDs, packet layouts, mission command authority or Service 1 verification semantics.
 
-- Serial/TCP/other selected Ground-device transport;
-- CCSDS Space Packet framing;
-- structural packet validation;
-- routing complete packets between local clients and the device link;
-- transport/link state and counters.
-
-It does **not** own mission-service semantics, periodic HK policy, time synchronization policy, service IDs, or packet payload construction.
-
-The operator/application layer owns:
-
-- PUS-C packet construction/decoding according to this ICD;
-- operator actions;
-- TC sequence counters;
-- scheduled operator requests where configured;
-- display of HK, events, alarms, transfers and update state.
+How EXN-GS divides transport, packet routing, TC generation, operator UI, simulator, periodic requests and local IPC between **daemon, UI and CLI processes** is implementation-private. The authoritative software architecture for those choices is [exn-gs/docs/architecture.md](https://github.com/ExoSpaceLabs/exn-gs/blob/main/docs/architecture.md); no daemon or UI internal protocol is allocated here.
 
 ## 4. OBC-routed commands
 
