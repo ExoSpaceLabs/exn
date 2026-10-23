@@ -115,32 +115,13 @@ Service 220 image/object chunks on the direct Ethernet data path initially carry
 
 Re-enumeration or reconnection does not prove endpoint liveness or command completion. Service 1 verification and normal OBC HEARTBEAT/HK supervision remain authoritative. Endpoint reports and packet retransmission must not result in silent duplicate execution of state-changing TCs.
 
-## 4. Pi serial router and mission endpoints
+## 4. Pi UART link and logical endpoint routing
 
-The Pi has **one physical UART control link** and **three logical endpoints**: PI-CAM (`0x101`), PI-COMMS (`0x103`) and PI-MGMT (`0x104`).
+The Pi hosts **PI-CAM (`0x101`), PI-COMMS (`0x103`) and PI-MGMT (`0x104`)** behind the single physical OBC↔Pi UART. Complete CCSDS Space Packets are delivered to the destination endpoint identified by **TC APID**; **TM APID** identifies the telemetry producer. The Pi link's local transport/router implementation has no fourth PUS APID and shall not grant Pi authority to bypass OBC command policy.
 
-A lightweight, bounded **Pi packet-router transport daemon** (working name `exn-linkd`) terminates Pi UART and dispatches CCSDS packets locally by **destination APID for TCs**. Its local IPC clients are the three Pi services, which remain logically independent.
+PI-COMMS receives Ground packets over the selected Wi-Fi/TCP link and relays authorized routing traffic to the OBC UART. OBC telemetry/verification returns via PI-COMMS to Ground. FPGA object downlink reaches PI-COMMS over the separate selected data path, not as OBC-relayed image bytes.
 
-```mermaid
-flowchart LR
-  GS["GS Wi-Fi"] --> COMMS["PI-COMMS"]
-  subgraph PI["Raspberry Pi 5"]
-    ROUTER["exn-linkd<br/>UART packet router<br/>not a PUS endpoint"]
-    CAM["PI-CAM<br/>APID 0x101"]
-    COMMS
-    MGMT["PI-MGMT<br/>APID 0x104"]
-    ROUTER <--> CAM
-    ROUTER <--> COMMS
-    ROUTER <--> MGMT
-  end
-  ROUTER <-->|"UART A"| OBC["STM32 OBC"]
-```
-
-The serial router must be **independently supervised by Linux/systemd**, not owned by the PI-COMMS process. A failed Antenna service must not remove OBC's ability to request PI-MGMT HK/restart operations across an otherwise functional Pi UART link. The router is **not** a fourth spacecraft endpoint and has no APID or PUS identity.
-
-PI-COMMS terminates the Wi-Fi Ground TCP session and sends Ground TCs through `exn-linkd` to the OBC; it does not independently authorize Camera/FPGA actions. Responses and selected OBC TM return through the Pi router to PI-COMMS. Direct FPGA object downlink arrives through Pi Ethernet and is forwarded by PI-COMMS to Ground.
-
-TC APID identifies the logical **destination** endpoint; TM APID identifies the **producer**. On-board Ethernet IP addresses and local process/socket addresses do not determine PUS identity. The OBC remains spacecraft authority even though Linux owns the GPIO UART device on its end.
+**Externally observable resilience requirement:** losing the PI-COMMS mission process alone must not necessarily prevent a healthy OBC from addressing PI-MGMT across an operational Pi UART. This means the UART/packet-routing facility must be supervised independently of the mission process. Exactly which Pi daemon, `systemd` unit, local socket or IPC framework provides that isolation is a **Pi implementation detail**, maintained in [exn-pi-cam's local architecture](https://github.com/ExoSpaceLabs/exn-pi-cam/blob/main/docs/PI_NODE_ARCHITECTURE.md). The initial working implementation calls the router `exn-linkd`; that process name is **informative**, not a mission-visible interface requirement.
 
 ## 5. Direct Pi ↔ KV260 Ethernet configuration
 
